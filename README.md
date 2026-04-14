@@ -108,20 +108,6 @@ Frontend app:
 - Teacher: `teacher1` / `TeacherPass123!`
 - Student: `student1` / `StudentPass123!`
 
-## Docker
-
-From repository root:
-
-```bash
-docker-compose up --build
-```
-
-Services:
-
-- Backend: `http://localhost:8000`
-- Frontend: `http://localhost:5173`
-- PostgreSQL: `localhost:5432`
-
 ## API Modules Implemented
 
 - `accounts/users/` user management + roles
