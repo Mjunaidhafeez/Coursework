@@ -25,13 +25,12 @@ export const extractFieldErrors = (errorData) => {
 
 export const extractApiErrorMessage = (error) => {
   const data = error?.response?.data;
-  if (data?.message) return data.message;
-
   const fieldErrors = extractFieldErrors(data);
   const firstFieldError = Object.values(fieldErrors)[0];
   if (firstFieldError) return firstFieldError;
 
   if (data?.detail) return String(data.detail);
+  if (data?.message) return String(data.message);
   if (typeof data === "string" && data.trim()) return data;
   return "Request failed. Please check your input and try again.";
 };

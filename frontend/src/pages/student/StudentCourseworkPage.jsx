@@ -23,7 +23,7 @@ const StudentCourseworkPage = () => {
   return (
     <Stack spacing={2}>
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>Coursework</Typography>
+        <Typography variant="h6" mb={2}>Assessment</Typography>
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}

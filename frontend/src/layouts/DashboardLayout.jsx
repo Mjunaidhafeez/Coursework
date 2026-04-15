@@ -45,7 +45,7 @@ const DashboardLayout = () => {
   const shownToastIdsRef = useRef(new Set());
   const headerConfig = {
     [ROLES.SUPER_ADMIN]: {
-      title: "Student Coursework Submission Portal",
+      title: "Student Assessment Submission Portal",
     },
     [ROLES.TEACHER]: {
       title: "Teacher Dashboard",
@@ -68,8 +68,8 @@ const DashboardLayout = () => {
     const fetchUnreadNotifications = async () => {
       try {
         const [recentRes, unreadRes] = await Promise.all([
-          api.get(`${ENDPOINTS.notifications}?page_size=8`),
-          api.get(`${ENDPOINTS.notifications}?is_read=false&page_size=1`),
+          api.get(`${ENDPOINTS.notifications}?page_size=8`, { skipGlobalLoader: true }),
+          api.get(`${ENDPOINTS.notifications}?is_read=false&page_size=1`, { skipGlobalLoader: true }),
         ]);
         if (!isActive) return;
 

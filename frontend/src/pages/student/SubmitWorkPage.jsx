@@ -1,14 +1,14 @@
 import {
+  Autocomplete,
   Alert,
   Box,
   Button,
-  Chip,
   Checkbox,
+  Chip,
   Collapse,
   FormControl,
   IconButton,
   InputLabel,
-  ListItemText,
   MenuItem,
   Select,
   Paper,
@@ -52,6 +52,7 @@ const SubmitWorkPage = () => {
   const [openCourseSections, setOpenCourseSections] = useState({});
   const [openCourseworkSections, setOpenCourseworkSections] = useState({});
   const [requestByCoursework, setRequestByCoursework] = useState({});
+  const [editingRequestByCoursework, setEditingRequestByCoursework] = useState({});
   const [rowFiles, setRowFiles] = useState({});
   const [rowUploading, setRowUploading] = useState({});
   const [rowFileDeleting, setRowFileDeleting] = useState({});
@@ -101,6 +102,26 @@ const SubmitWorkPage = () => {
         map[key] = submission;
       }
     });
+    return map;
+  }, [submissions]);
+  const blockedMemberIdsByCoursework = useMemo(() => {
+    const map = {};
+    const addParticipant = (courseworkId, participantId) => {
+      const normalized = Number(participantId);
+      if (!normalized) return;
+      const key = String(courseworkId);
+      if (!map[key]) map[key] = new Set();
+      map[key].add(normalized);
+    };
+
+    submissions.forEach((submission) => {
+      const courseworkId = submission?.coursework;
+      if (!courseworkId) return;
+      addParticipant(courseworkId, submission.student);
+      (submission.requested_member_ids || []).forEach((id) => addParticipant(courseworkId, id));
+      (submission.group_member_ids || []).forEach((id) => addParticipant(courseworkId, id));
+    });
+
     return map;
   }, [submissions]);
   const isCourseworkMarked = (courseworkId) => Boolean(submissionByCoursework[String(courseworkId)]?.is_marked);
@@ -186,7 +207,7 @@ const SubmitWorkPage = () => {
       api.get(`${ENDPOINTS.courses}?page_size=300`),
       api.get(`${ENDPOINTS.courseworks}?page_size=300`),
       api.get(`${ENDPOINTS.submissions}?page_size=300&ordering=submitted_at`),
-      api.get(`${ENDPOINTS.groups}?page_size=300&ordering=name`),
+      api.get(`${ENDPOINTS.groups}?page_size=300&ordering=name&include_coursework_groups=true`),
       api.get(`${ENDPOINTS.groups}eligible_students/?scope=global`),
     ]);
 
@@ -263,6 +284,26 @@ const SubmitWorkPage = () => {
       },
     }));
   };
+  const buildRequestStateFromSubmission = (submission) => ({
+    topic: submission?.topic || "",
+    selectedGroup: submission?.group ? String(submission.group) : "",
+    newMemberIds: submission?.group
+      ? []
+      : (submission?.requested_member_ids || []).filter((id) => String(id) !== String(user?.id)).map(Number),
+  });
+  const hasParticipantConflict = ({ courseworkId, participantIds, excludeSubmissionId = null }) =>
+    submissions.some((submission) => {
+      if (Number(submission.coursework) !== Number(courseworkId)) return false;
+      if (excludeSubmissionId && Number(submission.id) === Number(excludeSubmissionId)) return false;
+      const existingIds = new Set();
+      if (submission.student) existingIds.add(Number(submission.student));
+      (submission.requested_member_ids || []).forEach((id) => existingIds.add(Number(id)));
+      (submission.group_member_ids || []).forEach((id) => existingIds.add(Number(id)));
+      for (const id of participantIds) {
+        if (existingIds.has(Number(id))) return true;
+      }
+      return false;
+    });
   const getCourseworkTypeChipColor = (type) => {
     const value = String(type || "").toLowerCase();
     if (value === "assignment") return "primary";
@@ -338,6 +379,34 @@ const SubmitWorkPage = () => {
     }
   };
 
+  useEffect(() => {
+    const rowsToCheck = viewMode === "opening" ? openingRows : closedRows;
+    const pendingLoads = [];
+
+    rowsToCheck.forEach((coursework) => {
+      const courseworkKey = String(coursework.id);
+      if (!openCourseworkSections[courseworkKey]) return;
+
+      const submission = submissionByCoursework[courseworkKey];
+      if (!submission) return;
+
+      if (membersBySubmission[submission.id] || membersLoadingBySubmission[submission.id]) return;
+      pendingLoads.push(fetchSubmissionMembers(submission));
+    });
+
+    if (pendingLoads.length) {
+      Promise.allSettled(pendingLoads);
+    }
+  }, [
+    viewMode,
+    openingRows,
+    closedRows,
+    openCourseworkSections,
+    submissionByCoursework,
+    membersBySubmission,
+    membersLoadingBySubmission,
+  ]);
+
   const toggleCourseSection = (courseKey) => {
     setOpenCourseSections((prev) => ({ ...prev, [courseKey]: !prev[courseKey] }));
   };
@@ -345,6 +414,9 @@ const SubmitWorkPage = () => {
     const key = String(coursework.id);
     const next = !openCourseworkSections[key];
     setOpenCourseworkSections((prev) => ({ ...prev, [key]: next }));
+    if (next && submission && !requestByCoursework[key]) {
+      updateRequestState(coursework.id, buildRequestStateFromSubmission(submission));
+    }
     if (next && submission && !membersBySubmission[submission.id]) {
       await fetchSubmissionMembers(submission);
     }
@@ -352,7 +424,7 @@ const SubmitWorkPage = () => {
   const handleSendRequest = async (coursework) => {
     const existing = submissionByCoursework[String(coursework.id)];
     if (existing) {
-      notify("Request already exists for this coursework", "error");
+      notify("Request already exists for this assessment", "error");
       return;
     }
     const row = getRequestState(coursework.id);
@@ -373,10 +445,102 @@ const SubmitWorkPage = () => {
       group: selectedGroup,
       member_ids: selectedGroup ? [] : newMemberIds,
     };
+
+    const participantIds = new Set();
+    if (selectedGroup) {
+      const selectedGroupRow = groups.find((group) => Number(group.id) === Number(selectedGroup));
+      (selectedGroupRow?.members || []).forEach((member) => {
+        if (member.accepted === false) return;
+        if (member.student) participantIds.add(Number(member.student));
+      });
+    } else {
+      participantIds.add(Number(user?.id));
+      newMemberIds.forEach((id) => participantIds.add(Number(id)));
+    }
+    const conflictingParticipantIds = new Set();
+    if (hasParticipantConflict({ courseworkId: coursework.id, participantIds })) {
+      submissions.forEach((submission) => {
+        if (Number(submission.coursework) !== Number(coursework.id)) return;
+        const existingIds = new Set();
+        if (submission.student) existingIds.add(Number(submission.student));
+        (submission.requested_member_ids || []).forEach((id) => existingIds.add(Number(id)));
+        (submission.group_member_ids || []).forEach((id) => existingIds.add(Number(id)));
+        for (const id of participantIds) {
+          if (existingIds.has(Number(id))) conflictingParticipantIds.add(Number(id));
+        }
+      });
+      const conflictNames = Array.from(conflictingParticipantIds)
+        .map((id) => {
+          if (Number(id) === Number(user?.id)) {
+            return "You";
+          }
+          const student = sortedStudents.find((item) => Number(item.id) === Number(id));
+          return student?.full_name || student?.username || `Student #${id}`;
+        })
+        .filter(Boolean);
+      const preview = conflictNames.slice(0, 3).join(", ");
+      const suffix = conflictNames.length > 3 ? " and others" : "";
+      notify(
+        `${preview}${suffix} already have a request in this assessment. Please choose different member(s).`,
+        "error"
+      );
+      return;
+    }
+
     try {
       await api.post(ENDPOINTS.submissions, payload);
       notify("Request sent successfully");
       setRequestByCoursework((prev) => ({ ...prev, [String(coursework.id)]: { topic: "", selectedGroup: "", newMemberIds: [] } }));
+      await loadData();
+    } catch (err) {
+      notify(extractApiErrorMessage(err), "error");
+    }
+  };
+
+  const handleUpdateRequest = async (coursework, submission) => {
+    const row = getRequestState(coursework.id);
+    const topic = String(row.topic || "").trim();
+    const selectedGroup = row.selectedGroup ? Number(row.selectedGroup) : null;
+    const newMemberIds = (row.newMemberIds || []).map(Number);
+
+    if (!topic) {
+      notify("Topic is required", "error");
+      return;
+    }
+    if (requiresGroup(coursework) && !selectedGroup && !newMemberIds.length) {
+      notify("Select existing group or choose members", "error");
+      return;
+    }
+
+    const participantIds = new Set();
+    if (selectedGroup) {
+      const selectedGroupRow = groups.find((group) => Number(group.id) === Number(selectedGroup));
+      (selectedGroupRow?.members || []).forEach((member) => {
+        if (member.accepted === false) return;
+        if (member.student) participantIds.add(Number(member.student));
+      });
+    } else {
+      participantIds.add(Number(user?.id));
+      newMemberIds.forEach((id) => participantIds.add(Number(id)));
+    }
+
+    if (hasParticipantConflict({ courseworkId: coursework.id, participantIds, excludeSubmissionId: submission.id })) {
+      notify("One or more selected participants already have a request in this assessment.", "error");
+      return;
+    }
+
+    try {
+      await api.patch(`${ENDPOINTS.submissions}${submission.id}/`, {
+        topic,
+        group: selectedGroup,
+        member_ids: selectedGroup ? [] : newMemberIds,
+      });
+      notify(
+        coursework.approval_required
+          ? "Request updated. Status moved to pending approval."
+          : "Request updated and remains approved."
+      );
+      setEditingRequestByCoursework((prev) => ({ ...prev, [String(coursework.id)]: false }));
       await loadData();
     } catch (err) {
       notify(extractApiErrorMessage(err), "error");
@@ -404,7 +568,7 @@ const SubmitWorkPage = () => {
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} flexWrap="wrap">
           <TextField
             size="small"
-            label="Search coursework/course/type"
+            label="Search assessment/course/type"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             sx={{ minWidth: 260 }}
@@ -464,10 +628,10 @@ const SubmitWorkPage = () => {
             </Select>
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 170 }}>
-            <InputLabel id="coursework-type-filter-label">Coursework Type</InputLabel>
+            <InputLabel id="coursework-type-filter-label">Assessment Type</InputLabel>
             <Select
               labelId="coursework-type-filter-label"
-              label="Coursework Type"
+              label="Assessment Type"
               value={courseworkTypeFilter}
               onChange={(e) => setCourseworkTypeFilter(e.target.value)}
             >
@@ -515,7 +679,7 @@ const SubmitWorkPage = () => {
             color="info"
             onClick={() => setViewMode("opening")}
           >
-            Open Coursework
+            Open Assessment
           </Button>
           <Button
             variant={viewMode === "closed" ? "contained" : "outlined"}
@@ -535,8 +699,8 @@ const SubmitWorkPage = () => {
         <Box>
           {(() => {
             const section = viewMode === "opening"
-              ? { key: "opening", title: "Open Coursework", grouped: openingGrouped, tone: "#f8fbff", border: "#dbeafe" }
-              : { key: "closed", title: "Closed Coursework", grouped: closedGrouped, tone: "#fff8f0", border: "#ffe0b2" };
+              ? { key: "opening", title: "Open Assessment", grouped: openingGrouped, tone: "#f8fbff", border: "#dbeafe" }
+              : { key: "closed", title: "Closed Assessment", grouped: closedGrouped, tone: "#fff8f0", border: "#ffe0b2" };
             const isClosedView = section.key === "closed";
             return (
               <Paper variant="outlined" sx={{ p: 1, bgcolor: section.tone, borderColor: section.border, maxHeight: "70vh", overflowY: "auto" }}>
@@ -559,6 +723,29 @@ const SubmitWorkPage = () => {
                           const request = getRequestState(coursework.id);
                           const additionalLimit = maxAdditionalAllowed(coursework);
                           const canUpload = submission ? canUploadForSubmission(submission) : false;
+                          const selectedGroupObj = groups.find(
+                            (group) => String(group.id) === String(request.selectedGroup || "")
+                          );
+                          const selectedMemberCount = request.selectedGroup
+                            ? (selectedGroupObj?.members || []).filter((member) => member.accepted !== false).length
+                            : 1 + (request.newMemberIds || []).length;
+                          const blockedIdsForCoursework = blockedMemberIdsByCoursework[String(coursework.id)] || new Set();
+                          const blockedStudentsForCoursework = selectableStudents.filter((student) =>
+                            blockedIdsForCoursework.has(Number(student.id))
+                          );
+                          const selfOption = user
+                            ? {
+                                id: Number(user.id),
+                                full_name:
+                                  `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.username || "Me",
+                                username: user.username || "me",
+                                student_id: "You (pre-selected)",
+                                __self: true,
+                              }
+                            : null;
+                          const memberOptions = selfOption
+                            ? [selfOption, ...selectableStudents]
+                            : selectableStudents;
                           return (
                             <Paper key={coursework.id} variant="outlined" sx={{ p: 0.9, borderColor: "#cbd5e1" }}>
                               <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -580,7 +767,7 @@ const SubmitWorkPage = () => {
                                     <Chip
                                       size="small"
                                       color={getCourseworkTypeChipColor(coursework.coursework_type)}
-                                      label={`Coursework Type: ${coursework.coursework_type || "-"}`}
+                                      label={`Assessment Type: ${coursework.coursework_type || "-"}`}
                                     />
                                     <Chip
                                       size="small"
@@ -595,7 +782,7 @@ const SubmitWorkPage = () => {
                                       <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }}>
                                         <Chip size="small" color="warning" label="Closed" />
                                         <Typography variant="body2" color="text.secondary">
-                                          Deadline passed. No request/submission was created for this coursework.
+                                          Deadline passed. No request/submission was created for this assessment.
                                         </Typography>
                                       </Stack>
                                     </Paper>
@@ -619,59 +806,130 @@ const SubmitWorkPage = () => {
                                                 value={request.selectedGroup}
                                                 onChange={(e) => updateRequestState(coursework.id, { selectedGroup: e.target.value, newMemberIds: [] })}
                                               >
+                                                <MenuItem value="">
+                                                  <em>Select Group</em>
+                                                </MenuItem>
                                                 {groups.map((group) => (
                                                   <MenuItem key={group.id} value={String(group.id)}>{group.name}</MenuItem>
                                                 ))}
                                               </Select>
                                             </FormControl>
                                             {!request.selectedGroup && (
-                                              <FormControl size="small">
-                                                <InputLabel id={`new-members-${coursework.id}`}>New Members</InputLabel>
-                                                <Select
-                                                  labelId={`new-members-${coursework.id}`}
-                                                  multiple
-                                                  value={request.newMemberIds}
-                                                  label="New Members"
-                                                  onChange={(e) => {
-                                                    const next = e.target.value;
-                                                    if (additionalLimit !== null && next.length > additionalLimit) {
-                                                      notify(`Only ${additionalLimit} additional member(s) allowed`, "warning");
-                                                      return;
-                                                    }
-                                                    updateRequestState(coursework.id, { newMemberIds: next });
-                                                  }}
-                                                  renderValue={(selected) =>
-                                                    [
-                                                      user?.first_name || user?.last_name
-                                                        ? `${user?.first_name || ""} ${user?.last_name || ""}`.trim()
-                                                        : user?.username || "Me",
-                                                      ...selected.map((id) => {
-                                                        const student = sortedStudents.find((std) => String(std.id) === String(id));
-                                                        return student?.full_name || student?.username || String(id);
-                                                      }),
-                                                    ].join(", ")
+                                              <Autocomplete
+                                                multiple
+                                                size="small"
+                                                options={memberOptions}
+                                                value={selectableStudents.filter((student) =>
+                                                  request.newMemberIds.includes(student.id)
+                                                )}
+                                                disableCloseOnSelect
+                                                fullWidth
+                                                getOptionLabel={(option) =>
+                                                  option.full_name || option.username || String(option.id)
+                                                }
+                                                getOptionDisabled={(option) =>
+                                                  Boolean(option.__self) ||
+                                                  Boolean(blockedMemberIdsByCoursework[String(coursework.id)]?.has(Number(option.id)))
+                                                }
+                                                isOptionEqualToValue={(option, value) => Number(option.id) === Number(value.id)}
+                                                onChange={(_, selectedOptions) => {
+                                                  const next = selectedOptions
+                                                    .filter((option) => !option.__self)
+                                                    .map((option) => Number(option.id));
+                                                  if (additionalLimit !== null && next.length > additionalLimit) {
+                                                    notify(`Only ${additionalLimit} additional member(s) allowed`, "warning");
+                                                    return;
                                                   }
-                                                >
-                                                  {user && (
-                                                    <MenuItem value={user.id} disabled>
-                                                      <Checkbox checked />
-                                                      <ListItemText
-                                                        primary={`${user.first_name || ""} ${user.last_name || ""}`.trim() || user.username}
-                                                        secondary="You (pre-selected)"
+                                                  updateRequestState(coursework.id, { newMemberIds: next });
+                                                }}
+                                                ListboxProps={{ style: { maxHeight: 250 } }}
+                                                renderTags={(value, getTagProps) => {
+                                                  const tags = [];
+                                                  if (selfOption) {
+                                                    tags.push(
+                                                      <Chip
+                                                        key="self-preselected"
+                                                        size="small"
+                                                        color="info"
+                                                        variant="outlined"
+                                                        label={selfOption.full_name}
+                                                        disabled
                                                       />
-                                                    </MenuItem>
-                                                  )}
-                                                  {selectableStudents.map((student) => (
-                                                    <MenuItem key={student.id} value={student.id}>
-                                                      <Checkbox checked={request.newMemberIds.includes(student.id)} />
-                                                      <ListItemText
-                                                        primary={student.full_name || student.username}
-                                                        secondary={student.student_id || student.username}
+                                                    );
+                                                  }
+                                                  value.forEach((option, index) => {
+                                                    tags.push(
+                                                      <Chip
+                                                        {...getTagProps({ index })}
+                                                        key={option.id}
+                                                        size="small"
+                                                        color="primary"
+                                                        variant="outlined"
+                                                        label={option.full_name || option.username}
                                                       />
-                                                    </MenuItem>
-                                                  ))}
-                                                </Select>
-                                              </FormControl>
+                                                    );
+                                                  });
+                                                  return tags;
+                                                }}
+                                                renderOption={(props, option, { selected }) => {
+                                                  const isSelfOption = Boolean(option.__self);
+                                                  const alreadySent = Boolean(
+                                                    blockedMemberIdsByCoursework[String(coursework.id)]?.has(Number(option.id))
+                                                  );
+                                                  return (
+                                                    <li
+                                                      {...props}
+                                                      style={{
+                                                        ...props.style,
+                                                        backgroundColor: (selected || isSelfOption) ? "rgba(25, 118, 210, 0.10)" : props.style?.backgroundColor,
+                                                        borderBottom: "1px solid rgba(15, 23, 42, 0.06)",
+                                                      }}
+                                                    >
+                                                      <Checkbox
+                                                        size="small"
+                                                        checked={isSelfOption ? true : selected}
+                                                        disabled={alreadySent || isSelfOption}
+                                                        sx={{ mr: 0.6, p: 0.3 }}
+                                                      />
+                                                      <Box sx={{ py: 0.25 }}>
+                                                        <Typography variant="body2" sx={{ fontWeight: (selected || isSelfOption) ? 700 : 600 }}>
+                                                          {option.full_name || option.username}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                          {isSelfOption
+                                                            ? "You (pre-selected)"
+                                                            : alreadySent
+                                                            ? "Already sent"
+                                                            : (option.student_id || option.username)}
+                                                        </Typography>
+                                                      </Box>
+                                                    </li>
+                                                  );
+                                                }}
+                                                renderInput={(params) => (
+                                                  <TextField
+                                                    {...params}
+                                                    label="New Members"
+                                                    placeholder="Search and select members"
+                                                    helperText={`Selected: ${request.newMemberIds.length}${additionalLimit !== null ? ` / ${additionalLimit}` : ""}`}
+                                                  />
+                                                )}
+                                                sx={{
+                                                  "& .MuiOutlinedInput-root": {
+                                                    minHeight: 44,
+                                                    alignItems: "flex-start",
+                                                  },
+                                                  "& .MuiAutocomplete-tag": {
+                                                    mt: 0.35,
+                                                    mb: 0.1,
+                                                  },
+                                                }}
+                                              />
+                                            )}
+                                            {!request.selectedGroup && blockedStudentsForCoursework.length > 0 && (
+                                              <Alert severity="warning">
+                                                {blockedStudentsForCoursework.length} student(s) already have a request in this assessment and are disabled in the list.
+                                              </Alert>
                                             )}
                                             <Alert severity="info">
                                               You are included by default. Max members: {coursework.max_group_members || "N/A"}.
@@ -721,6 +979,113 @@ const SubmitWorkPage = () => {
                                           <StudentMemberList members={membersBySubmission[submission.id] || []} compact />
                                         )}
                                       </Stack>
+                                      {!submission.is_marked && (
+                                        <Paper variant="outlined" sx={{ mt: 1, p: 1, borderColor: "#bfdbfe", bgcolor: "#f8fbff" }}>
+                                          <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} alignItems={{ md: "center" }} sx={{ mb: 0.8 }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
+                                              Edit Topic / Group Request
+                                            </Typography>
+                                            <Button
+                                              size="small"
+                                              variant={editingRequestByCoursework[String(coursework.id)] ? "contained" : "outlined"}
+                                              onClick={() => {
+                                                const key = String(coursework.id);
+                                                const nextOpen = !editingRequestByCoursework[key];
+                                                if (nextOpen) {
+                                                  updateRequestState(coursework.id, buildRequestStateFromSubmission(submission));
+                                                }
+                                                setEditingRequestByCoursework((prev) => ({
+                                                  ...prev,
+                                                  [key]: nextOpen,
+                                                }));
+                                              }}
+                                            >
+                                              {editingRequestByCoursework[String(coursework.id)] ? "Close Edit" : "Edit Request"}
+                                            </Button>
+                                          </Stack>
+                                          <Collapse in={Boolean(editingRequestByCoursework[String(coursework.id)])} timeout="auto" unmountOnExit>
+                                            <Stack spacing={0.9}>
+                                              <Stack direction={{ xs: "column", md: "row" }} spacing={0.7}>
+                                                <Chip
+                                                  size="small"
+                                                  color="info"
+                                                  variant="outlined"
+                                                  label={`Topic: ${String(request.topic || "").trim() || "-"}`}
+                                                />
+                                                <Chip
+                                                  size="small"
+                                                  color={request.selectedGroup ? "primary" : "default"}
+                                                  variant="outlined"
+                                                  label={`Group: ${request.selectedGroup ? (selectedGroupObj?.name || "Selected Group") : "Not selected"}`}
+                                                />
+                                                <Chip
+                                                  size="small"
+                                                  color="secondary"
+                                                  variant="outlined"
+                                                  label={`Members: ${selectedMemberCount}`}
+                                                />
+                                              </Stack>
+                                              <TextField
+                                                size="small"
+                                                label="Topic"
+                                                value={request.topic}
+                                                onChange={(e) => updateRequestState(coursework.id, { topic: e.target.value })}
+                                              />
+                                              {allowsGroup(coursework) && (
+                                                <FormControl size="small">
+                                                  <InputLabel id={`edit-existing-group-${coursework.id}`}>Existing Group</InputLabel>
+                                                  <Select
+                                                    labelId={`edit-existing-group-${coursework.id}`}
+                                                    label="Existing Group"
+                                                    value={request.selectedGroup}
+                                                    onChange={(e) =>
+                                                      updateRequestState(coursework.id, { selectedGroup: e.target.value, newMemberIds: [] })
+                                                    }
+                                                  >
+                                                    <MenuItem value="">
+                                                      <em>Select Group</em>
+                                                    </MenuItem>
+                                                    {groups.map((group) => (
+                                                      <MenuItem key={group.id} value={String(group.id)}>{group.name}</MenuItem>
+                                                    ))}
+                                                  </Select>
+                                                </FormControl>
+                                              )}
+                                              {!request.selectedGroup && allowsGroup(coursework) && (
+                                                <Autocomplete
+                                                  multiple
+                                                  size="small"
+                                                  options={selectableStudents}
+                                                  value={selectableStudents.filter((student) => request.newMemberIds.includes(student.id))}
+                                                  disableCloseOnSelect
+                                                  fullWidth
+                                                  getOptionLabel={(option) => option.full_name || option.username || String(option.id)}
+                                                  isOptionEqualToValue={(option, value) => Number(option.id) === Number(value.id)}
+                                                  onChange={(_, selectedOptions) => {
+                                                    const next = selectedOptions.map((option) => Number(option.id));
+                                                    if (additionalLimit !== null && next.length > additionalLimit) {
+                                                      notify(`Only ${additionalLimit} additional member(s) allowed`, "warning");
+                                                      return;
+                                                    }
+                                                    updateRequestState(coursework.id, { newMemberIds: next });
+                                                  }}
+                                                  ListboxProps={{ style: { maxHeight: 250 } }}
+                                                  renderInput={(params) => (
+                                                    <TextField {...params} label="New Members" placeholder="Search and select members" />
+                                                  )}
+                                                />
+                                              )}
+                                              <Button
+                                                size="small"
+                                                variant="contained"
+                                                onClick={() => handleUpdateRequest(coursework, submission)}
+                                              >
+                                                Save Request Changes
+                                              </Button>
+                                            </Stack>
+                                          </Collapse>
+                                        </Paper>
+                                      )}
                                       <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} sx={{ mt: 1 }}>
                                         {canUpload ? (
                                           <Fragment>
@@ -813,7 +1178,7 @@ const SubmitWorkPage = () => {
                     );
                   })}
                   {!section.grouped.length && (
-                    <Typography variant="body2" color="text.secondary">No coursework found.</Typography>
+                    <Typography variant="body2" color="text.secondary">No assessment found.</Typography>
                   )}
                 </Stack>
               </Paper>

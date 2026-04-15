@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
 import FormErrorSummary from "../../components/shared/FormErrorSummary";
+import ModuleHero from "../../components/shared/ModuleHero";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import StudentMemberList from "../../components/shared/StudentMemberList";
 import { useUi } from "../../context/UiContext";
@@ -50,6 +51,7 @@ const GroupsPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [assignedGroupByStudentId, setAssignedGroupByStudentId] = useState({});
   const sortedStudents = useMemo(() => sortStudentsByRollOrUsername(students), [students]);
   const buildGroupsParams = ({ searchValue = search, pageValue = page, pageSizeValue = pageSize } = {}) => {
     const params = new URLSearchParams();
@@ -83,15 +85,46 @@ const GroupsPage = () => {
     setStudents(await fetchGlobalEligibleStudents(api, ENDPOINTS));
   };
 
+  const loadAssignedGroupMap = async () => {
+    const { data } = await api.get(`${ENDPOINTS.groups}?page_size=4000&ordering=name`);
+    const map = {};
+    (data.results || []).forEach((group) => {
+      if (!["pending", "approved"].includes(String(group.status || "").toLowerCase())) return;
+      (group.members || []).forEach((member) => {
+        const studentId = Number(member.student);
+        if (!studentId) return;
+        if (editingId && Number(group.id) === Number(editingId)) return;
+        if (!map[studentId]) {
+          map[studentId] = {
+            groupId: Number(group.id),
+            groupName: group.name || `Group #${group.id}`,
+          };
+        }
+      });
+    });
+    setAssignedGroupByStudentId(map);
+  };
+
   useEffect(() => {
     loadData({ searchValue: "", pageValue: 1 });
     loadEligibleStudents();
+    loadAssignedGroupMap();
   }, []);
 
   const validateForm = () => {
     const nextErrors = {};
     if (!form.name.trim()) nextErrors.name = "Group name is required";
     if (!form.member_ids.length) nextErrors.member_ids = "Select at least one student";
+    const conflictingStudent = (form.member_ids || []).find((studentId) => {
+      const linked = assignedGroupByStudentId[Number(studentId)];
+      return linked && (!editingId || Number(linked.groupId) !== Number(editingId));
+    });
+    if (conflictingStudent) {
+      const linked = assignedGroupByStudentId[Number(conflictingStudent)];
+      const studentObj = sortedStudents.find((student) => Number(student.id) === Number(conflictingStudent));
+      const studentLabel = getUserDisplayName(studentObj, { includeUsername: true }) || `Student #${conflictingStudent}`;
+      nextErrors.member_ids = `${studentLabel} is already in "${linked.groupName}". One student can be in only one class group.`;
+    }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -113,7 +146,7 @@ const GroupsPage = () => {
       setEditingId(null);
       setForm(emptyGroupForm);
       setFormErrors({});
-      loadData();
+      await Promise.all([loadData(), loadAssignedGroupMap()]);
     } catch (err) {
       setFormErrors((prev) => ({ ...prev, ...extractFieldErrors(err.response?.data) }));
       notify(extractApiErrorMessage(err), "error");
@@ -125,13 +158,14 @@ const GroupsPage = () => {
     setForm(toGroupEditForm(item));
     setFormErrors({});
     loadEligibleStudents();
+    loadAssignedGroupMap();
   };
 
   const approve = async (id) => {
     try {
       await api.post(`${ENDPOINTS.groups}${id}/approve/`);
       notify("Group request approved");
-      loadData();
+      await Promise.all([loadData(), loadAssignedGroupMap()]);
     } catch (err) {
       notify(extractApiErrorMessage(err), "error");
     }
@@ -141,7 +175,7 @@ const GroupsPage = () => {
     try {
       await api.post(`${ENDPOINTS.groups}${id}/reject/`);
       notify("Group request rejected");
-      loadData();
+      await Promise.all([loadData(), loadAssignedGroupMap()]);
     } catch (err) {
       notify(extractApiErrorMessage(err), "error");
     }
@@ -156,7 +190,7 @@ const GroupsPage = () => {
     try {
       await api.delete(`${ENDPOINTS.groups}${id}/`);
       notify("Group deleted");
-      loadData();
+      await Promise.all([loadData(), loadAssignedGroupMap()]);
     } catch {
       setGroups(prev);
       notify("Delete failed", "error");
@@ -202,8 +236,10 @@ const GroupsPage = () => {
 
   return (
     <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>Group Management & Approvals</Typography>
+      <ModuleHero
+        title="Group Management & Approvals"
+        subtitle="Create class groups, approve requests, and monitor membership consistency."
+      >
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}
@@ -234,7 +270,7 @@ const GroupsPage = () => {
             Export PDF
           </Button>
         </Stack>
-      </Paper>
+      </ModuleHero>
 
       <Paper sx={{ p: 2 }}>
         <Typography sx={{ fontWeight: 700, mb: 1.2 }}>{editingId ? "Update Group" : "Add Group"}</Typography>
@@ -272,16 +308,41 @@ const GroupsPage = () => {
             onChange={(e) => setForm((p) => ({ ...p, member_ids: e.target.value }))}
           >
             {sortedStudents.map((student) => (
-              <MenuItem key={student.id} value={student.id}>
+              <MenuItem
+                key={student.id}
+                value={student.id}
+                disabled={
+                  Boolean(assignedGroupByStudentId[Number(student.id)]) &&
+                  (!editingId || Number(assignedGroupByStudentId[Number(student.id)]?.groupId) !== Number(editingId))
+                }
+              >
                 <Checkbox checked={form.member_ids.includes(student.id)} />
-                <ListItemText primary={getUserDisplayName(student, { includeUsername: true })} secondary={student.student_id || student.username} />
+                <ListItemText
+                  primary={getUserDisplayName(student, { includeUsername: true })}
+                  secondary={
+                    assignedGroupByStudentId[Number(student.id)] &&
+                    (!editingId || Number(assignedGroupByStudentId[Number(student.id)]?.groupId) !== Number(editingId))
+                      ? `Already in ${assignedGroupByStudentId[Number(student.id)]?.groupName}`
+                      : (student.student_id || student.username)
+                  }
+                />
               </MenuItem>
             ))}
           </TextField>
         </Box>
         <Stack direction="row" spacing={1} sx={{ mt: 1.2 }}>
           <Button variant="contained" onClick={submit}>{editingId ? "Update" : "Add"}</Button>
-          <Button variant="outlined" onClick={() => { setEditingId(null); setForm(emptyGroupForm); setFormErrors({}); }}>Clear</Button>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setEditingId(null);
+              setForm(emptyGroupForm);
+              setFormErrors({});
+              loadAssignedGroupMap();
+            }}
+          >
+            Clear
+          </Button>
         </Stack>
       </Paper>
 

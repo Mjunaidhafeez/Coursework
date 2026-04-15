@@ -74,7 +74,7 @@ const CourseResultBoard = ({
       const studentName = submission.student_name || submission.submitted_by_name || studentLabel;
       const rollNo = submission.student_roll_no || "-";
       const feedbackText = feedback?.feedback || "";
-      const courseworkTitle = coursework.title || submission.coursework_title || `Coursework #${submission.coursework}`;
+      const courseworkTitle = coursework.title || submission.coursework_title || `Assessment #${submission.coursework}`;
       const courseTitle = course.title || `Course ${course.id}`;
       const courseCode = course.code || "-";
       const teacherName = (course.teacher_names || []).join(", ") || "-";
@@ -234,8 +234,8 @@ const CourseResultBoard = ({
       "Course Name",
       "Course Code",
       "Teacher Name",
-      "Coursework",
-      "Coursework Type",
+      "Assessment",
+      "Assessment Type",
       "Submission Mode",
       "Topic",
       "Obtained Marks",
@@ -325,8 +325,8 @@ const CourseResultBoard = ({
                 <th>Course Name</th>
                 <th>Course Code</th>
                 <th>Teacher Name</th>
-                <th>Coursework</th>
-                <th>Coursework Type</th>
+                <th>Assessment</th>
+                <th>Assessment Type</th>
                 <th>Submission Mode</th>
                 <th>Topic</th>
                 <th>Obtained Marks</th>
@@ -410,7 +410,7 @@ const CourseResultBoard = ({
                           size="small"
                           color="success"
                           variant="outlined"
-                          label={`Coursework Avg: ${avgLabel(courseworkNode.totalObtained, courseworkNode.totalMax, courseworkNode.recordCount)} | Records: ${courseworkNode.recordCount || 0}`}
+                          label={`Assessment Avg: ${avgLabel(courseworkNode.totalObtained, courseworkNode.totalMax, courseworkNode.recordCount)} | Records: ${courseworkNode.recordCount || 0}`}
                         />
                       </Stack>
 

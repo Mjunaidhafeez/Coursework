@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 
 import api from "../../api/client";
 import CourseResultMatrix from "../../components/shared/CourseResultMatrix";
+import ModuleHero from "../../components/shared/ModuleHero";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { ENDPOINTS } from "../../api/endpoints";
 
@@ -58,8 +59,10 @@ const GradingPage = () => {
 
   return (
     <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>Course Result</Typography>
+      <ModuleHero
+        title="Course Result"
+        subtitle="Review marked results with semester and course filters."
+      >
         <SearchToolbar
           search={resultSearch}
           onSearchChange={setResultSearch}
@@ -124,7 +127,7 @@ const GradingPage = () => {
             />
           )}
         </Box>
-      </Paper>
+      </ModuleHero>
     </Stack>
   );
 };

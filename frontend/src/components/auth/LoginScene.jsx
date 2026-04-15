@@ -53,7 +53,7 @@ const LoginScene = () => (
       </Avatar>
 
       <Typography sx={{ color: "white", fontSize: "2rem", fontWeight: 800, lineHeight: 1.15 }}>
-        Manage MBA Coursework
+        Manage Student Assesement Tracking
         <br />
         with Confidence
       </Typography>

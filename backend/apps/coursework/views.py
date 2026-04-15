@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -7,6 +9,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsTeacherOrAdmin
+from apps.academics.models import Enrollment
 from apps.common.mixins import AuditLogMixin
 from apps.common.models import Notification
 from apps.groups.models import GroupMember
@@ -44,6 +47,23 @@ class CourseworkViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         obj = serializer.save()
+        if obj.auto_approve_all_students:
+            enrolled_student_ids = list(
+                Enrollment.objects.filter(course_id=obj.course_id).values_list("student_id", flat=True).distinct()
+            )
+            now = timezone.now()
+            submissions_to_create = [
+                Submission(
+                    coursework=obj,
+                    student_id=student_id,
+                    topic=obj.title or "",
+                    submitted_at=now,
+                    approval_status=Submission.ApprovalStatus.APPROVED,
+                )
+                for student_id in enrolled_student_ids
+            ]
+            if submissions_to_create:
+                Submission.objects.bulk_create(submissions_to_create)
         self.create_audit_log(self.request, "coursework_created", obj, {"coursework_type": obj.coursework_type})
 
     def destroy(self, request, *args, **kwargs):
@@ -130,6 +150,12 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             return self._ensure_group_member_submissions(submission)
         return Submission.objects.filter(id=submission.id)
 
+    def _ensure_moderation_permission(self, user, submission):
+        if user.role not in [User.Role.TEACHER, User.Role.SUPER_ADMIN]:
+            raise PermissionDenied("Only teacher/admin can manage submissions.")
+        if user.role == User.Role.TEACHER and not submission.coursework.course.teachers.filter(id=user.id).exists():
+            raise PermissionDenied("You can only manage submissions for your courses.")
+
     def _ensure_group_member_submissions(self, submission):
         if not submission.group_id:
             return Submission.objects.filter(id=submission.id)
@@ -169,10 +195,7 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
     def approve(self, request, pk=None):
         submission = self.get_object()
         user = request.user
-        if user.role not in [User.Role.TEACHER, User.Role.SUPER_ADMIN]:
-            raise PermissionDenied("Only teacher/admin can approve submissions.")
-        if user.role == User.Role.TEACHER and not submission.coursework.course.teachers.filter(id=user.id).exists():
-            raise PermissionDenied("You can only approve submissions for your courses.")
+        self._ensure_moderation_permission(user, submission)
         scope = str(request.query_params.get("scope") or request.data.get("scope") or "").strip().lower()
         targets = self._get_scope_submissions(submission, scope)
         updated = targets.update(approval_status=Submission.ApprovalStatus.APPROVED)
@@ -190,10 +213,7 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
     def reject(self, request, pk=None):
         submission = self.get_object()
         user = request.user
-        if user.role not in [User.Role.TEACHER, User.Role.SUPER_ADMIN]:
-            raise PermissionDenied("Only teacher/admin can reject submissions.")
-        if user.role == User.Role.TEACHER and not submission.coursework.course.teachers.filter(id=user.id).exists():
-            raise PermissionDenied("You can only reject submissions for your courses.")
+        self._ensure_moderation_permission(user, submission)
         scope = str(request.query_params.get("scope") or request.data.get("scope") or "").strip().lower()
         targets = self._get_scope_submissions(submission, scope)
         updated = targets.update(approval_status=Submission.ApprovalStatus.REJECTED)
@@ -206,6 +226,62 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=False, methods=["post"])
+    def bulk_approve(self, request):
+        items = request.data.get("items") or []
+        if not isinstance(items, list) or not items:
+            return Response({"detail": "items list is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        if user.role not in [User.Role.TEACHER, User.Role.SUPER_ADMIN]:
+            raise PermissionDenied("Only teacher/admin can manage submissions.")
+        teacher_course_ids = (
+            set(user.teaching_courses.values_list("id", flat=True))
+            if user.role == User.Role.TEACHER
+            else None
+        )
+        requested_ids = [item.get("id") for item in items if item.get("id")]
+        submissions_by_id = {
+            submission.id: submission
+            for submission in Submission.objects.select_related("coursework__course").filter(id__in=requested_ids)
+        }
+
+        updated_count = 0
+        errors = []
+        for index, item in enumerate(items):
+            submission_id = item.get("id")
+            scope = str(item.get("scope") or "").strip().lower()
+            submission = submissions_by_id.get(submission_id)
+            if not submission:
+                errors.append({"index": index, "id": submission_id, "detail": "Submission not found."})
+                continue
+            if teacher_course_ids is not None and submission.coursework.course_id not in teacher_course_ids:
+                errors.append({"index": index, "id": submission_id, "detail": "Not allowed for this course."})
+                continue
+            targets = self._get_scope_submissions(submission, scope)
+            updated_count += targets.update(approval_status=Submission.ApprovalStatus.APPROVED)
+
+        return Response(
+            {
+                "updated_count": updated_count,
+                "error_count": len(errors),
+                "errors": errors,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"])
+    def bulk_delete(self, request):
+        if request.user.role != User.Role.SUPER_ADMIN:
+            raise PermissionDenied("Only admin can bulk delete submissions.")
+        ids = request.data.get("ids") or []
+        if not isinstance(ids, list) or not ids:
+            return Response({"detail": "ids list is required."}, status=status.HTTP_400_BAD_REQUEST)
+        target_qs = Submission.objects.filter(id__in=ids)
+        deleted_count = target_qs.count()
+        target_qs.delete()
+        return Response({"deleted_count": deleted_count}, status=status.HTTP_200_OK)
 
     def _can_student_edit_submission(self, user, submission):
         if submission.student_id == user.id:
@@ -433,23 +509,29 @@ class FeedbackGradeViewSet(AuditLogMixin, viewsets.ModelViewSet):
         raw_value = self.request.query_params.get("target_student_id") or self.request.data.get("target_student_id")
         if raw_value in (None, ""):
             return None
+
+    def _effective_scope_from_values(self, submission, scope, target_student_id):
+        requested_scope = "group" if scope == "group" else "single"
+        if requested_scope == "group":
+            return "group"
+        has_explicit_target = target_student_id is not None
+        is_collaborative = bool(submission.group_id) or bool(submission.requested_member_ids)
+        if not has_explicit_target and is_collaborative:
+            return "group"
+        return "single"
         try:
             return int(raw_value)
         except (TypeError, ValueError):
             return None
 
     def _effective_scope(self, submission):
-        requested_scope = self._requested_scope()
-        if requested_scope == "group":
-            return "group"
-        has_explicit_target = self._requested_target_student_id() is not None
-        is_collaborative = bool(submission.group_id) or bool(submission.requested_member_ids)
-        if not has_explicit_target and is_collaborative:
-            return "group"
-        return "single"
+        return self._effective_scope_from_values(
+            submission,
+            self._requested_scope(),
+            self._requested_target_student_id(),
+        )
 
-    def _resolve_target_submission(self, submission):
-        target_student_id = self._requested_target_student_id()
+    def _resolve_target_submission_for_values(self, submission, target_student_id):
         if not target_student_id:
             return submission
         if submission.student_id == target_student_id:
@@ -479,12 +561,22 @@ class FeedbackGradeViewSet(AuditLogMixin, viewsets.ModelViewSet):
                 return item
         return submission
 
-    def _scope_targets(self, submission):
-        if self._effective_scope(submission) != "group":
+    def _resolve_target_submission(self, submission):
+        return self._resolve_target_submission_for_values(submission, self._requested_target_student_id())
+
+    def _scope_targets_from_values(self, submission, scope, target_student_id):
+        if self._effective_scope_from_values(submission, scope, target_student_id) != "group":
             return [submission]
         if submission.group_id:
             return self._ensure_group_member_submissions(submission)
         return self._ensure_member_request_submissions(submission)
+
+    def _scope_targets(self, submission):
+        return self._scope_targets_from_values(
+            submission,
+            self._requested_scope(),
+            self._requested_target_student_id(),
+        )
 
     def create(self, request, *args, **kwargs):
         incoming_submission_id = request.data.get("submission")
@@ -572,3 +664,90 @@ class FeedbackGradeViewSet(AuditLogMixin, viewsets.ModelViewSet):
     def perform_update(self, serializer):
         feedback = serializer.save()
         self._propagate_group_feedback(feedback)
+
+    @action(detail=False, methods=["post"])
+    def bulk_upsert(self, request):
+        items = request.data.get("items") or []
+        if not isinstance(items, list) or not items:
+            return Response({"detail": "items list is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        teacher_course_ids = (
+            set(user.teaching_courses.values_list("id", flat=True))
+            if user.role == User.Role.TEACHER
+            else None
+        )
+        requested_ids = [item.get("submission") for item in items if item.get("submission")]
+        submissions_by_id = {
+            submission.id: submission
+            for submission in Submission.objects.select_related("coursework__course").filter(id__in=requested_ids)
+        }
+
+        updated_count = 0
+        errors = []
+        for index, item in enumerate(items):
+            submission_id = item.get("submission")
+            submission = submissions_by_id.get(submission_id)
+            if not submission:
+                errors.append({"index": index, "submission": submission_id, "detail": "Submission not found."})
+                continue
+            if teacher_course_ids is not None and submission.coursework.course_id not in teacher_course_ids:
+                errors.append({"index": index, "submission": submission_id, "detail": "Not allowed for this course."})
+                continue
+
+            raw_marks = item.get("marks")
+            try:
+                marks_value = Decimal(str(raw_marks))
+            except (InvalidOperation, TypeError):
+                errors.append({"index": index, "submission": submission_id, "detail": "Invalid marks value."})
+                continue
+            if marks_value > submission.coursework.max_marks:
+                errors.append(
+                    {
+                        "index": index,
+                        "submission": submission_id,
+                        "detail": f"Marks cannot exceed {submission.coursework.max_marks}.",
+                    }
+                )
+                continue
+
+            scope = str(item.get("scope") or "single").strip().lower()
+            target_student_id = item.get("target_student_id")
+            try:
+                target_student_id = int(target_student_id) if target_student_id not in [None, ""] else None
+            except (TypeError, ValueError):
+                target_student_id = None
+
+            target_submission = self._resolve_target_submission_for_values(submission, target_student_id)
+            feedback_obj, _ = FeedbackGrade.objects.update_or_create(
+                submission=target_submission,
+                defaults={
+                    "teacher": request.user,
+                    "feedback": item.get("feedback", "") or "",
+                    "marks": marks_value,
+                },
+            )
+
+            targets = self._scope_targets_from_values(target_submission, scope, target_student_id)
+            if len(targets) > 1:
+                for peer in targets:
+                    if peer.id == target_submission.id:
+                        continue
+                    FeedbackGrade.objects.update_or_create(
+                        submission=peer,
+                        defaults={
+                            "teacher": request.user,
+                            "feedback": feedback_obj.feedback,
+                            "marks": feedback_obj.marks,
+                        },
+                    )
+            updated_count += 1
+
+        return Response(
+            {
+                "updated_count": updated_count,
+                "error_count": len(errors),
+                "errors": errors,
+            },
+            status=status.HTTP_200_OK,
+        )

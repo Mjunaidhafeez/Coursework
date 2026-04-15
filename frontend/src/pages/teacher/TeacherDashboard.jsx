@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
-import StatCard from "../../components/StatCard";
+import DashboardFrame from "../../components/shared/DashboardFrame";
+import DashboardMetricGrid from "../../components/shared/DashboardMetricGrid";
+import OpeningAssessmentsCard from "../../components/shared/OpeningAssessmentsCard";
 
 const getCount = (res) => (res?.status === "fulfilled" ? Number(res.value?.data?.count || 0) : 0);
 
@@ -15,14 +17,17 @@ const TeacherDashboard = () => {
     pendingGrading: 0,
     marked: 0,
   });
+  const [openingAssessments, setOpeningAssessments] = useState([]);
+  const [activeTab, setActiveTab] = useState("overview");
 
   const loadData = async () => {
-    const [coursesRes, openCourseworkRes, pendingApprovalsRes, pendingGradingRes, markedRes] = await Promise.allSettled([
+    const [coursesRes, openCourseworkRes, pendingApprovalsRes, pendingGradingRes, markedRes, openingListRes] = await Promise.allSettled([
       api.get(`${ENDPOINTS.courses}?page_size=1`),
       api.get(`${ENDPOINTS.courseworks}?deadline_state=open&page_size=1`),
       api.get(`${ENDPOINTS.submissions}?workflow_state=request_pending&page_size=1`),
       api.get(`${ENDPOINTS.submissions}?workflow_state=file_submitted&page_size=1`),
       api.get(`${ENDPOINTS.submissions}?workflow_state=marked&page_size=1`),
+      api.get(`${ENDPOINTS.courseworks}?deadline_state=open&page_size=8&ordering=deadline`),
     ]);
 
     setStats({
@@ -32,6 +37,11 @@ const TeacherDashboard = () => {
       pendingGrading: getCount(pendingGradingRes),
       marked: getCount(markedRes),
     });
+    if (openingListRes.status === "fulfilled") {
+      setOpeningAssessments(openingListRes.value?.data?.results || []);
+    } else {
+      setOpeningAssessments([]);
+    }
   };
 
   useEffect(() => {
@@ -40,44 +50,51 @@ const TeacherDashboard = () => {
 
   const statCards = [
     { label: "My Courses", value: stats.courses, accent: "#1d4fbf" },
-    { label: "My Open Coursework", value: stats.openCoursework, accent: "#2e7d32" },
+    { label: "My Open Assessment", value: stats.openCoursework, accent: "#2e7d32" },
     { label: "Pending Approvals", value: stats.pendingApprovals, accent: "#ef6c00" },
     { label: "Pending Gradings (Marked)", value: `${stats.pendingGrading} (${stats.marked})`, accent: "#6a1b9a", valueFontSize: "1.2rem" },
   ];
 
   return (
     <Stack spacing={1.2}>
-      <Paper
-        sx={{
-          p: 1.25,
-          border: "1px solid #dbeafe",
-          borderRadius: 2,
-          background: "linear-gradient(130deg, #eff6ff 0%, #f8fbff 55%, #eef2ff 100%)",
-        }}
-      >
-        <Typography className="premium-heading-soft" sx={{ fontWeight: 900, fontSize: "1.06rem" }}>Teacher Dashboard</Typography>
-        <Typography variant="body2" sx={{ color: "#3e4d73" }}>
-          Quick academic workflow snapshot
-        </Typography>
-      </Paper>
-      <Box
-        sx={{
-          display: "grid",
-          gap: 1.2,
-          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" },
-        }}
-      >
-        {statCards.map((card) => (
-          <Box key={card.label}>
-            <StatCard
-              label={card.label}
-              value={card.value}
-              accent={card.accent}
-              valueFontSize={card.valueFontSize}
-            />
-          </Box>
-        ))}
-      </Box>
+      <DashboardFrame
+        title="Teacher Dashboard"
+        subtitle="Teaching pipeline summary and deadlines"
+        tabs={[
+          { value: "overview", label: "Overview" },
+          { value: "workflow", label: "Workflow" },
+        ]}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+
+      {activeTab === "overview" && (
+        <Stack spacing={1.2}>
+          <DashboardMetricGrid metrics={statCards} />
+          <OpeningAssessmentsCard
+            items={openingAssessments}
+            title="Opening Assessment Deadlines"
+            emptyText="No opening assessment found."
+          />
+        </Stack>
+      )}
+
+      {activeTab === "workflow" && (
+        <Box sx={{ display: "grid", gap: 1.2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
+          <Paper sx={{ p: 1.1, border: "1px solid #ffe0b2", borderRadius: 2 }}>
+            <Typography variant="caption" color="text.secondary">Pending Topic Approvals</Typography>
+            <Typography sx={{ fontWeight: 900, fontSize: "1.35rem", color: "#ef6c00" }}>{stats.pendingApprovals}</Typography>
+          </Paper>
+          <Paper sx={{ p: 1.1, border: "1px solid #e1bee7", borderRadius: 2 }}>
+            <Typography variant="caption" color="text.secondary">Files Waiting For Grading</Typography>
+            <Typography sx={{ fontWeight: 900, fontSize: "1.35rem", color: "#8e24aa" }}>{stats.pendingGrading}</Typography>
+          </Paper>
+          <Paper sx={{ p: 1.1, border: "1px solid #c8e6c9", borderRadius: 2 }}>
+            <Typography variant="caption" color="text.secondary">Marked Records</Typography>
+            <Typography sx={{ fontWeight: 900, fontSize: "1.35rem", color: "#2e7d32" }}>{stats.marked}</Typography>
+          </Paper>
+        </Box>
+      )}
     </Stack>
   );
 };

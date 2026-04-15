@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import ModuleHero from "../../components/shared/ModuleHero";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import StudentMemberList from "../../components/shared/StudentMemberList";
 import { useUi } from "../../context/UiContext";
@@ -70,8 +71,10 @@ const StudentGroupsPage = () => {
 
   return (
     <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>Groups Directory</Typography>
+      <ModuleHero
+        title="Groups Directory"
+        subtitle="Browse all approved class groups and quickly identify your own group."
+      >
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}
@@ -83,7 +86,7 @@ const StudentGroupsPage = () => {
             setPage(1);
           }}
         />
-      </Paper>
+      </ModuleHero>
 
       <Paper sx={{ p: 2 }}>
         <Stack direction="row" spacing={1} sx={{ mb: 1.2 }}>

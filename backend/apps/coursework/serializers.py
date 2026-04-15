@@ -7,6 +7,16 @@ from apps.groups.models import GroupMember, StudentGroup
 from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
 
 
+def normalize_coursework_type(value):
+    return (
+        str(value or "")
+        .strip()
+        .lower()
+        .replace("_", " ")
+        .replace("-", " ")
+    )
+
+
 class CourseworkSerializer(serializers.ModelSerializer):
     course_title = serializers.CharField(source="course.title", read_only=True)
     teacher_names = serializers.SerializerMethodField()
@@ -24,6 +34,9 @@ class CourseworkSerializer(serializers.ModelSerializer):
             "max_group_members",
             "teacher_names",
             "lock_at_due_time",
+            "approval_required",
+            "topic_duplication_allowed",
+            "auto_approve_all_students",
             "deadline",
             "max_marks",
             "created_by",
@@ -31,6 +44,9 @@ class CourseworkSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_by"]
+        extra_kwargs = {
+            "description": {"required": False, "allow_blank": True},
+        }
 
     def get_teacher_names(self, obj):
         names = []
@@ -40,8 +56,21 @@ class CourseworkSerializer(serializers.ModelSerializer):
         return names
 
     def validate(self, attrs):
+        if "description" in attrs and attrs["description"] is not None:
+            attrs["description"] = str(attrs["description"]).strip()
+        if "coursework_type" in attrs and attrs["coursework_type"] is not None:
+            attrs["coursework_type"] = " ".join(normalize_coursework_type(attrs["coursework_type"]).split())
+
         submission_type = attrs.get("submission_type") or getattr(self.instance, "submission_type", None)
         max_group_members = attrs.get("max_group_members", getattr(self.instance, "max_group_members", None))
+        auto_approve_all_students = attrs.get(
+            "auto_approve_all_students",
+            getattr(self.instance, "auto_approve_all_students", False),
+        )
+
+        if auto_approve_all_students:
+            # Auto-approval mode bypasses topic approval workflow for all enrolled students.
+            attrs["approval_required"] = False
 
         if submission_type in [Coursework.SubmissionType.GROUP, Coursework.SubmissionType.BOTH]:
             if not max_group_members:
@@ -52,6 +81,18 @@ class CourseworkSerializer(serializers.ModelSerializer):
             attrs["max_group_members"] = None
 
         return attrs
+
+    def validate_title(self, value):
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise serializers.ValidationError("Title is required.")
+        return normalized
+
+    def validate_coursework_type(self, value):
+        normalized = " ".join(normalize_coursework_type(value).split())
+        if not normalized:
+            raise serializers.ValidationError("Assessment type is required.")
+        return normalized
 
     def validate_deadline(self, value):
         if value <= timezone.now():
@@ -223,7 +264,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         coursework = attrs.get("coursework") or getattr(self.instance, "coursework", None)
         if not coursework:
-            raise serializers.ValidationError({"coursework": "Coursework is required."})
+            raise serializers.ValidationError({"coursework": "Assessment is required."})
         group = attrs.get("group", getattr(self.instance, "group", None))
         member_ids = attrs.get("member_ids", [])
         existing_requested_members = getattr(self.instance, "requested_member_ids", []) if self.instance else []
@@ -233,6 +274,12 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
         if not topic:
             raise serializers.ValidationError({"topic": "Topic is required."})
+
+        current_requested_members = set(existing_requested_members or [])
+        requested_member_ids = set(member_ids or [])
+        if self.instance and "member_ids" not in attrs:
+            requested_member_ids = current_requested_members
+        participant_ids = self._get_requested_participant_ids(coursework, user.id, group, requested_member_ids)
 
         if coursework.lock_at_due_time and now > coursework.deadline:
             raise serializers.ValidationError("Submission is locked because the due time has passed.")
@@ -251,7 +298,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
             if group.scope == StudentGroup.Scope.COURSE and group.course_id != coursework.course_id:
                 raise serializers.ValidationError("Selected group course does not match coursework course.")
             if group.scope == StudentGroup.Scope.COURSEWORK and group.coursework_id != coursework.id:
-                raise serializers.ValidationError("Selected group is not for this coursework.")
+                raise serializers.ValidationError("Selected group is not for this assessment.")
 
         if coursework.submission_type == Coursework.SubmissionType.GROUP:
             has_member_context = bool(member_ids) or bool(existing_requested_members)
@@ -262,7 +309,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("You are not a member of this group.")
         elif coursework.submission_type == Coursework.SubmissionType.INDIVIDUAL:
             if group or member_ids:
-                raise serializers.ValidationError("Group cannot be set for individual coursework.")
+                raise serializers.ValidationError("Group cannot be set for individual assessment.")
         elif coursework.submission_type == Coursework.SubmissionType.BOTH and group:
             if not GroupMember.objects.filter(group=group, student=user, accepted=True).exists():
                 raise serializers.ValidationError("You are not a member of this group.")
@@ -287,29 +334,137 @@ class SubmissionSerializer(serializers.ModelSerializer):
                     f"Selected group has {accepted_members_count} members, but max allowed is {coursework.max_group_members}."
                 )
 
-        # Prevent duplicate coursework requests/submissions for the same participant context.
-        if self.instance is None:
-            existing = None
-            if coursework.submission_type == Coursework.SubmissionType.GROUP or group or member_ids:
-                existing = self._find_existing_group_context_submission(coursework, user.id, group)
-            else:
-                existing = Submission.objects.filter(
-                    coursework=coursework,
-                    student=user,
-                    group__isnull=True,
-                ).order_by("-submitted_at").first()
-            if existing:
-                approval = existing.approval_status or Submission.ApprovalStatus.PENDING
+        if not coursework.topic_duplication_allowed:
+            topic_conflict = self._find_topic_conflict_submission(
+                coursework=coursework,
+                topic=topic,
+                participant_ids=participant_ids,
+                group=group,
+            )
+            if topic_conflict:
+                if topic_conflict.group_id:
+                    raise serializers.ValidationError(
+                        {
+                            "topic": (
+                                f"This topic is already selected by group '{topic_conflict.group.name}'. "
+                                "Choose a different topic."
+                            )
+                        }
+                    )
+                owner = topic_conflict.student
+                owner_name = (
+                    owner.get_full_name().strip() or owner.username
+                    if owner
+                    else "another student"
+                )
                 raise serializers.ValidationError(
                     {
-                        "coursework": (
-                            f"Request already exists for this coursework (status: {approval}). "
-                            "Duplicate request is not allowed."
+                        "topic": (
+                            f"This topic is already selected by {owner_name}. "
+                            "Choose a different topic."
                         )
                     }
                 )
 
+        # Prevent duplicate assessment requests/submissions for the same participant context.
+        existing = None
+        if coursework.submission_type == Coursework.SubmissionType.GROUP or group or requested_member_ids:
+            existing = self._find_existing_group_context_submission(coursework, user.id, group)
+        else:
+            existing = Submission.objects.filter(
+                coursework=coursework,
+                student=user,
+                group__isnull=True,
+            ).order_by("-submitted_at").first()
+        if existing and (not self.instance or existing.id != self.instance.id):
+            approval = existing.approval_status or Submission.ApprovalStatus.PENDING
+            raise serializers.ValidationError(
+                {
+                    "coursework": (
+                        f"Request already exists for this assessment (status: {approval}). "
+                        "Duplicate request is not allowed."
+                    )
+                }
+            )
+
+        # Strict participant-level guard:
+        # A student cannot appear in multiple requests for the same assessment
+        # (across groups and individual/member-based requests).
+        conflict = self._find_participant_conflict_submission(
+            coursework=coursework,
+            participant_ids=participant_ids,
+            exclude_submission_id=getattr(self.instance, "id", None),
+        )
+        if conflict:
+            conflict_student = User.objects.filter(id=conflict["student_id"]).first()
+            conflict_name = (
+                conflict_student.get_full_name().strip() or conflict_student.username
+                if conflict_student
+                else f"Student #{conflict['student_id']}"
+            )
+            raise serializers.ValidationError(
+                {
+                    "coursework": (
+                        f"{conflict_name} already has a request for this assessment. "
+                        "A student can only be part of one request per assessment."
+                    )
+                }
+            )
+
         return attrs
+
+    def _get_submission_participant_ids(self, submission):
+        participant_ids = set(submission.requested_member_ids or [])
+        if submission.student_id:
+            participant_ids.add(submission.student_id)
+        if submission.group_id:
+            participant_ids.update(
+                GroupMember.objects.filter(group_id=submission.group_id, accepted=True).values_list("student_id", flat=True)
+            )
+        return participant_ids
+
+    def _get_requested_participant_ids(self, coursework, user_id, group, member_ids):
+        if group:
+            return set(
+                GroupMember.objects.filter(group=group, accepted=True).values_list("student_id", flat=True)
+            )
+        participant_ids = set(member_ids or [])
+        participant_ids.add(user_id)
+        return participant_ids
+
+    def _find_participant_conflict_submission(self, coursework, participant_ids, exclude_submission_id=None):
+        if not participant_ids:
+            return None
+        existing_rows = Submission.objects.filter(coursework=coursework).order_by("-submitted_at")
+        if exclude_submission_id:
+            existing_rows = existing_rows.exclude(id=exclude_submission_id)
+        for row in existing_rows:
+            overlap = participant_ids.intersection(self._get_submission_participant_ids(row))
+            if overlap:
+                return {"submission_id": row.id, "student_id": next(iter(overlap))}
+        return None
+
+    def _find_topic_conflict_submission(self, coursework, topic, participant_ids, group):
+        normalized_topic = str(topic or "").strip()
+        if not normalized_topic:
+            return None
+
+        rows = Submission.objects.filter(coursework=coursework, topic__iexact=normalized_topic)
+        if self.instance:
+            rows = rows.exclude(id=self.instance.id)
+
+        for row in rows.order_by("-submitted_at"):
+            # Same group (or cloned group-member rows) are allowed to keep same topic.
+            if group and row.group_id and row.group_id == group.id:
+                continue
+
+            # Same participant-set clones (member-request flow) are also allowed.
+            row_participants = self._get_submission_participant_ids(row)
+            if row_participants and participant_ids and row_participants == participant_ids:
+                continue
+
+            return row
+        return None
 
     def _find_existing_group_context_submission(self, coursework, user_id, group):
         if group:
@@ -353,11 +508,44 @@ class SubmissionSerializer(serializers.ModelSerializer):
         # Keep submitter reference for both individual and group workflows.
         validated_data["student"] = user
         validated_data["version"] = next_version
-        validated_data["approval_status"] = Submission.ApprovalStatus.PENDING
+        validated_data["approval_status"] = (
+            Submission.ApprovalStatus.PENDING
+            if coursework.approval_required
+            else Submission.ApprovalStatus.APPROVED
+        )
         validated_data["requested_member_ids"] = list(dict.fromkeys([int(mid) for mid in member_ids]))
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
+        member_ids = validated_data.pop("member_ids", None)
+        if member_ids is not None:
+            validated_data["requested_member_ids"] = list(dict.fromkeys([int(mid) for mid in member_ids]))
+
+        request_payload_present = any(
+            field in validated_data for field in ["topic", "group", "requested_member_ids"]
+        )
+        request_fields_changed = False
+        if "topic" in validated_data and str(validated_data.get("topic") or "") != str(instance.topic or ""):
+            request_fields_changed = True
+        if "group" in validated_data and getattr(validated_data.get("group"), "id", None) != instance.group_id:
+            request_fields_changed = True
+        if "requested_member_ids" in validated_data:
+            old_members = set(instance.requested_member_ids or [])
+            new_members = set(validated_data.get("requested_member_ids") or [])
+            if old_members != new_members:
+                request_fields_changed = True
+
+        should_requeue_for_review = request_fields_changed or (
+            request_payload_present and instance.approval_status == Submission.ApprovalStatus.REJECTED
+        )
+
+        if should_requeue_for_review:
+            validated_data["approval_status"] = (
+                Submission.ApprovalStatus.PENDING
+                if instance.coursework.approval_required
+                else Submission.ApprovalStatus.APPROVED
+            )
+
         # If file is uploaded/replaced, refresh submitted_at to reflect actual file submission time.
         if validated_data.get("file") is not None:
             validated_data["submitted_at"] = timezone.now()
@@ -400,11 +588,18 @@ class FeedbackGradeSerializer(serializers.ModelSerializer):
         read_only_fields = ["teacher", "overridden_by"]
 
     def validate_marks(self, value):
-        submission = self.initial_data.get("submission")
-        if submission:
-            submission_obj = Submission.objects.get(pk=submission)
-            if value > submission_obj.coursework.max_marks:
-                raise serializers.ValidationError("Marks cannot exceed coursework max marks.")
+        submission_obj = None
+        submission_id = self.initial_data.get("submission")
+        if submission_id:
+            try:
+                submission_obj = Submission.objects.get(pk=submission_id)
+            except Submission.DoesNotExist:
+                raise serializers.ValidationError("Invalid submission.")
+        elif self.instance:
+            submission_obj = self.instance.submission
+
+        if submission_obj and value > submission_obj.coursework.max_marks:
+            raise serializers.ValidationError("Marks cannot exceed coursework max marks.")
         return value
 
     def create(self, validated_data):

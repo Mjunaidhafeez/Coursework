@@ -1,14 +1,18 @@
-import { Box, Grid2 as Grid, Paper, Stack, Typography } from "@mui/material";
+import { Box, Paper, Stack, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
+import DashboardFrame from "../../components/shared/DashboardFrame";
+import DashboardMetricGrid from "../../components/shared/DashboardMetricGrid";
+import OpeningAssessmentsCard from "../../components/shared/OpeningAssessmentsCard";
 import StudentMemberList from "../../components/shared/StudentMemberList";
 
 const StudentDashboard = () => {
   const [stats, setStats] = useState({ courses: 0, openWork: 0, pendingApprovals: 0, myGroups: 0 });
   const [courseworks, setCourseworks] = useState([]);
   const [myGroups, setMyGroups] = useState([]);
+  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     const load = async () => {
@@ -64,65 +68,29 @@ const StudentDashboard = () => {
     return courseworks.slice(0, 6);
   }, [courseworks]);
   const summaryCards = [
-    { label: "My Groups", value: stats.myGroups, accent: "linear-gradient(135deg, #0ea5e9, #2563eb)" },
-    { label: "My Courses", value: stats.courses, accent: "linear-gradient(135deg, #22c55e, #15803d)" },
-    { label: "My Open Work", value: stats.openWork, accent: "linear-gradient(135deg, #f59e0b, #d97706)" },
-    { label: "My Pending Approvals", value: stats.pendingApprovals, accent: "linear-gradient(135deg, #a855f7, #7e22ce)" },
+    { label: "My Groups", value: stats.myGroups, accent: "#1565c0" },
+    { label: "My Courses", value: stats.courses, accent: "#2e7d32" },
+    { label: "My Open Work", value: stats.openWork, accent: "#ef6c00" },
+    { label: "My Pending Approvals", value: stats.pendingApprovals, accent: "#8e24aa" },
   ];
 
   return (
     <Stack spacing={1.2}>
-      <Typography className="premium-heading-soft" sx={{ fontWeight: 900, fontSize: "1.04rem" }}>
-        Student Dashboard
-      </Typography>
-      <Grid container spacing={1.2}>
-        {summaryCards.map((item) => (
-          <Grid key={item.label} size={{ xs: 12, sm: 6, md: 3 }}>
-            <Paper
-              sx={{
-                p: 1.2,
-                borderRadius: 2,
-                color: "#fff",
-                background: item.accent,
-                boxShadow: "0 10px 22px rgba(15, 23, 42, 0.15)",
-              }}
-            >
-              <Typography variant="caption" sx={{ opacity: 0.9, fontWeight: 700 }}>
-                {item.label}
-              </Typography>
-              <Typography sx={{ mt: 0.3, fontSize: "1.4rem", fontWeight: 900, lineHeight: 1.1 }}>
-                {item.value}
-              </Typography>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
+      <DashboardFrame
+        title="Student Dashboard"
+        subtitle="Your learning progress, groups and upcoming work"
+        tabs={[
+          { value: "overview", label: "Overview" },
+          { value: "groups", label: "My Groups" },
+        ]}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
-      <Grid container spacing={1.2}>
-        <Grid size={{ xs: 12, md: 7 }}>
-          <Paper sx={{ p: 1.2, borderRadius: 2, border: "1px solid #dbeafe", bgcolor: "#f8fbff", minHeight: 210 }}>
-            <Typography className="premium-heading-soft" sx={{ fontWeight: 800, mb: 0.9 }}>My Groups</Typography>
-            <Stack spacing={0.7}>
-              {myGroups.length ? (
-                myGroups.map((group) => (
-                  <Paper key={group.id} variant="outlined" sx={{ p: 0.8, borderColor: "#bfdbfe", borderRadius: 1.3 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.4 }}>
-                      {group.name}
-                    </Typography>
-                    <StudentMemberList members={group.members || []} compact />
-                  </Paper>
-                ))
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No group assigned yet.
-                </Typography>
-              )}
-            </Stack>
-          </Paper>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 5 }}>
-          <Paper sx={{ p: 1.2, borderRadius: 2, border: "1px solid #ede9fe", bgcolor: "#faf9ff", minHeight: 210 }}>
+      {activeTab === "overview" && (
+        <Stack spacing={1.2}>
+          <DashboardMetricGrid metrics={summaryCards} />
+          <Paper sx={{ p: 1.2, borderRadius: 2, border: "1px solid #ede9fe", bgcolor: "#faf9ff" }}>
             <Typography className="premium-heading-soft" sx={{ fontWeight: 800, mb: 0.9 }}>My Open Work</Typography>
             <Stack spacing={0.7}>
               {latestOpenCoursework.length ? (
@@ -144,13 +112,41 @@ const StudentDashboard = () => {
                 ))
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  No open coursework found.
+                  No open assessment found.
                 </Typography>
               )}
             </Stack>
           </Paper>
-        </Grid>
-      </Grid>
+          <OpeningAssessmentsCard
+            items={courseworks.slice(0, 8)}
+            title="Opening Assessment Deadlines"
+            emptyText="No opening assessment found."
+          />
+        </Stack>
+      )}
+
+      {activeTab === "groups" && (
+        <Paper sx={{ p: 1.2, borderRadius: 2, border: "1px solid #dbeafe", bgcolor: "#f8fbff", minHeight: 210 }}>
+          <Typography className="premium-heading-soft" sx={{ fontWeight: 800, mb: 0.9 }}>My Groups</Typography>
+          <Stack spacing={0.7}>
+            {myGroups.length ? (
+              myGroups.map((group) => (
+                <Paper key={group.id} variant="outlined" sx={{ p: 0.8, borderColor: "#bfdbfe", borderRadius: 1.3 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.4 }}>
+                    {group.name}
+                  </Typography>
+                  <StudentMemberList members={group.members || []} compact />
+                </Paper>
+              ))
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No group assigned yet.
+              </Typography>
+            )}
+          </Stack>
+        </Paper>
+      )}
+
     </Stack>
   );
 };

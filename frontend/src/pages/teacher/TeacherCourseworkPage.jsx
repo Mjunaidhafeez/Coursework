@@ -1,22 +1,11 @@
 import {
   Box,
   Button,
-  Checkbox,
-  Chip,
   Collapse,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
   IconButton,
   MenuItem,
   Paper,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
@@ -27,17 +16,22 @@ import { useNavigate } from "react-router-dom";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
+import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import PaginationControls from "../../components/PaginationControls";
+import CourseworkFormSection from "../../components/shared/CourseworkFormSection";
+import ModuleHero from "../../components/shared/ModuleHero";
 import SearchToolbar from "../../components/shared/SearchToolbar";
-import StudentMemberList from "../../components/shared/StudentMemberList";
 import { useUi } from "../../context/UiContext";
-import { COURSEWORK_TYPE_OPTIONS, SUBMISSION_TYPE_OPTIONS } from "../../utils/courseworkOptions";
-import { emptyCourseworkForm, toCourseworkEditForm, toCourseworkPayload, validateMaxMarks } from "../../utils/courseworkForm";
-import { fetchFeedbackBySubmissionMap } from "../../utils/feedback";
-import { formatDate, formatMarks } from "../../utils/format";
-import { downloadSubmissionFile, openSubmissionFilePreview } from "../../utils/submissionFiles";
-import { resolveSubmissionMembers } from "../../utils/submissionMembers";
-import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
+import { buildCourseworkTypeOptions, SUBMISSION_TYPE_OPTIONS } from "../../utils/courseworkOptions";
+import { confirmDelete } from "../../utils/confirm";
+import {
+  emptyCourseworkForm,
+  toCourseworkEditForm,
+  toCourseworkPayload,
+  validateCourseworkForm,
+  validateMaxMarks,
+} from "../../utils/courseworkForm";
+import { formatDate } from "../../utils/format";
 
 const TeacherCourseworkPage = () => {
   const navigate = useNavigate();
@@ -52,21 +46,25 @@ const TeacherCourseworkPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [form, setForm] = useState(emptyCourseworkForm);
+  const [formErrors, setFormErrors] = useState({});
   const [editingId, setEditingId] = useState(null);
-  const [submissionsByCoursework, setSubmissionsByCoursework] = useState({});
-  const [submissionLoadingByCoursework, setSubmissionLoadingByCoursework] = useState({});
-  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
-  const [memberDialogTitle, setMemberDialogTitle] = useState("");
-  const [memberDialogItems, setMemberDialogItems] = useState([]);
   const [viewMode, setViewMode] = useState("opening");
   const [openCourseSections, setOpenCourseSections] = useState({});
   const [openCourseworkSections, setOpenCourseworkSections] = useState({});
-  const [feedbackBySubmission, setFeedbackBySubmission] = useState({});
-  const [feedbackDraftBySubmission, setFeedbackDraftBySubmission] = useState({});
-  const [feedbackSavingBySubmission, setFeedbackSavingBySubmission] = useState({});
-
-  const loadFeedbackMap = async () => {
-    setFeedbackBySubmission(await fetchFeedbackBySubmissionMap(api, ENDPOINTS, 1000));
+  const toggleSx = {
+    "& .MuiSwitch-switchBase.Mui-checked": { color: "#1565c0" },
+    "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+      bgcolor: "#90caf9",
+      opacity: 1,
+    },
+    "& .MuiSwitch-track": {
+      bgcolor: "#cfd8dc",
+      opacity: 1,
+      transition: "all 180ms ease",
+    },
+    "& .MuiSwitch-thumb": {
+      boxShadow: "0 2px 8px rgba(0,0,0,0.22)",
+    },
   };
 
   const loadData = async ({ searchValue = search, pageValue = page, pageSizeValue = pageSize } = {}) => {
@@ -78,14 +76,31 @@ const TeacherCourseworkPage = () => {
     params.append("page", String(pageValue));
     params.append("page_size", String(pageSizeValue));
     const query = params.toString();
-    const [courseworkRes, coursesRes] = await Promise.all([
+    const [courseworkRes, coursesRes] = await Promise.allSettled([
       api.get(`${ENDPOINTS.courseworks}${query ? `?${query}` : ""}`),
       api.get(ENDPOINTS.courses),
     ]);
-    await loadFeedbackMap();
-    setRows(courseworkRes.data.results || []);
-    setTotal(courseworkRes.data.count || 0);
-    setCourses(coursesRes.data.results || []);
+
+    if (coursesRes.status === "fulfilled") {
+      const payload = coursesRes.value?.data;
+      setCourses(Array.isArray(payload) ? payload : payload?.results || []);
+    } else {
+      setCourses([]);
+      notify("Courses could not be loaded", "error");
+    }
+
+    if (courseworkRes.status === "fulfilled") {
+      const payload = courseworkRes.value?.data;
+      setRows(payload?.results || []);
+      setTotal(payload?.count || 0);
+    } else {
+      setRows([]);
+      setTotal(0);
+      notify(
+        courseworkRes.reason?.response?.data?.detail || "Assessment list could not be loaded. Please run backend migrations.",
+        "error"
+      );
+    }
   };
 
   useEffect(() => {
@@ -93,6 +108,14 @@ const TeacherCourseworkPage = () => {
   }, [courseFilter, typeFilter, submissionFilter]);
 
   const submit = async () => {
+    const formValidation = validateCourseworkForm(form);
+    setFormErrors(formValidation.errors);
+    if (!formValidation.ok) {
+      const firstError = Object.values(formValidation.errors)[0] || "Please fill required fields";
+      notify(firstError, "error");
+      return;
+    }
+
     const marksValidation = validateMaxMarks(form.max_marks);
     if (!marksValidation.ok) {
       notify(marksValidation.error, "error");
@@ -100,29 +123,43 @@ const TeacherCourseworkPage = () => {
     }
 
     const payload = toCourseworkPayload({ ...form, max_marks: marksValidation.value });
-    if (editingId) {
-      await api.patch(`${ENDPOINTS.courseworks}${editingId}/`, payload);
-      notify("Coursework updated");
-    } else {
-      await api.post(ENDPOINTS.courseworks, payload);
-      notify("Coursework added");
+    try {
+      if (editingId) {
+        await api.patch(`${ENDPOINTS.courseworks}${editingId}/`, payload);
+        notify("Assessment updated");
+      } else {
+        await api.post(ENDPOINTS.courseworks, payload);
+        notify("Assessment added");
+      }
+    } catch (err) {
+      const serverErrors = extractFieldErrors(err?.response?.data);
+      if (Object.keys(serverErrors).length) {
+        setFormErrors((prev) => ({ ...prev, ...serverErrors }));
+      }
+      notify(extractApiErrorMessage(err), "error");
+      return;
     }
     setForm(emptyCourseworkForm);
     setEditingId(null);
+    setFormErrors({});
     loadData();
   };
 
   const edit = (row) => {
     setEditingId(row.id);
     setForm(toCourseworkEditForm(row));
+    setFormErrors({});
   };
 
   const remove = async (id) => {
+    if (!confirmDelete("assessment")) {
+      return;
+    }
     const previous = rows;
     setRows((prev) => prev.filter((item) => item.id !== id));
     try {
       await api.delete(`${ENDPOINTS.courseworks}${id}/`);
-      notify("Coursework deleted");
+      notify("Assessment deleted");
       if (editingId === id) {
         setEditingId(null);
         setForm(emptyCourseworkForm);
@@ -133,113 +170,6 @@ const TeacherCourseworkPage = () => {
       notify(err?.response?.data?.detail || "Delete failed", "error");
     }
   };
-
-  const loadCourseworkSubmissions = async (courseworkId) => {
-    setSubmissionLoadingByCoursework((prev) => ({ ...prev, [courseworkId]: true }));
-    try {
-      const params = new URLSearchParams();
-      params.append("coursework", String(courseworkId));
-      params.append("page_size", "200");
-      params.append("ordering", "submitted_at");
-      const { data } = await api.get(`${ENDPOINTS.submissions}?${params.toString()}`);
-      setSubmissionsByCoursework((prev) => ({ ...prev, [courseworkId]: data.results || [] }));
-    } finally {
-      setSubmissionLoadingByCoursework((prev) => ({ ...prev, [courseworkId]: false }));
-    }
-  };
-
-  const approveSubmission = async (courseworkId, submissionId) => {
-    await api.post(`${ENDPOINTS.submissions}${submissionId}/approve/`);
-    notify("Submission approved");
-    await loadCourseworkSubmissions(courseworkId);
-  };
-
-  const rejectSubmission = async (courseworkId, submissionId) => {
-    await api.post(`${ENDPOINTS.submissions}${submissionId}/reject/`);
-    notify("Submission rejected");
-    await loadCourseworkSubmissions(courseworkId);
-  };
-
-  const openSubmissionMembers = async (submission) => {
-    try {
-      const members = await resolveSubmissionMembers(api, ENDPOINTS, submission);
-      setMemberDialogItems(members);
-      setMemberDialogTitle(submission.topic || submission.group_name || "Submission Members");
-      setMemberDialogOpen(true);
-    } catch {
-      notify("Could not load submission members", "error");
-    }
-  };
-
-  const openFilePreview = (submission) => openSubmissionFilePreview(submission, notify);
-  const downloadFile = (submission) => downloadSubmissionFile(submission, notify);
-
-  const getFeedbackDraft = (submission) => {
-    const saved = feedbackBySubmission[String(submission.id)];
-    return feedbackDraftBySubmission[submission.id] || {
-      marks: saved?.marks ?? submission.obtained_marks ?? "",
-      feedback: saved?.feedback || "",
-    };
-  };
-
-  const updateFeedbackDraft = (submissionId, patch) => {
-    setFeedbackDraftBySubmission((prev) => ({
-      ...prev,
-      [submissionId]: {
-        ...prev[submissionId],
-        ...patch,
-      },
-    }));
-  };
-
-  const saveFeedback = async (courseworkId, submission, maxMarks) => {
-    if (!submission.file) {
-      notify("Upload required before grading", "warning");
-      return;
-    }
-    const draft = getFeedbackDraft(submission);
-    if (draft.marks === "" || draft.marks === null || draft.marks === undefined) {
-      notify("Marks are required", "error");
-      return;
-    }
-    const numericMarks = Number(draft.marks);
-    if (Number.isNaN(numericMarks)) {
-      notify("Marks must be numeric", "error");
-      return;
-    }
-    if (Number(maxMarks) && numericMarks > Number(maxMarks)) {
-      notify(`Marks cannot exceed ${maxMarks}`, "error");
-      return;
-    }
-    setFeedbackSavingBySubmission((prev) => ({ ...prev, [submission.id]: true }));
-    try {
-      const payload = {
-        submission: submission.id,
-        marks: numericMarks,
-        feedback: draft.feedback || "",
-      };
-      const existing = feedbackBySubmission[String(submission.id)];
-      if (existing?.id) {
-        await api.patch(`${ENDPOINTS.feedback}${existing.id}/`, payload);
-      } else {
-        await api.post(ENDPOINTS.feedback, payload);
-      }
-      notify("Marks & feedback saved");
-      await Promise.all([loadCourseworkSubmissions(courseworkId), loadFeedbackMap()]);
-    } catch (err) {
-      notify(err?.response?.data?.detail || "Failed to save marks/feedback", "error");
-    } finally {
-      setFeedbackSavingBySubmission((prev) => ({ ...prev, [submission.id]: false }));
-    }
-  };
-
-  useEffect(() => {
-    const missingIds = (rows || [])
-      .map((item) => item.id)
-      .filter((id) => !submissionsByCoursework[id] && !submissionLoadingByCoursework[id]);
-    if (!missingIds.length) return;
-    Promise.all(missingIds.map((id) => loadCourseworkSubmissions(id)));
-  }, [rows]);
 
   const openingRows = useMemo(
     () => (rows || []).filter((item) => item.deadline && new Date(item.deadline) >= new Date()),
@@ -258,6 +188,10 @@ const TeacherCourseworkPage = () => {
   const openingGrouped = useMemo(() => groupByCourse(openingRows), [openingRows, courses]);
   const closedGrouped = useMemo(() => groupByCourse(closedRows), [closedRows, courses]);
   const groupedCourseworks = viewMode === "opening" ? openingGrouped : closedGrouped;
+  const courseworkTypeOptions = useMemo(
+    () => buildCourseworkTypeOptions(rows.map((item) => item.coursework_type)),
+    [rows]
+  );
 
   useEffect(() => {
     const nextCourse = {};
@@ -279,16 +213,15 @@ const TeacherCourseworkPage = () => {
 
   return (
     <Stack spacing={2}>
-      <Paper sx={{ p: 1.5 }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1 }} alignItems={{ md: "center" }}>
-          <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-            Coursework creation is managed here. Student topic approvals and submissions are managed on the submissions page.
-          </Typography>
+      <ModuleHero
+        title="Assessment Management"
+        subtitle="Assessment creation is managed here. Student topic approvals and submissions are managed on the submissions page."
+        actions={(
           <Button size="small" variant="outlined" onClick={() => navigate("/teacher/submissions")}>
             Open Submissions
           </Button>
-        </Stack>
-        <Typography variant="h6" mb={1.2}>Coursework Management</Typography>
+        )}
+      >
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}
@@ -309,7 +242,7 @@ const TeacherCourseworkPage = () => {
           </TextField>
           <TextField select size="small" label="Filter by type" value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}>
             <MenuItem value="">All Types</MenuItem>
-            {COURSEWORK_TYPE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+            {courseworkTypeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
           </TextField>
           <TextField select size="small" label="Filter by submission" value={submissionFilter} onChange={(e) => { setSubmissionFilter(e.target.value); setPage(1); }}>
             <MenuItem value="">All Submission Types</MenuItem>
@@ -317,56 +250,26 @@ const TeacherCourseworkPage = () => {
           </TextField>
           <Button variant="outlined" onClick={() => loadData({ pageValue: 1 })}>Apply Filters</Button>
         </Stack>
-      </Paper>
+      </ModuleHero>
 
-      <Paper sx={{ p: 1.5 }}>
-        <Typography sx={{ fontWeight: 700, mb: 0.8 }}>{editingId ? "Update Coursework" : "Add Coursework"}</Typography>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0,1fr))" }, gap: 0.9 }}>
-          <TextField select size="small" label="Course" value={form.course} onChange={(e) => setForm((p) => ({ ...p, course: e.target.value }))}>
-            {courses.map((course) => (
-              <MenuItem key={course.id} value={course.id}>{course.title}</MenuItem>
-            ))}
-          </TextField>
-          <TextField size="small" label="Title" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
-          <TextField select size="small" label="Type" value={form.coursework_type} onChange={(e) => setForm((p) => ({ ...p, coursework_type: e.target.value }))}>
-            {COURSEWORK_TYPE_OPTIONS.map((option) => (
-              <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-            ))}
-          </TextField>
-          <TextField select size="small" label="Submission" value={form.submission_type} onChange={(e) => setForm((p) => ({ ...p, submission_type: e.target.value }))}>
-            {SUBMISSION_TYPE_OPTIONS.map((option) => (
-              <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-            ))}
-          </TextField>
-          {(form.submission_type === "group" || form.submission_type === "both") && (
-            <TextField
-              size="small"
-              type="number"
-              label="Max Members"
-              value={form.max_group_members}
-              onChange={(e) => setForm((p) => ({ ...p, max_group_members: e.target.value }))}
-              inputProps={{ min: 2 }}
-            />
-          )}
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={Boolean(form.lock_at_due_time)}
-                onChange={(e) => setForm((p) => ({ ...p, lock_at_due_time: e.target.checked }))}
-              />
-            }
-            label="Lock submission at due time"
-            sx={{ alignSelf: "center" }}
-          />
-          <TextField size="small" type="datetime-local" label="Deadline" value={form.deadline} onChange={(e) => setForm((p) => ({ ...p, deadline: e.target.value }))} InputLabelProps={{ shrink: true }} />
-          <TextField size="small" type="number" label="Max Marks" value={form.max_marks} onChange={(e) => setForm((p) => ({ ...p, max_marks: e.target.value }))} />
-          <TextField size="small" label="Description" multiline minRows={1} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} sx={{ gridColumn: { md: "span 2" } }} />
-        </Box>
-        <Stack direction="row" spacing={1} sx={{ mt: 0.9 }}>
-          <Button variant="contained" onClick={submit}>{editingId ? "Update" : "Add"}</Button>
-          <Button variant="outlined" onClick={() => { setEditingId(null); setForm(emptyCourseworkForm); }}>Clear</Button>
-        </Stack>
-      </Paper>
+      <CourseworkFormSection
+        form={form}
+        formErrors={formErrors}
+        editingId={editingId}
+        courses={courses}
+        courseworkTypeOptions={courseworkTypeOptions}
+        submissionTypeOptions={SUBMISSION_TYPE_OPTIONS}
+        toggleSx={toggleSx}
+        datalistId="teacher-coursework-type-options"
+        onSubmit={submit}
+        onClear={() => {
+          setEditingId(null);
+          setForm(emptyCourseworkForm);
+          setFormErrors({});
+        }}
+        setForm={setForm}
+        setFormErrors={setFormErrors}
+      />
 
       <Paper sx={{ p: 1.5 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1 }}>
@@ -414,9 +317,9 @@ const TeacherCourseworkPage = () => {
                           {openCourseworkSections[`${viewMode}-cw-${item.id}`] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
                         </IconButton>
                         <Stack spacing={0.1}>
-                          <Typography sx={{ fontWeight: 700 }}>Coursework: {item.title}</Typography>
+                          <Typography sx={{ fontWeight: 700 }}>Assessment: {item.title}</Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {item.coursework_type} | {item.submission_type} | Max Members: {item.max_group_members ?? "-"} | Max Marks: {item.max_marks ?? "-"} | Deadline: {formatDate(item.deadline)}
+                            {item.coursework_type} | {item.submission_type} | Approval: {item.approval_required ? "Required" : "Auto"} | Topic Dup: {item.topic_duplication_allowed ? "Allowed" : "Not Allowed"} | Auto-Approve All: {item.auto_approve_all_students ? "On" : "Off"} | Max Members: {item.max_group_members ?? "-"} | Max Marks: {item.max_marks ?? "-"} | Deadline: {formatDate(item.deadline)}
                           </Typography>
                         </Stack>
                       </Stack>
@@ -433,7 +336,7 @@ const TeacherCourseworkPage = () => {
           ))}
           {!Object.keys(groupedCourseworks).length && (
             <Typography variant="body2" color="text.secondary">
-              {viewMode === "opening" ? "No open coursework found." : "No closed coursework found."}
+              {viewMode === "opening" ? "No open assessment found." : "No closed assessment found."}
             </Typography>
           )}
         </Stack>
@@ -449,12 +352,6 @@ const TeacherCourseworkPage = () => {
         </Box>
       </Paper>
 
-      <Dialog open={memberDialogOpen} onClose={() => setMemberDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>{memberDialogTitle}</DialogTitle>
-        <DialogContent dividers>
-          <StudentMemberList members={memberDialogItems} />
-        </DialogContent>
-      </Dialog>
     </Stack>
   );
 };

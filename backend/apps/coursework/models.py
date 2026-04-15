@@ -7,13 +7,6 @@ from apps.common.models import TimeStampedModel
 
 
 class Coursework(TimeStampedModel):
-    class CourseworkType(models.TextChoices):
-        ASSIGNMENT = "assignment", "Assignment"
-        QUIZ = "quiz", "Quiz"
-        EXAM = "exam", "Exam"
-        PRESENTATION = "presentation", "Presentation"
-        PROJECT = "project", "Project"
-
     class SubmissionType(models.TextChoices):
         INDIVIDUAL = "individual", "Individual"
         GROUP = "group", "Group"
@@ -22,10 +15,13 @@ class Coursework(TimeStampedModel):
     course = models.ForeignKey("academics.Course", on_delete=models.CASCADE, related_name="courseworks")
     title = models.CharField(max_length=200)
     description = models.TextField()
-    coursework_type = models.CharField(max_length=20, choices=CourseworkType.choices)
+    coursework_type = models.CharField(max_length=50)
     submission_type = models.CharField(max_length=20, choices=SubmissionType.choices)
     max_group_members = models.PositiveIntegerField(null=True, blank=True)
-    lock_at_due_time = models.BooleanField(default=False)
+    lock_at_due_time = models.BooleanField(default=True)
+    approval_required = models.BooleanField(default=False)
+    topic_duplication_allowed = models.BooleanField(default=False)
+    auto_approve_all_students = models.BooleanField(default=False)
     deadline = models.DateTimeField()
     max_marks = models.DecimalField(max_digits=6, decimal_places=2)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_courseworks")

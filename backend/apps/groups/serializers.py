@@ -138,6 +138,33 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                         {"member_ids": "All selected students must be enrolled in this course."}
                     )
 
+            # Class-group guard: one student can belong to only one active manual group.
+            # Exclude the current group on edit so existing members can be retained.
+            candidate_ids = set(member_ids)
+            if request.user.role == User.Role.STUDENT:
+                candidate_ids.add(request.user.id)
+
+            active_memberships = GroupMember.objects.filter(
+                student_id__in=candidate_ids,
+                accepted=True,
+                group__source=StudentGroup.Source.MANUAL,
+                group__status__in=[StudentGroup.Status.PENDING, StudentGroup.Status.APPROVED],
+            ).select_related("group", "student")
+            if self.instance:
+                active_memberships = active_memberships.exclude(group_id=self.instance.id)
+
+            first_conflict = active_memberships.order_by("student_id", "created_at").first()
+            if first_conflict:
+                student_label = first_conflict.student.get_full_name().strip() or first_conflict.student.username
+                raise serializers.ValidationError(
+                    {
+                        "member_ids": (
+                            f"{student_label} is already part of '{first_conflict.group.name}'. "
+                            "A student can belong to only one class group."
+                        )
+                    }
+                )
+
         return attrs
 
     def create(self, validated_data):

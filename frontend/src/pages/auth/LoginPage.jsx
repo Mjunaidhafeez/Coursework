@@ -61,7 +61,7 @@ const LoginPage = () => {
       <LoginScene />
       <AuthCard>
         <Typography variant="h5" fontWeight={700} mb={2} className="premium-heading">
-          MBA Coursework Login
+          Student Assesement Tracking Login
         </Typography>
         <Typography variant="body2" color="text.secondary" mb={3}>
           Sign in with your role-based account.

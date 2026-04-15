@@ -14,7 +14,7 @@ import { NAV_ITEMS } from "../utils/roleConfig";
 const getIcon = (label) => {
   const value = label.toLowerCase();
   if (value.includes("dashboard")) return <DashboardIcon fontSize="small" />;
-  if (value.includes("my coursework")) return <HomeIcon fontSize="small" />;
+  if (value.includes("my coursework") || value.includes("my assessment")) return <HomeIcon fontSize="small" />;
   if (value.includes("user") || value.includes("teacher") || value.includes("student")) return <SchoolIcon fontSize="small" />;
   if (value.includes("course")) return <BookIcon fontSize="small" />;
   if (value.includes("group")) return <GroupsIcon fontSize="small" />;
