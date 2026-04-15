@@ -9,6 +9,7 @@ export const UiProvider = ({ children }) => {
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const [apiPendingCount, setApiPendingCount] = useState(0);
   const [manualPendingCount, setManualPendingCount] = useState(0);
+  const [showBackdrop, setShowBackdrop] = useState(false);
 
   const notify = useCallback((message, severity = "success") => {
     setToast({ open: true, message, severity });
@@ -32,6 +33,16 @@ export const UiProvider = ({ children }) => {
   }, []);
 
   const isGlobalLoading = apiPendingCount + manualPendingCount > 0;
+  useEffect(() => {
+    if (!isGlobalLoading) {
+      setShowBackdrop(false);
+      return undefined;
+    }
+    // Prevent brief request flicker and reduce "double loader" feeling on quick calls.
+    const timer = setTimeout(() => setShowBackdrop(true), 220);
+    return () => clearTimeout(timer);
+  }, [isGlobalLoading]);
+
   const value = useMemo(
     () => ({ notify, startLoading, stopLoading, isGlobalLoading }),
     [notify, startLoading, stopLoading, isGlobalLoading]
@@ -41,9 +52,10 @@ export const UiProvider = ({ children }) => {
     <UiContext.Provider value={value}>
       {children}
       <Backdrop
-        open={isGlobalLoading}
+        open={showBackdrop}
         sx={{
-          zIndex: (theme) => theme.zIndex.modal + 2000,
+          // Keep global loader under dialogs/menus to avoid profile popup layering issues.
+          zIndex: (theme) => theme.zIndex.modal - 1,
           color: "#fff",
           backdropFilter: "blur(2px)",
           backgroundColor: "rgba(16, 33, 63, 0.35)",

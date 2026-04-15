@@ -121,6 +121,7 @@ const DashboardLayout = () => {
   };
 
   const openProfile = () => {
+    closeNotifications();
     setProfileForm({
       first_name: user?.first_name || "",
       last_name: user?.last_name || "",
@@ -285,7 +286,7 @@ const DashboardLayout = () => {
           </Box>
         </Box>
       </Box>
-      <Dialog open={profileOpen} onClose={closeProfile} maxWidth="xs" fullWidth>
+      <Dialog open={profileOpen} onClose={closeProfile} maxWidth="xs" fullWidth scroll="paper">
         <DialogTitle>My Profile</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={1.1} sx={{ mt: 0.6 }}>
