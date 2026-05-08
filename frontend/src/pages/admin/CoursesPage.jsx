@@ -30,7 +30,7 @@ import { confirmDelete } from "../../utils/confirm";
 const emptyForm = { code: "", title: "", semester: "", teachers: [] };
 
 const CoursesPage = () => {
-  const { notify } = useUi();
+  const { notify, isGlobalLoading } = useUi();
   const [courses, setCourses] = useState([]);
   const [total, setTotal] = useState(0);
   const [semesters, setSemesters] = useState([]);
@@ -219,7 +219,7 @@ const CoursesPage = () => {
             )}
           </TableBody>
         </Table>
-        {loading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
+        {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
         <Box sx={{ mt: 1.5 }}>
           <PaginationControls

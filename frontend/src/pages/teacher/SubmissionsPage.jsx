@@ -61,7 +61,7 @@ const WORKFLOW_FILTER_OPTIONS = [
 
 const SubmissionsPage = () => {
   const { user } = useAuth();
-  const { notify } = useUi();
+  const { notify, isGlobalLoading } = useUi();
   const isAdminApprovalsView = user?.role === "super_admin";
   const [statusFilter, setStatusFilter] = useState("");
   const [workflowFilter, setWorkflowFilter] = useState("request_pending");
@@ -1542,7 +1542,7 @@ const SubmissionsPage = () => {
             </Paper>
             ))}
         </Stack>
-        {loading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
+        {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
         <PaginationControls page={page} pageSize={pageSize} total={total} onPageChange={changePage} onPageSizeChange={changePageSize} />
       </Paper>

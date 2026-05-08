@@ -10,9 +10,11 @@ import { useEffect, useState } from "react";
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
 import StudentMemberList from "../../components/shared/StudentMemberList";
+import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 
 const TeacherGroupsPage = () => {
+  const { isGlobalLoading } = useUi();
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -69,7 +71,7 @@ const TeacherGroupsPage = () => {
             ))}
           </Box>
         )}
-        {loading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
+        {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
         <Box sx={{ mt: 1.5 }}>
           <PaginationControls

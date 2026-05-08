@@ -37,7 +37,7 @@ import { getUserDisplayName } from "../../utils/userDisplay";
 import { confirmDelete } from "../../utils/confirm";
 
 const GroupsPage = () => {
-  const { notify } = useUi();
+  const { notify, isGlobalLoading } = useUi();
   const [groups, setGroups] = useState([]);
   const [total, setTotal] = useState(0);
   const [courses, setCourses] = useState([]);
@@ -388,7 +388,7 @@ const GroupsPage = () => {
             ))}
           </Box>
         )}
-        {loading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
+        {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
         <Box sx={{ mt: 1.5 }}>
           <PaginationControls

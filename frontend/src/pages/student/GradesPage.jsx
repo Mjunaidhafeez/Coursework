@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../api/client";
 import CourseResultMatrix from "../../components/shared/CourseResultMatrix";
 import { useAuth } from "../../context/AuthContext";
+import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import { buildFeedbackBySubmissionMap } from "../../utils/feedback";
 
@@ -11,6 +12,7 @@ const getRows = (res) => (res?.status === "fulfilled" ? res.value?.data?.results
 
 const GradesPage = () => {
   const { user } = useAuth();
+  const { isGlobalLoading } = useUi();
   const [search, setSearch] = useState("");
   const [semesterFilter, setSemesterFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("");
@@ -140,7 +142,7 @@ const GradesPage = () => {
             Reset
           </Button>
         </Stack>
-        {loading ? (
+        {loading && !isGlobalLoading ? (
           <Stack alignItems="center" sx={{ py: 3 }}>
             <CircularProgress size={28} />
           </Stack>

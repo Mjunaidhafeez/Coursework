@@ -17,7 +17,7 @@ import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 
 const StudentGroupsPage = () => {
-  const { notify } = useUi();
+  const { notify, isGlobalLoading } = useUi();
   const [allGroups, setAllGroups] = useState([]);
   const [myGroupIds, setMyGroupIds] = useState(new Set());
   const [search, setSearch] = useState("");
@@ -120,7 +120,7 @@ const StudentGroupsPage = () => {
             ))}
           </Box>
         )}
-        {loading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
+        {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
         <Box sx={{ mt: 1.5 }}>
           <PaginationControls

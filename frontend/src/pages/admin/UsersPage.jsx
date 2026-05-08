@@ -45,7 +45,7 @@ const emptyForm = {
 };
 
 const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
-  const { notify } = useUi();
+  const { notify, isGlobalLoading } = useUi();
   const location = useLocation();
   const urlRole = useMemo(() => fixedRole || new URLSearchParams(location.search).get("role") || "", [fixedRole, location.search]);
 
@@ -456,7 +456,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             )}
           </TableBody>
         </Table>
-        {loading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
+        {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
         <Box sx={{ mt: 1.5 }}>
           <PaginationControls

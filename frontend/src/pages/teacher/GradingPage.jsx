@@ -13,9 +13,11 @@ import api from "../../api/client";
 import CourseResultMatrix from "../../components/shared/CourseResultMatrix";
 import ModuleHero from "../../components/shared/ModuleHero";
 import SearchToolbar from "../../components/shared/SearchToolbar";
+import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 
 const GradingPage = () => {
+  const { isGlobalLoading } = useUi();
   const [resultSubmissions, setResultSubmissions] = useState([]);
   const [resultFeedbackBySubmissionId, setResultFeedbackBySubmissionId] = useState({});
   const [courses, setCourses] = useState([]);
@@ -107,7 +109,7 @@ const GradingPage = () => {
           </TextField>
         </Stack>
         <Box sx={{ mt: 1.4 }}>
-          {resultLoading ? (
+          {resultLoading && !isGlobalLoading ? (
             <Stack alignItems="center" sx={{ py: 2 }}>
               <CircularProgress size={26} />
             </Stack>
