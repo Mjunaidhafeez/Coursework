@@ -93,7 +93,7 @@ openpyxl==3.1.5
 packaging==25.0
 pandas==2.2.3
 pdfkit==1.0.0
-pillow==10.4.0
+pillow==12.1.0
 platformdirs==4.3.7
 playwright==1.52.0
 plotly==6.6.0
