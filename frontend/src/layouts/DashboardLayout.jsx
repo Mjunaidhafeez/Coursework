@@ -1,5 +1,5 @@
 import NotificationsNoneRoundedIcon from "@mui/icons-material/NotificationsNoneRounded";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import {
   Avatar,
   Badge,
@@ -24,8 +24,10 @@ import { Outlet } from "react-router-dom";
 import api from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 import Sidebar from "../components/Sidebar";
+import RouteFallback from "../components/shared/RouteFallback";
 import { useAuth } from "../context/AuthContext";
 import { useUi } from "../context/UiContext";
+import { getTimeGreeting } from "../utils/greeting";
 import { ROLES } from "../utils/roleConfig";
 
 const DashboardLayout = () => {
@@ -55,6 +57,8 @@ const DashboardLayout = () => {
     },
   };
   const currentHeader = headerConfig[user?.role] || headerConfig[ROLES.SUPER_ADMIN];
+  const greeting = getTimeGreeting();
+  const GreetingIcon = greeting.Icon;
   const fullName = user?.full_name || `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || user?.username || "User";
   const avatarSrc = user?.avatar
     ? `${user.avatar}${String(user.avatar).includes("?") ? "&" : "?"}v=${user?.avatar_cache_key || 1}`
@@ -259,8 +263,16 @@ const DashboardLayout = () => {
                     </Avatar>
                   </IconButton>
                   <Box sx={{ display: { xs: "none", md: "block" } }}>
-                    <Typography sx={{ fontSize: "0.9rem", fontWeight: 700, lineHeight: 1.1 }}>{fullName}</Typography>
-                    <Typography sx={{ fontSize: "0.78rem", opacity: 0.85 }}>@{user?.username}</Typography>
+                    <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mb: 0.15 }}>
+                      <GreetingIcon sx={{ fontSize: 16, color: "#fde68a" }} />
+                      <Typography sx={{ fontSize: "0.74rem", fontWeight: 700, letterSpacing: "0.02em", opacity: 0.95 }}>
+                        {greeting.label}
+                      </Typography>
+                    </Stack>
+                    <Typography sx={{ fontSize: "0.9rem", fontWeight: 700, lineHeight: 1.15 }}>
+                      Welcome {fullName}
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.75rem", opacity: 0.82 }}>@{user?.username}</Typography>
                   </Box>
                 </Stack>
                 <Button variant="contained" color="inherit" onClick={logout} sx={{ color: "#1d4fbf", fontWeight: 700 }}>
@@ -281,7 +293,9 @@ const DashboardLayout = () => {
                 boxShadow: "0 10px 24px rgba(11, 39, 98, 0.12)",
               }}
             >
-              <Outlet />
+              <Suspense fallback={<RouteFallback />}>
+                <Outlet />
+              </Suspense>
             </Box>
           </Box>
         </Box>

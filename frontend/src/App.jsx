@@ -1,4 +1,3 @@
-import { CircularProgress, Stack } from "@mui/material";
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
@@ -34,12 +33,6 @@ const TeacherCourseworkPage = lazy(() => import("./pages/teacher/TeacherCoursewo
 const TeacherDashboard = lazy(() => import("./pages/teacher/TeacherDashboard"));
 const TeacherGroupsPage = lazy(() => import("./pages/teacher/TeacherGroupsPage"));
 
-const Loader = () => (
-  <Stack alignItems="center" justifyContent="center" minHeight="100vh">
-    <CircularProgress />
-  </Stack>
-);
-
 const AdminUsersRedirect = () => {
   const location = useLocation();
   const role = new URLSearchParams(location.search).get("role");
@@ -51,9 +44,15 @@ const AdminUsersRedirect = () => {
 
 function App() {
   return (
-    <Suspense fallback={<Loader />}>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <Suspense fallback={null}>
+            <LoginPage />
+          </Suspense>
+        }
+      />
 
         <Route element={<ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN]} />}>
           <Route element={<DashboardLayout />}>
@@ -97,9 +96,8 @@ function App() {
           </Route>
         </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </Suspense>
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
   );
 }
 

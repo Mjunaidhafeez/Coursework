@@ -45,11 +45,8 @@ const Sidebar = ({ role }) => {
         boxShadow: "inset -1px 0 0 rgba(255,255,255,0.04)",
       }}
     >
-      <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 800, fontSize: "1rem" }}>
+      <Typography variant="h6" sx={{ mb: 2, fontWeight: 800, fontSize: "1rem" }}>
         {roleTitleMap[role] || "Dashboard"}
-      </Typography>
-      <Typography variant="caption" sx={{ opacity: 0.7, mb: 2, display: "block" }}>
-        Navigation
       </Typography>
       <List>
         {items.map((item) => (
