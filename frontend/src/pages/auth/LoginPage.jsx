@@ -1,12 +1,13 @@
 import LockOpenRoundedIcon from "@mui/icons-material/LockOpenRounded";
 import VisibilityOffRoundedIcon from "@mui/icons-material/VisibilityOffRounded";
 import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
-import { Alert, Box, Button, IconButton, InputAdornment, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, IconButton, InputAdornment, Paper, Stack, TextField, Typography } from "@mui/material";
 import { useState } from "react";
 
-import AuthCard from "../../components/auth/AuthCard";
-import LoginScene from "../../components/auth/LoginScene";
 import { useAuth } from "../../context/AuthContext";
+
+const campusImage = `${import.meta.env.BASE_URL}login/campus.png`;
+const classImage = `${import.meta.env.BASE_URL}login/class-group.png`;
 
 const LoginPage = () => {
   const { login } = useAuth();
@@ -32,87 +33,188 @@ const LoginPage = () => {
     <Box
       sx={{
         minHeight: "100vh",
-        display: "flex",
-        alignItems: "stretch",
-        justifyContent: "center",
-        background: "radial-gradient(circle at 10% 20%, #3157c2 0%, #152347 48%, #0e1a39 100%)",
-        overflow: "hidden",
         position: "relative",
-        "@keyframes floatY": {
-          "0%": { transform: "translateY(0px)" },
-          "50%": { transform: "translateY(-14px)" },
-          "100%": { transform: "translateY(0px)" },
-        },
-        "@keyframes popIn": {
-          "0%": { opacity: 0, transform: "translateY(16px) scale(0.98)" },
-          "100%": { opacity: 1, transform: "translateY(0) scale(1)" },
-        },
-        "@keyframes spinSlow": {
-          "0%": { transform: "rotate(0deg)" },
-          "100%": { transform: "rotate(360deg)" },
-        },
-        "@keyframes pulseGlow": {
-          "0%": { opacity: 0.45, transform: "scale(1)" },
-          "50%": { opacity: 0.9, transform: "scale(1.07)" },
-          "100%": { opacity: 0.45, transform: "scale(1)" },
+        overflow: "hidden",
+        "@keyframes fadeUp": {
+          from: { opacity: 0, transform: "translateY(18px)" },
+          to: { opacity: 1, transform: "translateY(0)" },
         },
       }}
     >
-      <LoginScene />
-      <AuthCard>
-        <Typography variant="h5" fontWeight={700} mb={2} className="premium-heading">
-          Student Assesement Tracking Login
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `url(${campusImage})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `url(${classImage})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center 28%",
+          opacity: 0.55,
+          mixBlendMode: "soft-light",
+          WebkitMaskImage: "linear-gradient(180deg, transparent 12%, rgba(0,0,0,0.7) 48%, rgba(0,0,0,0.9) 100%)",
+          maskImage: "linear-gradient(180deg, transparent 12%, rgba(0,0,0,0.7) 48%, rgba(0,0,0,0.9) 100%)",
+        }}
+      />
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(180deg, rgba(7,14,32,0.66) 0%, rgba(10,22,48,0.42) 40%, rgba(8,16,36,0.74) 100%)",
+        }}
+      />
+
+      <Box
+        sx={{
+          position: "relative",
+          zIndex: 1,
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          px: 2,
+        }}
+      >
+        <Typography
+          sx={{
+            pt: { xs: 2.4, md: 3.2 },
+            color: "#f3d38a",
+            letterSpacing: { xs: "0.14em", md: "0.28em" },
+            fontWeight: 700,
+            fontSize: { xs: "0.78rem", md: "0.92rem" },
+            textTransform: "uppercase",
+            textAlign: "center",
+            animation: "fadeUp 500ms ease-out",
+          }}
+        >
+          Superior University Lahore
         </Typography>
-        <Typography variant="body2" color="text.secondary" mb={3}>
-          Sign in with your role-based account.
-        </Typography>
-        <form onSubmit={onSubmit}>
-          <Stack spacing={2}>
-            {error && <Alert severity="error">{error}</Alert>}
-            <TextField
-              label="Username"
-              value={form.username}
-              onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
-              required
-            />
-            <TextField
-              label="Password"
-              type={showPassword ? "text" : "password"}
-              value={form.password}
-              onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-              required
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setShowPassword((prev) => !prev)}>
-                      {showPassword ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={loading}
-              endIcon={<LockOpenRoundedIcon />}
+
+        <Box
+          sx={{
+            flex: 1,
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            py: 3,
+            gap: 2.4,
+          }}
+        >
+          <Typography
+            sx={{
+              color: "#fff",
+              fontWeight: 800,
+              textAlign: "center",
+              fontSize: { xs: "1.7rem", sm: "2.15rem", md: "2.55rem" },
+              lineHeight: 1.15,
+              letterSpacing: "-0.02em",
+              textShadow: "0 8px 28px rgba(0,0,0,0.35)",
+              animation: "fadeUp 600ms ease-out",
+            }}
+          >
+            Student Assessment Tracking
+          </Typography>
+
+          <Paper
+            elevation={0}
+            sx={{
+              width: "100%",
+              maxWidth: 420,
+              p: { xs: 3, sm: 3.6 },
+              borderRadius: 3.5,
+              background: "rgba(255,255,255,0.94)",
+              backdropFilter: "blur(16px)",
+              border: "1px solid rgba(255,255,255,0.55)",
+              boxShadow: "0 22px 50px rgba(4, 10, 28, 0.38)",
+              animation: "fadeUp 700ms ease-out",
+            }}
+          >
+            <Typography
               sx={{
-                textTransform: "none",
-                fontWeight: 700,
-                background: "linear-gradient(90deg, #1f49b7 0%, #2f63d9 100%)",
-                transition: "all 0.22s ease",
-                "&:hover": {
-                  background: "linear-gradient(90deg, #1a3e99 0%, #2958c5 100%)",
-                  transform: "translateY(-1px)",
-                },
+                fontWeight: 800,
+                fontSize: "1.35rem",
+                color: "#16356f",
+                textAlign: "center",
+                mb: 2.4,
               }}
             >
-              {loading ? "Signing in..." : "Login"}
-            </Button>
-          </Stack>
-        </form>
-      </AuthCard>
+              Login Here
+            </Typography>
+            <form onSubmit={onSubmit}>
+              <Stack spacing={2}>
+                {error && <Alert severity="error">{error}</Alert>}
+                <TextField
+                  label="Username"
+                  value={form.username}
+                  onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
+                  required
+                  fullWidth
+                />
+                <TextField
+                  label="Password"
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                  required
+                  fullWidth
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => setShowPassword((prev) => !prev)}>
+                          {showPassword ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Button
+                  type="submit"
+                  variant="contained"
+                  size="large"
+                  disabled={loading}
+                  endIcon={<LockOpenRoundedIcon />}
+                  sx={{
+                    mt: 0.5,
+                    py: 1.15,
+                    textTransform: "none",
+                    fontWeight: 700,
+                    borderRadius: 2,
+                    background: "linear-gradient(90deg, #1d4cb4 0%, #2f63d9 100%)",
+                    boxShadow: "0 10px 22px rgba(31, 76, 180, 0.32)",
+                    "&:hover": {
+                      background: "linear-gradient(90deg, #173f96 0%, #2756c2 100%)",
+                    },
+                  }}
+                >
+                  {loading ? "Signing in..." : "Login"}
+                </Button>
+              </Stack>
+            </form>
+          </Paper>
+        </Box>
+
+        <Typography
+          sx={{
+            pb: 2,
+            color: "rgba(255,255,255,0.78)",
+            fontSize: { xs: "0.72rem", sm: "0.8rem" },
+            textAlign: "center",
+            letterSpacing: "0.02em",
+          }}
+        >
+          Developed by : Junaid Hafeez (SVL) MBA NON Business 2025-2027
+        </Typography>
+      </Box>
     </Box>
   );
 };

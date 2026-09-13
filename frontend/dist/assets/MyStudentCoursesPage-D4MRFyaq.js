@@ -1,1 +1,0 @@
-import{j as t}from"./index-CnsgSj-2.js";import{C as e}from"./CoursesListPage-D8NIhvy_.js";import"./PaginationControls-Bk9XaHwC.js";import"./MenuItem-BXsfcfO4.js";import"./SearchToolbar-7f_wK_4V.js";import"./usePaginatedQuery-D_rGA2oF.js";import"./TableRow-wBBgVgoy.js";const u=()=>t.jsx(e,{title:"My Courses",enableSemesterFilter:!0});export{u as default};
