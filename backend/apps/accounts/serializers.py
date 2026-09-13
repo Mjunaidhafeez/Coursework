@@ -130,6 +130,8 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
+        if self.instance and "username" in attrs and attrs["username"] != self.instance.username:
+            raise serializers.ValidationError({"username": "Username cannot be changed."})
         role = attrs.get("role", getattr(self.instance, "role", User.Role.STUDENT))
         email = attrs.get("email", getattr(self.instance, "email", "")).strip().lower()
         teacher_profile_data = attrs.get("teacher_profile", None)
