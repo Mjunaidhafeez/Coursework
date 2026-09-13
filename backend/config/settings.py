@@ -15,6 +15,8 @@ if RENDER_HOSTNAME and RENDER_HOSTNAME not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(RENDER_HOSTNAME)
 if os.environ.get("RENDER") and ".onrender.com" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(".onrender.com")
+if ".pythonanywhere.com" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(".pythonanywhere.com")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -154,6 +156,10 @@ if RENDER_EXTERNAL_URL:
         CORS_ALLOWED_ORIGINS.append(RENDER_EXTERNAL_URL)
     if RENDER_EXTERNAL_URL not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(RENDER_EXTERNAL_URL)
+if "https://*.pythonanywhere.com" not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append("https://*.pythonanywhere.com")
+if "https://*.pythonanywhere.com" not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append("https://*.pythonanywhere.com")
 
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bool)

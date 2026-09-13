@@ -115,6 +115,23 @@ Frontend app:
 - `groups/groups/`, `groups/members/`
 - `coursework/courseworks/`, `coursework/submissions/`, `coursework/feedback/`
 
+## Deploy on PythonAnywhere (free, no card)
+
+1. Create a free account at [pythonanywhere.com](https://www.pythonanywhere.com).
+2. Open a **Bash** console and run:
+
+```bash
+git clone https://github.com/Mjunaidhafeez/Coursework.git ~/Coursework
+bash ~/Coursework/pythonanywhere-setup.sh YOUR_USERNAME
+```
+
+3. Open the **Web** tab → **Add a new web app** → **Manual configuration** → Python 3.10.
+4. Set **Source code** and working directory to `/home/YOUR_USERNAME/Coursework/backend`.
+5. Set **Virtualenv** to `/home/YOUR_USERNAME/.virtualenvs/mba-portal`.
+6. Open the WSGI file, delete everything, paste `pythonanywhere_wsgi.py`, and put your username in `USERNAME`.
+7. Add static files: `/static/` → `/home/YOUR_USERNAME/Coursework/backend/staticfiles` and `/media/` → `/home/YOUR_USERNAME/Coursework/backend/media`.
+8. Click **Reload**. Site: `https://YOUR_USERNAME.pythonanywhere.com`
+
 ## Deploy on Render (free)
 
 1. Create a free Postgres database at [Neon](https://neon.tech) and copy the connection string.
@@ -138,7 +155,7 @@ cd backend
 python manage.py seed_data
 ```
 
-The live URL is `https://<service-name>.onrender.com`. Uploaded files are stored on the server disk and are lost when the free instance restarts unless you later enable S3/R2 (`USE_S3=True`).
+The live URL is `https://<service-name>.onrender.com`. Uploaded files are stored on the server disk and are lost when the free instance restarts unless you later enable S3/R2 (`USE_S3=True`). Render may ask for a card even on the free plan.
 
 ## Notes for Production Hardening
 
