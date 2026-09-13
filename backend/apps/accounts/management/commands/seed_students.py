@@ -9,7 +9,7 @@ class Command(BaseCommand):
     help = "Seed MBA F25 students from the class roll list."
 
     def add_arguments(self, parser):
-        parser.add_argument("--semester", type=int, default=1)
+        parser.add_argument("--semester", type=int, default=3)
 
     def handle(self, *args, **options):
         semester, _ = Semester.objects.get_or_create(number=options["semester"])
