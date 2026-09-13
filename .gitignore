@@ -1,3 +1,4 @@
+backend/requirements.full.txt
 backend/.env
 backend/.venv/
 backend/db.sqlite3

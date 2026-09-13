@@ -115,6 +115,31 @@ Frontend app:
 - `groups/groups/`, `groups/members/`
 - `coursework/courseworks/`, `coursework/submissions/`, `coursework/feedback/`
 
+## Deploy on Render (free)
+
+1. Create a free Postgres database at [Neon](https://neon.tech) and copy the connection string.
+2. Push this repo to GitHub.
+3. In [Render](https://dashboard.render.com), click **New +** → **Blueprint** and select the repo, or create a **Web Service** with:
+   - **Runtime:** Python
+   - **Build command:** `bash render-build.sh`
+   - **Start command:** `cd backend && python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120`
+4. Set environment variables:
+   - `DEBUG=False`
+   - `USE_SQLITE=False`
+   - `SECRET_KEY` = a long random string
+   - `DATABASE_URL` = Neon connection string
+   - `DB_SSL_REQUIRE=True`
+   - `ALLOWED_HOSTS=.onrender.com`
+   - `SECURE_SSL_REDIRECT=False`
+5. After the first deploy succeeds, open the Render **Shell** and seed demo users:
+
+```bash
+cd backend
+python manage.py seed_data
+```
+
+The live URL is `https://<service-name>.onrender.com`. Uploaded files are stored on the server disk and are lost when the free instance restarts unless you later enable S3/R2 (`USE_S3=True`).
+
 ## Notes for Production Hardening
 
 - Add background worker (Celery/RQ) for reminders and notifications
