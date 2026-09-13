@@ -15,6 +15,8 @@ import ModuleHero from "../../components/shared/ModuleHero";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
+import { fetchAllPages } from "../../utils/fetchAllPages";
+import { buildFeedbackBySubmissionMap } from "../../utils/feedback";
 
 const GradingPage = () => {
   const { isGlobalLoading } = useUi();
@@ -32,24 +34,21 @@ const GradingPage = () => {
   const loadResultData = async () => {
     setResultLoading(true);
     try {
-      const [semRes, courseRes, cwRes, subRes, feedbackRes, enrollmentsRes] = await Promise.all([
-        api.get(`${ENDPOINTS.semesters}?page_size=100`),
-        api.get(`${ENDPOINTS.courses}?page_size=300`),
-        api.get(`${ENDPOINTS.courseworks}?page_size=500`),
-        api.get(`${ENDPOINTS.submissions}?page_size=1000&ordering=submitted_at`),
-        api.get(`${ENDPOINTS.feedback}?page_size=3000`),
-        api.get(`${ENDPOINTS.enrollments}?page_size=4000`),
+      const loaderConfig = { skipGlobalLoader: true };
+      const [semestersRows, coursesRows, courseworksRows, submissionsRows, feedbackRows, enrollmentsRows] = await Promise.all([
+        fetchAllPages(api, ENDPOINTS.semesters, { page_size: 100 }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.courses, { page_size: 300 }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.courseworks, { page_size: 500 }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.submissions, { page_size: 500, workflow_state: "marked", ordering: "submitted_at" }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.feedback, { page_size: 500 }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.enrollments, { page_size: 500 }, loaderConfig),
       ]);
-      const feedbackMap = (feedbackRes.data.results || []).reduce((acc, item) => {
-        acc[String(item.submission)] = item;
-        return acc;
-      }, {});
-      setSemesters(semRes.data.results || []);
-      setCourses(courseRes.data.results || []);
-      setCourseworks(cwRes.data.results || []);
-      setResultSubmissions((subRes.data.results || []).filter((item) => item.is_marked));
-      setResultFeedbackBySubmissionId(feedbackMap);
-      setEnrollments(enrollmentsRes.data.results || []);
+      setSemesters(semestersRows);
+      setCourses(coursesRows);
+      setCourseworks(courseworksRows);
+      setResultSubmissions(submissionsRows.filter((item) => item.is_marked));
+      setResultFeedbackBySubmissionId(buildFeedbackBySubmissionMap(feedbackRows));
+      setEnrollments(enrollmentsRows);
     } finally {
       setResultLoading(false);
     }

@@ -1,3 +1,5 @@
+import { fetchAllPages } from "./fetchAllPages";
+
 export const buildFeedbackBySubmissionMap = (rows = []) => {
   const map = {};
   rows.forEach((item) => {
@@ -6,7 +8,7 @@ export const buildFeedbackBySubmissionMap = (rows = []) => {
   return map;
 };
 
-export const fetchFeedbackBySubmissionMap = async (api, ENDPOINTS, pageSize = 2000) => {
-  const { data } = await api.get(`${ENDPOINTS.feedback}?page_size=${pageSize}`);
-  return buildFeedbackBySubmissionMap(data.results || []);
+export const fetchFeedbackBySubmissionMap = async (api, ENDPOINTS, pageSize = 500) => {
+  const rows = await fetchAllPages(api, ENDPOINTS.feedback, { page_size: pageSize }, { skipGlobalLoader: true });
+  return buildFeedbackBySubmissionMap(rows);
 };

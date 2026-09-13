@@ -5,6 +5,7 @@ import api from "../../api/client";
 import CourseResultMatrix from "../../components/shared/CourseResultMatrix";
 import { ENDPOINTS } from "../../api/endpoints";
 import StatCard from "../../components/StatCard";
+import { fetchAllPages } from "../../utils/fetchAllPages";
 import { buildFeedbackBySubmissionMap } from "../../utils/feedback";
 
 const ReportsPage = () => {
@@ -25,16 +26,16 @@ const ReportsPage = () => {
   const [enrollments, setEnrollments] = useState([]);
 
   useEffect(() => {
+    const loaderConfig = { skipGlobalLoader: true };
     Promise.all([
-      api.get(`${ENDPOINTS.submissions}?page_size=1000&ordering=submitted_at`),
-      api.get(`${ENDPOINTS.feedback}?page_size=1000`),
-      api.get(`${ENDPOINTS.courseworks}?page_size=500`),
-      api.get(`${ENDPOINTS.courses}?page_size=300`),
-      api.get(`${ENDPOINTS.semesters}?page_size=100`),
-      api.get(`${ENDPOINTS.enrollments}?page_size=4000`),
-    ]).then(([submissionsRes, feedbackRes, courseworksRes, coursesRes, semestersRes, enrollmentsRes]) => {
-        const rows = submissionsRes.data.results || [];
-        const feedbackMap = buildFeedbackBySubmissionMap(feedbackRes.data.results || []);
+      fetchAllPages(api, ENDPOINTS.submissions, { page_size: 500, workflow_state: "marked", ordering: "submitted_at" }, loaderConfig),
+      fetchAllPages(api, ENDPOINTS.feedback, { page_size: 500 }, loaderConfig),
+      fetchAllPages(api, ENDPOINTS.courseworks, { page_size: 500 }, loaderConfig),
+      fetchAllPages(api, ENDPOINTS.courses, { page_size: 300 }, loaderConfig),
+      fetchAllPages(api, ENDPOINTS.semesters, { page_size: 100 }, loaderConfig),
+      fetchAllPages(api, ENDPOINTS.enrollments, { page_size: 500 }, loaderConfig),
+    ]).then(([rows, feedbackRows, courseworksRows, coursesRows, semestersRows, enrollmentsRows]) => {
+        const feedbackMap = buildFeedbackBySubmissionMap(feedbackRows);
         const markedRows = rows.filter((item) => item.is_marked);
         const scored = markedRows
           .map((item) => {
@@ -68,14 +69,14 @@ const ReportsPage = () => {
         setStats({
           highestRollNos: highest5.length ? highest5.join(", ") : "-",
           lowestRollNos: lowest5.length ? lowest5.join(", ") : "-",
-          totalCourses: (coursesRes.data.results || []).length,
-          totalStudents: (enrollmentsRes.data.results || []).length,
+          totalCourses: coursesRows.length,
+          totalStudents: enrollmentsRows.length,
         });
-        setSubmissions(rows.filter((item) => item.is_marked));
-        setCourseworks(courseworksRes.data.results || []);
-        setCourses(coursesRes.data.results || []);
-        setSemesters(semestersRes.data.results || []);
-        setEnrollments(enrollmentsRes.data.results || []);
+        setSubmissions(markedRows);
+        setCourseworks(courseworksRows);
+        setCourses(coursesRows);
+        setSemesters(semestersRows);
+        setEnrollments(enrollmentsRows);
         setFeedbackBySubmissionId(feedbackMap);
       });
   }, []);

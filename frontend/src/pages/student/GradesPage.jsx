@@ -6,9 +6,8 @@ import CourseResultMatrix from "../../components/shared/CourseResultMatrix";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
+import { fetchAllPages } from "../../utils/fetchAllPages";
 import { buildFeedbackBySubmissionMap } from "../../utils/feedback";
-
-const getRows = (res) => (res?.status === "fulfilled" ? res.value?.data?.results || [] : []);
 
 const GradesPage = () => {
   const { user } = useAuth();
@@ -26,19 +25,21 @@ const GradesPage = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      const loaderConfig = { skipGlobalLoader: true };
       const [semRes, courseRes, cwRes, subRes, feedbackRes] = await Promise.allSettled([
-        api.get(`${ENDPOINTS.semesters}?page_size=100`),
-        api.get(`${ENDPOINTS.courses}?page_size=300`),
-        api.get(`${ENDPOINTS.courseworks}?page_size=500`),
-        api.get(`${ENDPOINTS.submissions}?page_size=800&ordering=submitted_at`),
-        api.get(`${ENDPOINTS.feedback}?page_size=3000`),
+        fetchAllPages(api, ENDPOINTS.semesters, { page_size: 100 }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.courses, { page_size: 300 }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.courseworks, { page_size: 500 }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.submissions, { page_size: 500, workflow_state: "marked", ordering: "submitted_at" }, loaderConfig),
+        fetchAllPages(api, ENDPOINTS.feedback, { page_size: 500 }, loaderConfig),
       ]);
 
-      const semesterRows = getRows(semRes);
-      const courseRows = getRows(courseRes);
-      const courseworkRows = getRows(cwRes);
-      const submissionRows = getRows(subRes);
-      const feedbackRows = getRows(feedbackRes); // Student may get 403; keep graceful fallback.
+      const getSettledRows = (res) => (res?.status === "fulfilled" ? res.value || [] : []);
+      const semesterRows = getSettledRows(semRes);
+      const courseRows = getSettledRows(courseRes);
+      const courseworkRows = getSettledRows(cwRes);
+      const submissionRows = getSettledRows(subRes);
+      const feedbackRows = getSettledRows(feedbackRes); // Student may get 403; keep graceful fallback.
       const markedRows = submissionRows.filter((item) => item.is_marked);
 
       setSemesters(semesterRows);

@@ -98,6 +98,47 @@ const CourseResultMatrix = ({
       });
     });
 
+    const enrollmentByKey = new Map();
+    (enrollments || []).forEach((enrollment) => {
+      if (!enrollment?.course || enrollment.student == null) return;
+      enrollmentByKey.set(`${enrollment.course}-${enrollment.student}`, enrollment);
+    });
+
+    submissions.forEach((submission) => {
+      const cw = courseworks.find((item) => String(item.id) === String(submission.coursework));
+      if (!cw) return;
+      const participants = [];
+      if (submission.student) {
+        participants.push({
+          student: submission.student,
+          student_name: submission.student_name || submission.submitted_by_name,
+          student_roll_no: submission.student_roll_no || "",
+        });
+      }
+      const memberDetails = submission.group_member_details || submission.requested_member_details || [];
+      memberDetails.forEach((member) => {
+        const studentId = member.id || member.student;
+        if (!studentId) return;
+        participants.push({
+          student: studentId,
+          student_name: member.name || member.student_name,
+          student_roll_no: member.roll_no || member.student_roll_no || "",
+        });
+      });
+      participants.forEach((participant) => {
+        const key = `${cw.course}-${participant.student}`;
+        if (enrollmentByKey.has(key)) return;
+        enrollmentByKey.set(key, {
+          course: cw.course,
+          student: participant.student,
+          student_name: participant.student_name,
+          student_roll_no: participant.student_roll_no,
+        });
+      });
+    });
+
+    const allEnrollments = Array.from(enrollmentByKey.values());
+
     const visibleCourses = courses
       .filter((course) => !semesterFilter || String(course.semester) === String(semesterFilter))
       .filter((course) => !courseFilter || String(course.id) === String(courseFilter))
@@ -107,7 +148,7 @@ const CourseResultMatrix = ({
         );
         if (!cws.length) return null;
 
-        const studentRows = (enrollments || [])
+        const studentRows = allEnrollments
           .filter((enrollment) => String(enrollment.course) === String(course.id))
           .map((enrollment) => {
             const studentName = enrollment.student_name || `Student #${enrollment.student}`;
@@ -144,7 +185,7 @@ const CourseResultMatrix = ({
             return rowText.includes(normalizedSearch);
           });
 
-        if (!studentRows.length && normalizedSearch) return null;
+        if (!studentRows.length) return null;
 
         return {
           id: course.id,

@@ -80,7 +80,7 @@ class CourseViewSet(viewsets.ModelViewSet):
 
 
 class EnrollmentViewSet(viewsets.ModelViewSet):
-    queryset = Enrollment.objects.select_related("student", "course")
+    queryset = Enrollment.objects.select_related("student", "student__student_profile", "course")
     serializer_class = EnrollmentSerializer
     filterset_fields = ["course", "student"]
     ordering_fields = ["created_at"]
