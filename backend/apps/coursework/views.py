@@ -42,7 +42,12 @@ class CourseworkViewSet(AuditLogMixin, viewsets.ModelViewSet):
         if user.role == User.Role.TEACHER:
             return queryset.filter(course__teachers=user)
         if user.role == User.Role.STUDENT:
-            return queryset.filter(course__enrollments__student=user)
+            semester_id = getattr(getattr(user, "student_profile", None), "semester_id", None)
+            if semester_id:
+                return queryset.filter(
+                    Q(course__enrollments__student=user) | Q(course__semester_id=semester_id)
+                ).distinct()
+            return queryset.filter(course__enrollments__student=user).distinct()
         return queryset
 
     def perform_create(self, serializer):

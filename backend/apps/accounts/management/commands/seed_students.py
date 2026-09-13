@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from apps.academics.models import Semester
+from apps.academics.models import Course, Enrollment, Semester
 from apps.accounts.data.mba_f25_students import DEFAULT_PASSWORD, student_records
 from apps.accounts.models import StudentProfile, User
 
@@ -41,6 +41,18 @@ class Command(BaseCommand):
                 created += 1
             else:
                 updated += 1
+
+        semester_courses = list(Course.objects.filter(semester=semester))
+        semester_student_ids = list(
+            User.objects.filter(role=User.Role.STUDENT, student_profile__semester=semester).values_list("id", flat=True)
+        )
+        enrollments = [
+            Enrollment(student_id=student_id, course=course)
+            for course in semester_courses
+            for student_id in semester_student_ids
+        ]
+        if enrollments:
+            Enrollment.objects.bulk_create(enrollments, ignore_conflicts=True)
 
         self.stdout.write(
             self.style.SUCCESS(

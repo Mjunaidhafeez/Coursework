@@ -42,6 +42,24 @@ class CourseViewSet(viewsets.ModelViewSet):
             return [IsTeacherOrAdmin()]
         return [permissions.IsAuthenticated()]
 
+    def _enroll_semester_students(self, course):
+        student_ids = User.objects.filter(
+            role=User.Role.STUDENT,
+            student_profile__semester_id=course.semester_id,
+        ).values_list("id", flat=True)
+        Enrollment.objects.bulk_create(
+            [Enrollment(student_id=student_id, course=course) for student_id in student_ids],
+            ignore_conflicts=True,
+        )
+
+    def perform_create(self, serializer):
+        course = serializer.save()
+        self._enroll_semester_students(course)
+
+    def perform_update(self, serializer):
+        course = serializer.save()
+        self._enroll_semester_students(course)
+
     def get_queryset(self):
         queryset = super().get_queryset()
         user = self.request.user
