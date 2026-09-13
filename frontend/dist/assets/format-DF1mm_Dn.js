@@ -1,0 +1,1 @@
+const e=r=>{if(!r)return"-";const t=new Date(r);return Number.isNaN(t.getTime())?"-":t.toLocaleString(void 0,{year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:!0})},n=r=>{if(r==null||r==="")return"-";const t=Number(r);return Number.isNaN(t)?String(r):(Number.isInteger(t),String(t))};export{n as a,e as f};
