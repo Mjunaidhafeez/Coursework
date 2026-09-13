@@ -46,7 +46,7 @@ class Command(BaseCommand):
             title="Case Study Report",
             defaults={
                 "description": "Submit a case analysis.",
-                "coursework_type": Coursework.CourseworkType.ASSIGNMENT,
+                "coursework_type": "assignment",
                 "submission_type": Coursework.SubmissionType.INDIVIDUAL,
                 "deadline": timezone.now() + timedelta(days=7),
                 "max_marks": 100,
