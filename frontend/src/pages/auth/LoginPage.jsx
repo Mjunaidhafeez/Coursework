@@ -6,8 +6,8 @@ import { useState } from "react";
 
 import { useAuth } from "../../context/AuthContext";
 
-const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=4`;
-const classImage = `${import.meta.env.BASE_URL}login/class-group.png?v=4`;
+const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=5`;
+const classImage = `${import.meta.env.BASE_URL}login/class-group.png?v=5`;
 const developedBy = "Developed by : Junaid Hafeez (SVL) MBA NON Business 2025-2027";
 
 const LoginPage = () => {
@@ -53,44 +53,34 @@ const LoginPage = () => {
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          objectPosition: "center 48%",
+          objectPosition: "center 36%",
         }}
       />
       <Box
         sx={{
           position: "absolute",
           left: "50%",
-          bottom: { xs: "3%", md: "7%" },
+          top: { xs: "24%", md: "28%" },
           transform: "translateX(-50%)",
-          width: { xs: "min(92vw, 640px)", md: "min(48vw, 720px)" },
-          height: { xs: "38vh", md: "58vh" },
+          width: { xs: "min(86vw, 680px)", md: "min(50vw, 760px)" },
+          height: { xs: "32vh", md: "40vh" },
+          opacity: 0.42,
+          filter: "blur(3.6px)",
           pointerEvents: "none",
           zIndex: 1,
+          WebkitMaskImage: "radial-gradient(ellipse 70% 72% at 50% 58%, #000 32%, transparent 78%)",
+          maskImage: "radial-gradient(ellipse 70% 72% at 50% 58%, #000 32%, transparent 78%)",
         }}
       >
-        <Box
-          sx={{
-            position: "absolute",
-            left: "50%",
-            bottom: 8,
-            transform: "translateX(-50%)",
-            width: "72%",
-            height: 34,
-            borderRadius: "50%",
-            background: "radial-gradient(ellipse, rgba(18,32,12,0.34) 0%, rgba(18,32,12,0) 72%)",
-          }}
-        />
         <Box
           component="img"
           src={classImage}
           alt=""
           sx={{
-            position: "relative",
             width: "100%",
             height: "100%",
             objectFit: "contain",
             objectPosition: "center bottom",
-            filter: "saturate(1.05) contrast(1.04) drop-shadow(0 10px 14px rgba(20,36,14,0.32))",
           }}
         />
       </Box>
