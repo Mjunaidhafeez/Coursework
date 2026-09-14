@@ -1127,6 +1127,22 @@ const SubmissionsPage = () => {
                           {items.map((item, idx) => {
                             const primarySubmissionId = getPrimarySubmissionId(item);
                             const isGroupRow = Boolean(item.group) && !item.force_individual_row;
+                            const groupMembers = (groupsById[String(item.group)]?.members || []).filter((member) => member.accepted !== false);
+                            const groupMemberRows = item.group_member_rows || [];
+                            const canViewMembers =
+                              !item.is_topic_not_submitted &&
+                              (
+                                Boolean(item.group) ||
+                                (item.requested_member_ids || []).length > 0 ||
+                                (item.requested_member_details || []).length > 0 ||
+                                (item.requested_member_names || []).length > 0
+                              );
+                            const memberHintCount =
+                              (item.requested_member_details || []).length ||
+                              (item.requested_member_ids || []).length ||
+                              (item.requested_member_names || []).length ||
+                              groupMembers.length ||
+                              groupMemberRows.length;
                             const canShowMarkingControls =
                               !item.is_topic_not_submitted &&
                               String(item.approval_status || "").toLowerCase() === "approved";
@@ -1137,12 +1153,11 @@ const SubmissionsPage = () => {
                               item.force_individual_row && item.synthetic_member_row
                                 ? String(item.id || `row-${item.coursework}-${item.student || idx}`)
                                 : String(primarySubmissionId || item.id || idx);
-                            const groupMembers = (groupsById[String(item.group)]?.members || []).filter((member) => member.accepted !== false);
-                            const groupMemberRows = item.group_member_rows || [];
                             const groupOpen = !!openGroupRows[String(primarySubmissionId)];
+                            const senderName = item.student_name || item.submitted_by_name || item.student || "-";
                             const studentLabel = item.force_individual_row
-                              ? (item.student_name || item.group_name || item.student || "-")
-                              : (item.group_name || item.student_name || item.student || "-");
+                              ? senderName
+                              : (item.group_name || senderName);
                             const maxMarks = courseworkById[String(item.coursework)]?.max_marks;
                             const givenMarks = feedbackBySubmission[String(primarySubmissionId)]?.marks ?? item.obtained_marks ?? "-";
                             const simpleStatus = item.is_topic_not_submitted
@@ -1179,24 +1194,29 @@ const SubmissionsPage = () => {
                                         />
                                       </TableCell>
                                       <TableCell>
-                                        <Typography sx={{ fontWeight: 700, lineHeight: 1.3 }}>{studentLabel}</Typography>
+                                        <Typography
+                                          sx={{
+                                            fontWeight: 700,
+                                            lineHeight: 1.3,
+                                            cursor: canViewMembers ? "pointer" : "default",
+                                            color: canViewMembers ? "#1d4fbf" : "inherit",
+                                          }}
+                                          onClick={canViewMembers ? () => openSubmissionMembers(item) : undefined}
+                                        >
+                                          {studentLabel}
+                                        </Typography>
                                         <Typography variant="caption" color="text.secondary" display="block">
-                                          {item.topic ? item.topic : "No topic"}
+                                          {canViewMembers ? `Sent by ${senderName}` : (item.topic ? item.topic : "No topic")}
                                           {item.student_roll_no ? ` · ${item.student_roll_no}` : ""}
                                           {item.submitted_at ? ` · ${formatDate(item.submitted_at)}` : ""}
                                         </Typography>
-                                        {isGroupRow && (
+                                        {canViewMembers && (
                                           <Button
                                             size="small"
                                             sx={{ px: 0, minWidth: 0, mt: 0.2 }}
-                                            onClick={() =>
-                                              setOpenGroupRows((prev) => ({
-                                                ...prev,
-                                                [String(primarySubmissionId)]: !prev[String(primarySubmissionId)],
-                                              }))
-                                            }
+                                            onClick={() => openSubmissionMembers(item)}
                                           >
-                                            {groupOpen ? "Hide members" : "Show members"}
+                                            {memberHintCount ? `View members (${memberHintCount})` : "View members"}
                                           </Button>
                                         )}
                                       </TableCell>
@@ -1338,7 +1358,7 @@ const SubmissionsPage = () => {
         fullWidth
         disableEscapeKeyDown
       >
-        <DialogTitle>{memberDialogTitle}</DialogTitle>
+        <DialogTitle>{memberDialogTitle || "Group members"}</DialogTitle>
         <DialogContent dividers sx={{ p: 0, maxHeight: "72vh" }}>
           <Box sx={{ overflowX: "auto" }}>
             <Table size="small">
