@@ -6,8 +6,8 @@ import { useState } from "react";
 
 import { useAuth } from "../../context/AuthContext";
 
-const campusImage = `${import.meta.env.BASE_URL}login/campus.png`;
-const classImage = `${import.meta.env.BASE_URL}login/class-group.png`;
+const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=3`;
+const classImage = `${import.meta.env.BASE_URL}login/class-group.png?v=3`;
 const developedBy = "Developed by : Junaid Hafeez (SVL) MBA NON Business 2025-2027";
 
 const LoginPage = () => {
@@ -36,6 +36,7 @@ const LoginPage = () => {
         minHeight: "100vh",
         position: "relative",
         overflow: "hidden",
+        backgroundColor: "#102016",
         "@keyframes fadeUp": {
           from: { opacity: 0, transform: "translateY(18px)" },
           to: { opacity: 1, transform: "translateY(0)" },
@@ -52,7 +53,7 @@ const LoginPage = () => {
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          objectPosition: "center",
+          objectPosition: "center 42%",
         }}
       />
       <Box
@@ -61,21 +62,26 @@ const LoginPage = () => {
         alt=""
         sx={{
           position: "absolute",
-          top: 0,
-          right: 0,
-          width: { xs: "100%", md: "62%" },
-          height: "100%",
+          right: { xs: "50%", md: "1%" },
+          bottom: { xs: "-3%", md: "-2%" },
+          transform: { xs: "translateX(50%)", md: "none" },
+          width: { xs: "min(150vw, 760px)", md: "min(56vw, 840px)" },
+          height: { xs: "44vh", md: "86vh" },
           objectFit: "contain",
-          objectPosition: { xs: "center 78%", md: "right bottom" },
+          objectPosition: "right bottom",
+          filter: "drop-shadow(0 20px 32px rgba(8,16,10,0.4))",
+          pointerEvents: "none",
+          zIndex: 1,
         }}
       />
       <Box
         sx={{
           position: "absolute",
           inset: 0,
+          zIndex: 2,
           background: {
-            xs: "linear-gradient(180deg, rgba(7,14,32,0.55) 0%, rgba(10,22,48,0.28) 42%, rgba(8,16,36,0.2) 100%)",
-            md: "linear-gradient(90deg, rgba(7,14,32,0.58) 0%, rgba(10,22,48,0.32) 38%, rgba(8,16,36,0.08) 72%, rgba(8,16,36,0.12) 100%)",
+            xs: "linear-gradient(180deg, rgba(8,16,28,0.6) 0%, rgba(8,16,28,0.26) 40%, rgba(8,16,28,0.16) 100%)",
+            md: "linear-gradient(90deg, rgba(8,16,28,0.6) 0%, rgba(8,16,28,0.32) 32%, rgba(8,16,28,0.08) 56%, rgba(8,16,28,0.03) 100%)",
           },
         }}
       />
@@ -83,23 +89,24 @@ const LoginPage = () => {
       <Box
         sx={{
           position: "relative",
-          zIndex: 1,
+          zIndex: 3,
           minHeight: "100vh",
           display: "flex",
           flexDirection: "column",
           alignItems: { xs: "center", md: "flex-start" },
-          px: { xs: 2, md: 6 },
+          px: { xs: 2, md: 7 },
         }}
       >
-        <Stack spacing={0.6} sx={{ pt: { xs: 2.2, md: 2.8 }, maxWidth: 520, width: { xs: "100%", md: "auto" } }}>
+        <Stack spacing={0.55} sx={{ pt: { xs: 2.2, md: 2.8 }, maxWidth: 560, width: { xs: "100%", md: "auto" } }}>
           <Typography
             sx={{
               color: "#f3d38a",
-              letterSpacing: { xs: "0.12em", md: "0.22em" },
+              letterSpacing: { xs: "0.14em", md: "0.2em" },
               fontWeight: 800,
               fontSize: { xs: "0.78rem", md: "0.9rem" },
               textTransform: "uppercase",
               textAlign: { xs: "center", md: "left" },
+              textShadow: "0 2px 12px rgba(0,0,0,0.45)",
             }}
           >
             Superior University Lahore
@@ -107,10 +114,10 @@ const LoginPage = () => {
           <Typography
             sx={{
               color: "#fff",
-              fontWeight: 800,
-              fontSize: { xs: "0.86rem", md: "0.98rem" },
+              fontWeight: 700,
+              fontSize: { xs: "0.84rem", md: "0.95rem" },
               textAlign: { xs: "center", md: "left" },
-              textShadow: "0 4px 16px rgba(0,0,0,0.45)",
+              textShadow: "0 4px 16px rgba(0,0,0,0.5)",
             }}
           >
             {developedBy}
@@ -125,9 +132,10 @@ const LoginPage = () => {
             display: "flex",
             flexDirection: "column",
             alignItems: { xs: "center", md: "flex-start" },
-            justifyContent: "center",
-            py: 3,
-            gap: 2.2,
+            justifyContent: { xs: "flex-start", md: "center" },
+            pt: { xs: 3, md: 0 },
+            pb: { xs: 4, md: 6 },
+            gap: 2,
           }}
         >
           <Typography
@@ -135,10 +143,10 @@ const LoginPage = () => {
               color: "#fff",
               fontWeight: 800,
               textAlign: { xs: "center", md: "left" },
-              fontSize: { xs: "1.7rem", sm: "2.05rem", md: "2.35rem" },
-              lineHeight: 1.15,
+              fontSize: { xs: "1.7rem", sm: "2.05rem", md: "2.4rem" },
+              lineHeight: 1.18,
               letterSpacing: "0.01em",
-              textShadow: "0 8px 28px rgba(0,0,0,0.35)",
+              textShadow: "0 8px 28px rgba(0,0,0,0.4)",
               animation: "fadeUp 600ms ease-out",
             }}
           >
@@ -218,17 +226,6 @@ const LoginPage = () => {
                 >
                   {loading ? "Signing in..." : "Login"}
                 </Button>
-                <Typography
-                  sx={{
-                    color: "#16356f",
-                    fontWeight: 800,
-                    fontSize: "0.78rem",
-                    textAlign: "center",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  {developedBy}
-                </Typography>
               </Stack>
             </form>
           </Paper>
