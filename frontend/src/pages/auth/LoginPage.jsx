@@ -6,8 +6,8 @@ import { useState } from "react";
 
 import { useAuth } from "../../context/AuthContext";
 
-const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=5`;
-const classImage = `${import.meta.env.BASE_URL}login/class-group.png?v=5`;
+const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=6`;
+const classImage = `${import.meta.env.BASE_URL}login/class-group.png?v=6`;
 const developedBy = "Developed by : Junaid Hafeez (SVL) MBA NON Business 2025-2027";
 
 const LoginPage = () => {
@@ -64,12 +64,12 @@ const LoginPage = () => {
           transform: "translateX(-50%)",
           width: { xs: "min(86vw, 680px)", md: "min(50vw, 760px)" },
           height: { xs: "32vh", md: "40vh" },
-          opacity: 0.42,
-          filter: "blur(3.6px)",
+          opacity: 0.78,
+          filter: "blur(0.8px)",
           pointerEvents: "none",
           zIndex: 1,
-          WebkitMaskImage: "radial-gradient(ellipse 70% 72% at 50% 58%, #000 32%, transparent 78%)",
-          maskImage: "radial-gradient(ellipse 70% 72% at 50% 58%, #000 32%, transparent 78%)",
+          WebkitMaskImage: "radial-gradient(ellipse 78% 80% at 50% 55%, #000 52%, transparent 88%)",
+          maskImage: "radial-gradient(ellipse 78% 80% at 50% 55%, #000 52%, transparent 88%)",
         }}
       >
         <Box

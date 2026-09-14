@@ -1,0 +1,1 @@
+import{j as o}from"./index-D7Sa8lVy.js";import{C as t}from"./CoursesListPage-DJJf3EcA.js";import"./PaginationControls-B2ytLtJu.js";import"./ListingPage-CD7AOLWQ.js";import"./SearchToolbar-ANsheJ6u.js";import"./usePaginatedQuery-BN71tua-.js";import"./TableRow-CgiY_81O.js";const u=()=>o.jsx(t,{title:"My Courses"});export{u as default};
