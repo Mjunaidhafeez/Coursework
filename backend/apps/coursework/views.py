@@ -86,7 +86,7 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
     serializer_class = SubmissionSerializer
     filterset_fields = ["coursework", "status", "group", "approval_status"]
     search_fields = ["status", "coursework__title", "student__username", "group__name"]
-    ordering_fields = ["submitted_at", "created_at"]
+    ordering_fields = ["submitted_at", "created_at", "student__username"]
 
     def get_permissions(self):
         return [permissions.IsAuthenticated()]

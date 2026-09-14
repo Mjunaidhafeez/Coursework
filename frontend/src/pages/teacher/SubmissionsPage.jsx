@@ -42,6 +42,19 @@ import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
 import { csvSafe, downloadTextFile, fileSafe } from "../../utils/export";
 import { confirmDelete } from "../../utils/confirm";
 
+const compareByRollNo = (a, b) => {
+  const rollA = String(a.student_roll_no || a.rollNo || "").trim();
+  const rollB = String(b.student_roll_no || b.rollNo || "").trim();
+  if (rollA && rollB) {
+    return rollA.localeCompare(rollB, undefined, { numeric: true, sensitivity: "base" });
+  }
+  if (rollA) return -1;
+  if (rollB) return 1;
+  return String(a.student_name || a.group_name || "").localeCompare(String(b.student_name || b.group_name || ""), undefined, {
+    sensitivity: "base",
+  });
+};
+
 const SubmissionsPage = () => {
   const { user } = useAuth();
   const { notify, isGlobalLoading } = useUi();
@@ -68,6 +81,8 @@ const SubmissionsPage = () => {
   const [bulkFeedback, setBulkFeedback] = useState("");
   const [bulkSavingMarks, setBulkSavingMarks] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [savingAllMarks, setSavingAllMarks] = useState(false);
+  const [selectedCourseworkByCourse, setSelectedCourseworkByCourse] = useState({});
   const bulkApproveLockRef = useRef(false);
   const bulkSaveLockRef = useRef(false);
   const bulkDeleteLockRef = useRef(false);
@@ -83,7 +98,7 @@ const SubmissionsPage = () => {
 
   const queryFn = async ({ search, page, pageSize }) => {
     const params = new URLSearchParams();
-    params.append("ordering", "submitted_at");
+    params.append("ordering", "student__username");
     if (search) params.append("search", search);
     if (statusFilter) params.append("status", statusFilter);
     if (workflowFilter && workflowFilter !== "topic_not_submitted") params.append("workflow_state", workflowFilter);
@@ -136,7 +151,7 @@ const SubmissionsPage = () => {
 
   const loadSubmissionIndexRows = async () => {
     const params = new URLSearchParams();
-    params.append("ordering", "submitted_at");
+    params.append("ordering", "student__username");
     if (statusFilter) params.append("status", statusFilter);
     params.append("page", "1");
     params.append("page_size", "3000");
@@ -434,6 +449,69 @@ const SubmissionsPage = () => {
     updateFeedbackDraft(String(draftKeyOverride ?? submissionId), { marks: normalized });
   };
 
+  const getRowDraftKey = (item, idx) =>
+    item.force_individual_row && item.synthetic_member_row
+      ? String(item.id || `row-${item.coursework}-${item.student || idx}`)
+      : String(getPrimarySubmissionId(item) || item.id || idx);
+
+  const saveAllDraftMarks = async (items) => {
+    const markable = items.filter(
+      (item) =>
+        !item.is_topic_not_submitted &&
+        String(item.approval_status || "").toLowerCase() === "approved" &&
+        Boolean(getPrimarySubmissionId(item))
+    );
+    if (!markable.length) {
+      notify("Approve the topic first, then enter marks.", "warning");
+      return;
+    }
+    setSavingAllMarks(true);
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (let idx = 0; idx < items.length; idx += 1) {
+        const item = items[idx];
+        if (!markable.includes(item)) continue;
+        const draftKey = getRowDraftKey(item, idx);
+        const draft = getFeedbackDraft(item, draftKey);
+        if (draft.marks === "" || draft.marks === null || draft.marks === undefined) continue;
+        const groupMemberRows = item.group_member_rows || [];
+        if (groupMemberRows.length > 1) {
+          let savedMember = false;
+          for (const memberRow of groupMemberRows) {
+            const memberDraft = getFeedbackDraft(memberRow);
+            if (memberDraft.marks === "" || memberDraft.marks === null || memberDraft.marks === undefined) continue;
+            const success = await saveFeedback(memberRow, "single", { shouldNotify: false, shouldReload: false });
+            if (success) {
+              ok += 1;
+              savedMember = true;
+            } else {
+              fail += 1;
+            }
+          }
+          if (savedMember) continue;
+        }
+        const success = await saveFeedback(item, resolveRowSaveScope(item), {
+          shouldNotify: false,
+          shouldReload: false,
+          targetStudentId: item.force_individual_row ? item.student : null,
+          draftKey,
+          savingKey: draftKey,
+        });
+        if (success) ok += 1;
+        else fail += 1;
+      }
+      if (!ok && !fail) {
+        notify("Enter marks first, then click Save marks.", "warning");
+        return;
+      }
+      await Promise.all([loadFeedbackMap(), loadData(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
+      notify(fail ? `${ok} saved, ${fail} failed` : `Marks saved for ${ok} student(s)`, fail ? "warning" : "success");
+    } finally {
+      setSavingAllMarks(false);
+    }
+  };
+
   const pendingNoRequestEntries = useMemo(() => {
     const shouldShow = workflowFilter === "" || workflowFilter === "request_pending" || workflowFilter === "topic_not_submitted";
     if (!shouldShow) return [];
@@ -500,7 +578,7 @@ const SubmissionsPage = () => {
         file: null,
         is_marked: false,
         is_topic_not_submitted: true,
-      }));
+      })).sort(compareByRollNo);
     }
     if (workflowFilter === "marked") {
       const seen = new Set();
@@ -515,7 +593,8 @@ const SubmissionsPage = () => {
           ...row,
           submission_id: row.id,
           force_individual_row: true,
-        }));
+        }))
+        .sort(compareByRollNo);
     }
     const nonGroupRows = rows.filter((row) => !row.group).map((row) => ({ ...row, submission_id: row.id }));
     const groupedRowsMap = new Map();
@@ -535,11 +614,11 @@ const SubmissionsPage = () => {
       representativeGroupRows.push({
         ...representative,
         submission_id: representative.id,
-        group_member_rows: groupRows.map((row) => ({ ...row, submission_id: row.id })),
+        group_member_rows: groupRows.map((row) => ({ ...row, submission_id: row.id })).sort(compareByRollNo),
       });
     });
 
-    return [...nonGroupRows, ...representativeGroupRows];
+    return [...nonGroupRows, ...representativeGroupRows].sort(compareByRollNo);
   }, [workflowFilter, rows, pendingNoRequestEntries, groupsById, enrollments]);
 
   const groupedByCourseAndCoursework = useMemo(() => {
@@ -561,8 +640,30 @@ const SubmissionsPage = () => {
       if (!grouped[courseTitle][courseworkTitle]) grouped[courseTitle][courseworkTitle] = [];
       grouped[courseTitle][courseworkTitle].push(row);
     });
+    Object.keys(grouped).forEach((courseTitle) => {
+      Object.keys(grouped[courseTitle]).forEach((courseworkTitle) => {
+        grouped[courseTitle][courseworkTitle].sort(compareByRollNo);
+      });
+    });
     return grouped;
   }, [displayRows, courseworksMeta, courses]);
+
+  useEffect(() => {
+    setSelectedCourseworkByCourse((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      Object.entries(groupedByCourseAndCoursework).forEach(([courseTitle, courseworkGroup]) => {
+        const titles = Object.keys(courseworkGroup);
+        if (!titles.length) return;
+        if (!next[courseTitle] || !courseworkGroup[next[courseTitle]]) {
+          next[courseTitle] = titles[0];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [groupedByCourseAndCoursework]);
+
   const courseNameById = useMemo(() => {
     const map = {};
     courses.forEach((course) => {
@@ -935,27 +1036,8 @@ const SubmissionsPage = () => {
               {selectedCount} selected
             </Typography>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }}>
-              <TextField
-                size="small"
-                type="number"
-                label="Marks"
-                value={bulkMarks}
-                onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
-                inputProps={{ min: 0, step: 1 }}
-                sx={{ width: 110 }}
-              />
-              <TextField
-                size="small"
-                label="Feedback"
-                value={bulkFeedback}
-                onChange={(e) => setBulkFeedback(e.target.value)}
-                sx={{ width: 180 }}
-              />
               <Button size="small" variant="contained" color="success" disabled={!selectedApproveRows.length} onClick={bulkApproveSelected}>
                 Approve
-              </Button>
-              <Button size="small" variant="contained" disabled={!selectedMarkRows.length || bulkSavingMarks} onClick={bulkSaveSelectedMarks}>
-                {bulkSavingMarks ? "Saving..." : "Save marks"}
               </Button>
               {isAdminApprovalsView && (
                 <Button size="small" color="error" disabled={!selectedDeleteRows.length || bulkDeleting} onClick={bulkDeleteSelected}>
@@ -969,17 +1051,43 @@ const SubmissionsPage = () => {
           <Typography variant="body2" color="text.secondary">Nothing to show in this tab.</Typography>
         )}
         <Stack spacing={2} ref={resultsSectionRef}>
-          {Object.entries(groupedByCourseAndCoursework).map(([courseTitle, courseworkGroup]) => (
+          {Object.entries(groupedByCourseAndCoursework).map(([courseTitle, courseworkGroup]) => {
+            const assessmentTitles = Object.keys(courseworkGroup);
+            const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
+            const items = courseworkGroup[selectedTitle] || [];
+            const canSaveMarks = items.some(
+              (item) =>
+                !item.is_topic_not_submitted &&
+                String(item.approval_status || "").toLowerCase() === "approved"
+            );
+            return (
             <Box key={courseTitle}>
-              <Typography sx={{ fontWeight: 800, color: "#13377a", mb: 1 }}>
-                {courseTitle}
-              </Typography>
-              <Stack spacing={1.5}>
-                {Object.entries(courseworkGroup).map(([courseworkTitle, items]) => (
-                    <Box key={courseworkTitle}>
-                      <Typography sx={{ fontWeight: 700, color: "#35507c", mb: 0.6 }}>
-                        {courseworkTitle}
-                      </Typography>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} justifyContent="space-between" sx={{ mb: 1 }}>
+                <Typography sx={{ fontWeight: 800, color: "#13377a" }}>
+                  {courseTitle}
+                </Typography>
+                {canSaveMarks && (
+                  <Button size="small" variant="contained" disabled={savingAllMarks} onClick={() => saveAllDraftMarks(items)}>
+                    {savingAllMarks ? "Saving..." : "Save marks"}
+                  </Button>
+                )}
+              </Stack>
+              {assessmentTitles.length > 1 ? (
+                <Box sx={{ mb: 1.2 }}>
+                  <CompactTabs
+                    value={selectedTitle}
+                    onChange={(next) => setSelectedCourseworkByCourse((prev) => ({ ...prev, [courseTitle]: next }))}
+                    tabs={assessmentTitles.map((title) => ({
+                      value: title,
+                      label: `${title} (${courseworkGroup[title].length})`,
+                    }))}
+                  />
+                </Box>
+              ) : (
+                <Typography sx={{ fontWeight: 700, color: "#35507c", mb: 0.8 }}>
+                  {selectedTitle}
+                </Typography>
+              )}
                       <Table
                         size="small"
                         sx={{
@@ -1019,7 +1127,6 @@ const SubmissionsPage = () => {
                           {items.map((item, idx) => {
                             const primarySubmissionId = getPrimarySubmissionId(item);
                             const isGroupRow = Boolean(item.group) && !item.force_individual_row;
-                            const rowSaveScope = resolveRowSaveScope(item);
                             const canShowMarkingControls =
                               !item.is_topic_not_submitted &&
                               String(item.approval_status || "").toLowerCase() === "approved";
@@ -1112,31 +1219,15 @@ const SubmissionsPage = () => {
                                       </TableCell>
                                       <TableCell>
                                         {canShowMarkingControls ? (
-                                          <Stack direction="row" spacing={0.6} alignItems="center">
-                                            <TextField
-                                              size="small"
-                                              type="number"
-                                              placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
-                                              value={getFeedbackDraft(item, rowDraftKey).marks}
-                                              onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
-                                              inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
-                                              sx={{ width: 88 }}
-                                            />
-                                            <Button
-                                              size="small"
-                                              variant="contained"
-                                              disabled={feedbackSavingBySubmission[rowDraftKey]}
-                                              onClick={() =>
-                                                saveFeedback(item, rowSaveScope, {
-                                                  targetStudentId: item.force_individual_row ? item.student : null,
-                                                  draftKey: rowDraftKey,
-                                                  savingKey: rowDraftKey,
-                                                })
-                                              }
-                                            >
-                                              {feedbackSavingBySubmission[rowDraftKey] ? "..." : "Save"}
-                                            </Button>
-                                          </Stack>
+                                          <TextField
+                                            size="small"
+                                            type="number"
+                                            placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
+                                            value={getFeedbackDraft(item, rowDraftKey).marks}
+                                            onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
+                                            inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
+                                            sx={{ width: 88 }}
+                                          />
                                         ) : (
                                           <Typography variant="body2" color="text.secondary">
                                             {item.is_marked ? formatMarks(givenMarks) : "—"}
@@ -1179,16 +1270,14 @@ const SubmissionsPage = () => {
                                               <TableRow>
                                                 <TableCell>Name</TableCell>
                                                 <TableCell>Roll No</TableCell>
-                                                {canShowMarkingControls && (
-                                                  <>
-                                                    <TableCell>Marks</TableCell>
-                                                    <TableCell align="right">Save</TableCell>
-                                                  </>
-                                                )}
+                                                {canShowMarkingControls && <TableCell>Marks</TableCell>}
                                               </TableRow>
                                             </TableHead>
                                             <TableBody>
-                                              {(groupMembers.length ? groupMembers : groupMemberRows).map((member, memberIdx) => {
+                                              {(groupMembers.length ? groupMembers : groupMemberRows)
+                                                .slice()
+                                                .sort(compareByRollNo)
+                                                .map((member, memberIdx) => {
                                                 const memberStudentId = String(member.student || member.id || "");
                                                 const memberSubmission =
                                                   groupMemberRows.find((row) => String(row.student || "") === memberStudentId) ||
@@ -1208,27 +1297,15 @@ const SubmissionsPage = () => {
                                                     <TableCell>{memberName}</TableCell>
                                                     <TableCell>{memberRollNo}</TableCell>
                                                     {canShowMarkingControls && (
-                                                      <>
-                                                        <TableCell sx={{ minWidth: 110 }}>
-                                                          <TextField
-                                                            size="small"
-                                                            type="number"
-                                                            value={getFeedbackDraft(memberSubmission).marks}
-                                                            onChange={(e) => handleMarksDraftChange(memberSubmission, e.target.value)}
-                                                            inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
-                                                          />
-                                                        </TableCell>
-                                                        <TableCell align="right">
-                                                          <Button
-                                                            size="small"
-                                                            variant="outlined"
-                                                            disabled={feedbackSavingBySubmission[memberSubmissionId]}
-                                                            onClick={() => saveFeedback(memberSubmission, "single")}
-                                                          >
-                                                            {feedbackSavingBySubmission[memberSubmissionId] ? "Saving..." : "Save"}
-                                                          </Button>
-                                                        </TableCell>
-                                                      </>
+                                                      <TableCell sx={{ minWidth: 110 }}>
+                                                        <TextField
+                                                          size="small"
+                                                          type="number"
+                                                          value={getFeedbackDraft(memberSubmission).marks}
+                                                          onChange={(e) => handleMarksDraftChange(memberSubmission, e.target.value)}
+                                                          inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
+                                                        />
+                                                      </TableCell>
                                                     )}
                                                   </TableRow>
                                                 );
@@ -1245,11 +1322,9 @@ const SubmissionsPage = () => {
                           })}
                         </TableBody>
                       </Table>
-                    </Box>
-                ))}
-              </Stack>
             </Box>
-          ))}
+            );
+          })}
         </Stack>
         {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
