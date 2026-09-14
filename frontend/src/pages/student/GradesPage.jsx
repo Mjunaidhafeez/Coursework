@@ -1,8 +1,10 @@
-import { Button, CircularProgress, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { CircularProgress, MenuItem, Stack, TextField } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import CourseResultMatrix from "../../components/shared/CourseResultMatrix";
+import ListingPage from "../../components/shared/ListingPage";
+import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
@@ -90,59 +92,54 @@ const GradesPage = () => {
   }, [user, submissions, courseworks]);
 
   return (
-    <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>Course Result</Typography>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1 }}>
-          <TextField
-            size="small"
-            label="Search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ minWidth: 260 }}
-          />
-          <TextField
-            select
-            size="small"
-            label="Semester"
-            value={semesterFilter}
-            onChange={(e) => {
-              setSemesterFilter(e.target.value);
-              setCourseFilter("");
-            }}
-            sx={{ minWidth: 180 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {semesters.map((semester) => (
-              <MenuItem key={semester.id} value={String(semester.id)}>Semester {semester.number}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            size="small"
-            label="Course"
-            value={courseFilter}
-            onChange={(e) => setCourseFilter(e.target.value)}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {filteredCourses.map((course) => (
-              <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>
-            ))}
-          </TextField>
-          <Button
-            size="small"
-            variant="text"
-            sx={{ alignSelf: "center" }}
-            onClick={() => {
-              setSearch("");
-              setSemesterFilter("");
-              setCourseFilter("");
-            }}
-          >
-            Reset
-          </Button>
-        </Stack>
+    <ListingPage
+      title="Course Result"
+      filters={(
+        <SearchToolbar
+          search={search}
+          onSearchChange={setSearch}
+          onSearch={() => {}}
+          onReset={() => {
+            setSearch("");
+            setSemesterFilter("");
+            setCourseFilter("");
+          }}
+          filters={(
+            <>
+              <TextField
+                select
+                size="small"
+                label="Semester"
+                value={semesterFilter}
+                onChange={(e) => {
+                  setSemesterFilter(e.target.value);
+                  setCourseFilter("");
+                }}
+                sx={{ minWidth: 140 }}
+              >
+                <MenuItem value="">All</MenuItem>
+                {semesters.map((semester) => (
+                  <MenuItem key={semester.id} value={String(semester.id)}>Semester {semester.number}</MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                size="small"
+                label="Course"
+                value={courseFilter}
+                onChange={(e) => setCourseFilter(e.target.value)}
+                sx={{ minWidth: 180 }}
+              >
+                <MenuItem value="">All</MenuItem>
+                {filteredCourses.map((course) => (
+                  <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>
+                ))}
+              </TextField>
+            </>
+          )}
+        />
+      )}
+    >
         {loading && !isGlobalLoading ? (
           <Stack alignItems="center" sx={{ py: 3 }}>
             <CircularProgress size={28} />
@@ -162,8 +159,7 @@ const GradesPage = () => {
             emptyText="No result found for current filters."
           />
         )}
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

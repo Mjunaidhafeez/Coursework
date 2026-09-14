@@ -19,8 +19,11 @@ import { useEffect, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import CompactAddForm from "../../components/shared/CompactAddForm";
 import FormErrorSummary from "../../components/shared/FormErrorSummary";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
+import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
@@ -132,9 +135,32 @@ const CoursesPage = () => {
   };
 
   return (
-    <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>Courses</Typography>
+    <ListingPage
+      title="Courses"
+      addForm={(
+        <CompactAddForm
+          title={editingId ? "Update Course" : "Add Course"}
+          submitLabel={editingId ? "Update" : "Add"}
+          onSubmit={submit}
+          onClear={() => { setEditingId(null); setForm(emptyForm); setFormErrors({}); }}
+          extra={(
+            <>
+              <FormErrorSummary errors={formErrors} />
+              {semesterAlert && <Alert severity="warning">{semesterAlert}</Alert>}
+            </>
+          )}
+        >
+          <TextField required size="small" label="Code" value={form.code} error={Boolean(formErrors.code)} helperText={formErrors.code || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
+          <TextField required size="small" label="Title" value={form.title} error={Boolean(formErrors.title)} helperText={formErrors.title || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
+          <TextField required select size="small" label="Semester" value={form.semester} error={Boolean(formErrors.semester)} helperText={formErrors.semester || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, semester: e.target.value }))}>
+            {semesters.map((s) => <MenuItem key={s.id} value={s.id}>{s.number}</MenuItem>)}
+          </TextField>
+          <TextField required select size="small" label="Teachers" error={Boolean(formErrors.teachers)} helperText={formErrors.teachers || ""} SelectProps={{ multiple: true }} value={form.teachers} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, teachers: e.target.value }))}>
+            {teachers.map((teacher) => <MenuItem key={teacher.id} value={teacher.id}>{getUserDisplayName(teacher, { includeUsername: true })}</MenuItem>)}
+          </TextField>
+        </CompactAddForm>
+      )}
+      filters={(
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}
@@ -148,35 +174,11 @@ const CoursesPage = () => {
             loadData({ searchValue: "", pageValue: 1 });
           }}
         />
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
-        <Typography sx={{ fontWeight: 700, mb: 1.2 }}>{editingId ? "Update Course" : "Add Course"}</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.2 }}>
-          Fields marked with * are mandatory.
-        </Typography>
-        <FormErrorSummary errors={formErrors} />
-        {semesterAlert && <Alert severity="warning" sx={{ mb: 1.2 }}>{semesterAlert}</Alert>}
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, 1fr)" }, gap: 1.2 }}>
-          <TextField required size="small" label="Code" value={form.code} error={Boolean(formErrors.code)} helperText={formErrors.code || ""} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
-          <TextField required size="small" label="Title" value={form.title} error={Boolean(formErrors.title)} helperText={formErrors.title || ""} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
-          <TextField required select size="small" label="Semester" value={form.semester} error={Boolean(formErrors.semester)} helperText={formErrors.semester || ""} onChange={(e) => setForm((p) => ({ ...p, semester: e.target.value }))}>
-            {semesters.map((s) => <MenuItem key={s.id} value={s.id}>{s.number}</MenuItem>)}
-          </TextField>
-          <TextField required select size="small" label="Teachers" error={Boolean(formErrors.teachers)} helperText={formErrors.teachers || ""} SelectProps={{ multiple: true }} value={form.teachers} onChange={(e) => setForm((p) => ({ ...p, teachers: e.target.value }))}>
-            {teachers.map((teacher) => <MenuItem key={teacher.id} value={teacher.id}>{getUserDisplayName(teacher, { includeUsername: true })}</MenuItem>)}
-          </TextField>
-        </Box>
-        <Stack direction="row" spacing={1} sx={{ mt: 1.2 }}>
-          <Button variant="contained" onClick={submit}>{editingId ? "Update" : "Add"}</Button>
-          <Button variant="outlined" onClick={() => { setEditingId(null); setForm(emptyForm); setFormErrors({}); }}>Clear</Button>
-        </Stack>
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
-        <Stack direction="row" spacing={1} sx={{ mb: 1.2 }}>
-          <Chip label={`Total: ${total}`} variant="outlined" />
-          <Chip label={`With Teachers: ${courses.filter((c) => (c.teachers || []).length > 0).length}`} color="success" variant="outlined" />
+      )}
+    >
+        <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
+          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
+          <Chip size="small" label={`With Teachers: ${courses.filter((c) => (c.teachers || []).length > 0).length}`} color="success" variant="outlined" />
         </Stack>
         <Table size="small">
           <TableHead>
@@ -230,8 +232,7 @@ const CoursesPage = () => {
             onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
           />
         </Box>
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

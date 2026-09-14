@@ -23,8 +23,11 @@ import { useLocation } from "react-router-dom";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import CompactAddForm from "../../components/shared/CompactAddForm";
 import FormErrorSummary from "../../components/shared/FormErrorSummary";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
+import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
@@ -337,15 +340,46 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   ];
 
   return (
-    <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>{pageTitle}</Typography>
-        {!fixedRole && (
-          <Alert severity="info" sx={{ mb: 1.2 }}>
-            Create users from here for any role. Dedicated lists remain available in Manage Students and Manage Teachers pages.
-          </Alert>
-        )}
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+    <ListingPage
+      title={pageTitle}
+      addForm={(
+        <CompactAddForm
+          title={editingId ? "Update User" : "Add User"}
+          submitLabel={editingId ? "Update" : "Add"}
+          onSubmit={submit}
+          onClear={() => { setEditingId(null); setForm({ ...emptyForm, role: urlRole || "student" }); setFormErrors({}); setShowValidation(false); }}
+          extra={(
+            <>
+              <FormErrorSummary errors={showValidation ? formErrors : {}} />
+              {error && <Alert severity="error">{error}</Alert>}
+              {semesterAlert && form.role === "student" && <Alert severity="warning">{semesterAlert}</Alert>}
+            </>
+          )}
+        >
+          <TextField required size="small" label="Username" value={form.username} disabled={Boolean(editingId)} error={showValidation && Boolean(formErrors.username)} helperText={editingId ? "Locked" : (showValidation ? formErrors.username || "" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, username: e.target.value }))} />
+          <TextField required size="small" label="Email" type="email" value={form.email} error={showValidation && Boolean(formErrors.email)} helperText={showValidation ? formErrors.email || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, email: e.target.value }))} />
+          <TextField required={!editingId} size="small" label={editingId ? "Password (optional)" : "Password"} type="password" value={form.password} error={showValidation && Boolean(formErrors.password)} helperText={showValidation ? formErrors.password || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, password: e.target.value }))} />
+          <TextField required size="small" label="First Name" value={form.first_name} error={showValidation && Boolean(formErrors.first_name)} helperText={showValidation ? formErrors.first_name || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, first_name: e.target.value }))} />
+          <TextField required size="small" label="Last Name" value={form.last_name} error={showValidation && Boolean(formErrors.last_name)} helperText={showValidation ? formErrors.last_name || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, last_name: e.target.value }))} />
+          {!fixedRole && (
+            <TextField required select size="small" label="Role" value={form.role} error={showValidation && Boolean(formErrors.role)} helperText={showValidation ? formErrors.role || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, role: e.target.value }))}>
+              <MenuItem value="student">Student</MenuItem>
+              <MenuItem value="teacher">Teacher</MenuItem>
+              <MenuItem value="super_admin">Super Admin</MenuItem>
+            </TextField>
+          )}
+          {form.role === "teacher" && <TextField required size="small" label="Department" value={form.department} error={showValidation && Boolean(formErrors.department)} helperText={showValidation ? formErrors.department || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, department: e.target.value }))} />}
+          {form.role === "student" && (
+            <>
+              <TextField required size="small" label="Student ID" value={form.student_id} error={showValidation && Boolean(formErrors.student_id)} helperText={showValidation ? formErrors.student_id || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, student_id: e.target.value }))} />
+              <TextField required select size="small" label="Semester" value={form.semester} error={showValidation && Boolean(formErrors.semester)} helperText={showValidation ? formErrors.semester || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, semester: e.target.value }))}>
+                {semesters.map((semester) => <MenuItem key={semester.id} value={semester.id}>{semester.number}</MenuItem>)}
+              </TextField>
+            </>
+          )}
+        </CompactAddForm>
+      )}
+      filters={(
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}
@@ -358,62 +392,19 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             setPage(1);
             loadUsers({ searchValue: "", pageValue: 1 });
           }}
+          actions={isStudentAdminPage ? (
+            <>
+              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportStudentsCsv}>CSV</Button>
+              <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportStudentsPdf}>PDF</Button>
+            </>
+          ) : null}
         />
-        {isStudentAdminPage && (
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mt: 1.1 }}>
-            <Button variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportStudentsCsv}>
-              Export CSV
-            </Button>
-            <Button variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportStudentsPdf}>
-              Export PDF
-            </Button>
-          </Stack>
-        )}
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 700 }}>{editingId ? "Update User" : "Add User"}</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.2 }}>
-          Fields marked with * are mandatory.
-        </Typography>
-        <FormErrorSummary errors={showValidation ? formErrors : {}} />
-        {semesterAlert && form.role === "student" && <Alert severity="warning" sx={{ mb: 1.5 }}>{semesterAlert}</Alert>}
-        <Stack spacing={1.2}>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 1.2 }}>
-            <TextField required size="small" label="Username" value={form.username} disabled={Boolean(editingId)} error={showValidation && Boolean(formErrors.username)} helperText={editingId ? "Username cannot be changed" : (showValidation ? formErrors.username || "" : "")} onChange={(e) => updateForm((p) => ({ ...p, username: e.target.value }))} />
-            <TextField required size="small" label="Email" type="email" value={form.email} error={showValidation && Boolean(formErrors.email)} helperText={showValidation ? formErrors.email || "" : ""} onChange={(e) => updateForm((p) => ({ ...p, email: e.target.value }))} />
-            <TextField required={!editingId} size="small" label={editingId ? "Password (optional)" : "Password"} type="password" value={form.password} error={showValidation && Boolean(formErrors.password)} helperText={showValidation ? formErrors.password || "" : ""} onChange={(e) => updateForm((p) => ({ ...p, password: e.target.value }))} />
-            <TextField required size="small" label="First Name" value={form.first_name} error={showValidation && Boolean(formErrors.first_name)} helperText={showValidation ? formErrors.first_name || "" : ""} onChange={(e) => updateForm((p) => ({ ...p, first_name: e.target.value }))} />
-            <TextField required size="small" label="Last Name" value={form.last_name} error={showValidation && Boolean(formErrors.last_name)} helperText={showValidation ? formErrors.last_name || "" : ""} onChange={(e) => updateForm((p) => ({ ...p, last_name: e.target.value }))} />
-            {!fixedRole && (
-              <TextField required select size="small" label="Role" value={form.role} error={showValidation && Boolean(formErrors.role)} helperText={showValidation ? formErrors.role || "" : ""} onChange={(e) => updateForm((p) => ({ ...p, role: e.target.value }))}>
-                <MenuItem value="student">Student</MenuItem>
-                <MenuItem value="teacher">Teacher</MenuItem>
-                <MenuItem value="super_admin">Super Admin</MenuItem>
-              </TextField>
-            )}
-            {form.role === "teacher" && <TextField required size="small" label="Department" value={form.department} error={showValidation && Boolean(formErrors.department)} helperText={showValidation ? formErrors.department || "" : ""} onChange={(e) => updateForm((p) => ({ ...p, department: e.target.value }))} />}
-            {form.role === "student" && (
-              <>
-                <TextField required size="small" label="Student ID" value={form.student_id} error={showValidation && Boolean(formErrors.student_id)} helperText={showValidation ? formErrors.student_id || "" : ""} onChange={(e) => updateForm((p) => ({ ...p, student_id: e.target.value }))} />
-                <TextField required select size="small" label="Semester" value={form.semester} error={showValidation && Boolean(formErrors.semester)} helperText={showValidation ? formErrors.semester || "" : ""} onChange={(e) => updateForm((p) => ({ ...p, semester: e.target.value }))}>
-                  {semesters.map((semester) => <MenuItem key={semester.id} value={semester.id}>{semester.number}</MenuItem>)}
-                </TextField>
-              </>
-            )}
-          </Box>
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" onClick={submit}>{editingId ? "Update" : "Add"}</Button>
-            <Button variant="outlined" onClick={() => { setEditingId(null); setForm({ ...emptyForm, role: urlRole || "student" }); setFormErrors({}); setShowValidation(false); }}>Clear</Button>
-          </Stack>
-        </Stack>
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
-        <Stack direction="row" spacing={1} sx={{ mb: 1.2 }}>
-          <Chip label={`Total: ${total}`} variant="outlined" />
-          <Chip label={`Students: ${users.filter((u) => u.role === "student").length}`} color="info" variant="outlined" />
-          <Chip label={`Teachers: ${users.filter((u) => u.role === "teacher").length}`} color="success" variant="outlined" />
+      )}
+    >
+        <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
+          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
+          <Chip size="small" label={`Students: ${users.filter((u) => u.role === "student").length}`} color="info" variant="outlined" />
+          <Chip size="small" label={`Teachers: ${users.filter((u) => u.role === "teacher").length}`} color="success" variant="outlined" />
         </Stack>
         <Table size="small">
           <TableHead>
@@ -474,8 +465,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             }}
           />
         </Box>
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

@@ -1,7 +1,8 @@
-import { Chip, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Chip, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { ENDPOINTS } from "../../api/endpoints";
 import usePaginatedQuery from "../../hooks/usePaginatedQuery";
@@ -21,18 +22,10 @@ const StudentCourseworkPage = () => {
     usePaginatedQuery({ queryFn });
 
   return (
-    <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>Assessment</Typography>
-        <SearchToolbar
-          search={search}
-          onSearchChange={setSearch}
-          onSearch={runSearch}
-          onReset={resetSearch}
-        />
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
+    <ListingPage
+      title="Assessment"
+      filters={<SearchToolbar search={search} onSearchChange={setSearch} onSearch={runSearch} onReset={resetSearch} />}
+    >
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -65,8 +58,7 @@ const StudentCourseworkPage = () => {
           onPageChange={changePage}
           onPageSizeChange={changePageSize}
         />
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

@@ -17,10 +17,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import CompactAddForm from "../../components/shared/CompactAddForm";
 import FormErrorSummary from "../../components/shared/FormErrorSummary";
-import ModuleHero from "../../components/shared/ModuleHero";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import StudentMemberList from "../../components/shared/StudentMemberList";
+import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
@@ -235,51 +237,22 @@ const GroupsPage = () => {
   };
 
   return (
-    <Stack spacing={2}>
-      <ModuleHero
-        title="Group Management & Approvals"
-        subtitle="Create class groups, approve requests, and monitor membership consistency."
-      >
-        <SearchToolbar
-          search={search}
-          onSearchChange={setSearch}
-          onSearch={() => {
-            setPage(1);
-            loadData({ searchValue: search, pageValue: 1 });
+    <ListingPage
+      title="Group Management & Approvals"
+      addForm={(
+        <CompactAddForm
+          title={editingId ? "Update Group" : "Add Group"}
+          submitLabel={editingId ? "Update" : "Add"}
+          onSubmit={submit}
+          onClear={() => {
+            setEditingId(null);
+            setForm(emptyGroupForm);
+            setFormErrors({});
+            loadAssignedGroupMap();
           }}
-          onReset={() => {
-            setSearch("");
-            setPage(1);
-            loadData({ searchValue: "", pageValue: 1 });
-          }}
-        />
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ mt: 1.2 }}>
-          <TextField select size="small" label="Filter by status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-            <MenuItem value="">All</MenuItem>
-            {GROUP_STATUS_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Filter by course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }}>
-            <MenuItem value="">All Courses</MenuItem>
-            {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
-          </TextField>
-          <Button variant="outlined" onClick={() => loadData({ pageValue: 1 })}>Apply Filters</Button>
-          <Button variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportGroupsCsv}>
-            Export CSV
-          </Button>
-          <Button variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportGroupsPdf}>
-            Export PDF
-          </Button>
-        </Stack>
-      </ModuleHero>
-
-      <Paper sx={{ p: 2 }}>
-        <Typography sx={{ fontWeight: 700, mb: 1.2 }}>{editingId ? "Update Group" : "Add Group"}</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.2 }}>
-          Fields marked with * are mandatory.
-        </Typography>
-        <FormErrorSummary errors={formErrors} />
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" }, gap: 1.2 }}>
-          <TextField required size="small" label="Group Name" value={form.name} error={Boolean(formErrors.name)} helperText={formErrors.name || ""} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+          extra={<FormErrorSummary errors={formErrors} />}
+        >
+          <TextField required size="small" label="Group Name" value={form.name} error={Boolean(formErrors.name)} helperText={formErrors.name || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
           <TextField
             select
             size="small"
@@ -300,10 +273,9 @@ const GroupsPage = () => {
             error={Boolean(formErrors.member_ids)}
             helperText={formErrors.member_ids || ""}
             sx={{
-              "& .MuiOutlinedInput-root": {
-                borderRadius: 1.5,
-                bgcolor: "#f8fbff",
-              },
+              ...compactFieldSx,
+              minWidth: { xs: "100%", sm: 220 },
+              flex: { xs: "1 1 100%", sm: "1 1 260px" },
             }}
             onChange={(e) => setForm((p) => ({ ...p, member_ids: e.target.value }))}
           >
@@ -329,28 +301,49 @@ const GroupsPage = () => {
               </MenuItem>
             ))}
           </TextField>
-        </Box>
-        <Stack direction="row" spacing={1} sx={{ mt: 1.2 }}>
-          <Button variant="contained" onClick={submit}>{editingId ? "Update" : "Add"}</Button>
-          <Button
-            variant="outlined"
-            onClick={() => {
-              setEditingId(null);
-              setForm(emptyGroupForm);
-              setFormErrors({});
-              loadAssignedGroupMap();
-            }}
-          >
-            Clear
-          </Button>
-        </Stack>
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
-        <Stack direction="row" spacing={1} sx={{ mb: 1.2 }}>
-          <Chip label={`Total: ${total}`} variant="outlined" />
-          <Chip label={`Pending: ${groups.filter((g) => g.status === "pending").length}`} color="warning" variant="outlined" />
-          <Chip label={`Approved: ${groups.filter((g) => g.status === "approved").length}`} color="success" variant="outlined" />
+        </CompactAddForm>
+      )}
+      filters={(
+        <SearchToolbar
+          search={search}
+          onSearchChange={setSearch}
+          onSearch={() => {
+            setPage(1);
+            loadData({ searchValue: search, pageValue: 1 });
+          }}
+          onReset={() => {
+            setSearch("");
+            setStatusFilter("");
+            setCourseFilter("");
+            setPage(1);
+            loadData({ searchValue: "", pageValue: 1 });
+          }}
+          filters={(
+            <>
+              <TextField select size="small" label="Status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} sx={{ minWidth: 130 }}>
+                <MenuItem value="">All</MenuItem>
+                {GROUP_STATUS_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }} sx={{ minWidth: 160 }}>
+                <MenuItem value="">All Courses</MenuItem>
+                {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
+              </TextField>
+            </>
+          )}
+          actions={(
+            <>
+              <Button size="small" variant="outlined" onClick={() => loadData({ pageValue: 1 })}>Apply</Button>
+              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportGroupsCsv}>CSV</Button>
+              <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportGroupsPdf}>PDF</Button>
+            </>
+          )}
+        />
+      )}
+    >
+        <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
+          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
+          <Chip size="small" label={`Pending: ${groups.filter((g) => g.status === "pending").length}`} color="warning" variant="outlined" />
+          <Chip size="small" label={`Approved: ${groups.filter((g) => g.status === "approved").length}`} color="success" variant="outlined" />
         </Stack>
         {!groups.length && !loading ? (
           <Typography variant="body2" color="text.secondary">No groups found for current filters.</Typography>
@@ -399,8 +392,7 @@ const GroupsPage = () => {
             onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
           />
         </Box>
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

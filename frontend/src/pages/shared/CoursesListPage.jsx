@@ -3,20 +3,18 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
-  Paper,
   Select,
-  Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  Typography,
 } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { ENDPOINTS } from "../../api/endpoints";
 import usePaginatedQuery from "../../hooks/usePaginatedQuery";
@@ -56,21 +54,25 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
   const semesterLabel = useMemo(() => rows[0]?.semester_name || "", [rows]);
 
   return (
-    <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>{title}</Typography>
-        {enableSemesterFilter && semesterLabel && <Chip label={`My Semester: ${semesterLabel}`} color="info" variant="outlined" sx={{ mb: 1.2 }} />}
-        {enableSemesterFilter && (
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ mb: 1.2 }}>
-            <FormControl size="small" sx={{ minWidth: 220 }}>
-              <InputLabel id="student-courses-semester-filter">Semester Filter</InputLabel>
+    <ListingPage
+      title={title}
+      tabs={enableSemesterFilter && semesterLabel ? <Chip size="small" label={`My Semester: ${semesterLabel}`} color="info" variant="outlined" /> : null}
+      filters={(
+        <SearchToolbar
+          search={search}
+          onSearchChange={setSearch}
+          onSearch={runSearch}
+          onReset={resetSearch}
+          filters={enableSemesterFilter ? (
+            <FormControl size="small" sx={{ minWidth: 170 }}>
+              <InputLabel id="student-courses-semester-filter">Semester</InputLabel>
               <Select
                 labelId="student-courses-semester-filter"
-                label="Semester Filter"
+                label="Semester"
                 value={semesterFilter}
                 onChange={(e) => setSemesterFilter(e.target.value)}
               >
-                <MenuItem value="my">My Semester (Default)</MenuItem>
+                <MenuItem value="my">My Semester</MenuItem>
                 <MenuItem value="all">All Semesters</MenuItem>
                 {semesters.map((semester) => (
                   <MenuItem key={semester.id} value={String(semester.id)}>
@@ -79,17 +81,10 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
                 ))}
               </Select>
             </FormControl>
-          </Stack>
-        )}
-        <SearchToolbar
-          search={search}
-          onSearchChange={setSearch}
-          onSearch={runSearch}
-          onReset={resetSearch}
+          ) : null}
         />
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
+      )}
+    >
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -118,8 +113,7 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
           onPageChange={changePage}
           onPageSizeChange={changePageSize}
         />
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

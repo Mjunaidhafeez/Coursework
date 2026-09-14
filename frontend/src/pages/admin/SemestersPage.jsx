@@ -1,9 +1,12 @@
-import { Box, Button, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import { Box, Button, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField } from "@mui/material";
 import { useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import CompactAddForm from "../../components/shared/CompactAddForm";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
+import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import usePaginatedQuery from "../../hooks/usePaginatedQuery";
@@ -88,18 +91,20 @@ const SemestersPage = () => {
   };
 
   return (
-    <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={2}>Semesters</Typography>
-        <SearchToolbar label="Search semester number" search={search} onSearchChange={setSearch} onSearch={runSearch} onReset={resetSearch} />
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
+    <ListingPage
+      title="Semesters"
+      addForm={(
+        <CompactAddForm
+          title={editingId ? "Update Semester" : "Add Semester"}
+          submitLabel={editingId ? "Update" : "Add"}
+          onSubmit={submit}
+          onClear={clearForm}
+          extra={<Button size="small" variant="outlined" onClick={createDefaults}>Generate 1-8</Button>}
+        >
           <TextField
             required
             size="small"
-            label="Semester Number (1-8)"
+            label="Semester (1-8)"
             type="number"
             value={number}
             error={Boolean(numberError)}
@@ -109,16 +114,12 @@ const SemestersPage = () => {
               if (numberError) setNumberError("");
             }}
             inputProps={{ min: 1, max: 8 }}
-            sx={{ maxWidth: 260 }}
+            sx={{ ...compactFieldSx, maxWidth: { sm: 180 } }}
           />
-          <Button variant="contained" onClick={submit}>{editingId ? "Update" : "Add"}</Button>
-          <Button variant="outlined" onClick={clearForm}>Clear</Button>
-          <Box sx={{ flex: 1 }} />
-          <Button variant="outlined" onClick={createDefaults}>Generate Default Semesters (1-8)</Button>
-        </Stack>
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
+        </CompactAddForm>
+      )}
+      filters={<SearchToolbar label="Search number" search={search} onSearchChange={setSearch} onSearch={runSearch} onReset={resetSearch} />}
+    >
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -144,8 +145,7 @@ const SemestersPage = () => {
         <Box sx={{ mt: 1.5 }}>
           <PaginationControls page={page} pageSize={pageSize} total={total} onPageChange={changePage} onPageSizeChange={changePageSize} />
         </Box>
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

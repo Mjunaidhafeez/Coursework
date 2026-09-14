@@ -1,17 +1,9 @@
-import {
-  Box,
-  CircularProgress,
-  MenuItem,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { CircularProgress, MenuItem, Stack, TextField } from "@mui/material";
 import { useEffect, useState } from "react";
 
 import api from "../../api/client";
 import CourseResultMatrix from "../../components/shared/CourseResultMatrix";
-import ModuleHero from "../../components/shared/ModuleHero";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
@@ -59,11 +51,9 @@ const GradingPage = () => {
   }, []);
 
   return (
-    <Stack spacing={2}>
-      <ModuleHero
-        title="Course Result"
-        subtitle="Review marked results with semester and course filters."
-      >
+    <ListingPage
+      title="Course Result"
+      filters={(
         <SearchToolbar
           search={resultSearch}
           onSearchChange={setResultSearch}
@@ -73,41 +63,44 @@ const GradingPage = () => {
             setSemesterFilter("");
             setCourseFilter("");
           }}
+          filters={(
+            <>
+              <TextField
+                select
+                size="small"
+                label="Semester"
+                value={semesterFilter}
+                onChange={(e) => {
+                  setSemesterFilter(e.target.value);
+                  setCourseFilter("");
+                }}
+                sx={{ minWidth: 140 }}
+              >
+                <MenuItem value="">All</MenuItem>
+                {semesters.map((semester) => (
+                  <MenuItem key={semester.id} value={String(semester.id)}>Semester {semester.number}</MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                size="small"
+                label="Course"
+                value={courseFilter}
+                onChange={(e) => setCourseFilter(e.target.value)}
+                sx={{ minWidth: 180 }}
+              >
+                <MenuItem value="">All</MenuItem>
+                {courses
+                  .filter((course) => !semesterFilter || String(course.semester) === String(semesterFilter))
+                  .map((course) => (
+                    <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>
+                  ))}
+              </TextField>
+            </>
+          )}
         />
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mt: 1 }}>
-          <TextField
-            select
-            size="small"
-            label="Semester"
-            value={semesterFilter}
-            onChange={(e) => {
-              setSemesterFilter(e.target.value);
-              setCourseFilter("");
-            }}
-            sx={{ minWidth: 180 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {semesters.map((semester) => (
-              <MenuItem key={semester.id} value={String(semester.id)}>Semester {semester.number}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            size="small"
-            label="Course"
-            value={courseFilter}
-            onChange={(e) => setCourseFilter(e.target.value)}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {courses
-              .filter((course) => !semesterFilter || String(course.semester) === String(semesterFilter))
-              .map((course) => (
-                <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>
-              ))}
-          </TextField>
-        </Stack>
-        <Box sx={{ mt: 1.4 }}>
+      )}
+    >
           {resultLoading && !isGlobalLoading ? (
             <Stack alignItems="center" sx={{ py: 2 }}>
               <CircularProgress size={26} />
@@ -127,9 +120,7 @@ const GradingPage = () => {
               emptyText="No result records found for selected filters."
             />
           )}
-        </Box>
-      </ModuleHero>
-    </Stack>
+    </ListingPage>
   );
 };
 

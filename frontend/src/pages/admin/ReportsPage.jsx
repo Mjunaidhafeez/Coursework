@@ -1,8 +1,10 @@
-import { Grid2 as Grid, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Box, Grid2 as Grid, MenuItem, TextField } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import CourseResultMatrix from "../../components/shared/CourseResultMatrix";
+import ListingPage from "../../components/shared/ListingPage";
+import SearchToolbar from "../../components/shared/SearchToolbar";
 import { ENDPOINTS } from "../../api/endpoints";
 import StatCard from "../../components/StatCard";
 import { fetchAllPages } from "../../utils/fetchAllPages";
@@ -94,53 +96,62 @@ const ReportsPage = () => {
 
   return (
     <>
-      <Grid container spacing={2}>
+      <Grid container spacing={1}>
         {statCards.map((card) => (
           <Grid key={card.label} size={{ xs: 12, md: 3 }}>
             <StatCard label={card.label} value={card.value} valueFontSize={card.valueFontSize} />
           </Grid>
         ))}
       </Grid>
-      <Paper sx={{ p: 2, mt: 2 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>Course Result</Typography>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1 }}>
-          <TextField
-            size="small"
-            label="Search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ minWidth: 260 }}
-          />
-          <TextField
-            select
-            size="small"
-            label="Semester"
-            value={semesterFilter}
-            onChange={(e) => {
-              setSemesterFilter(e.target.value);
+      <Box sx={{ mt: 1.2 }}>
+      <ListingPage
+        title="Course Result"
+        filters={(
+          <SearchToolbar
+            search={search}
+            onSearchChange={setSearch}
+            onSearch={() => {}}
+            onReset={() => {
+              setSearch("");
+              setSemesterFilter("");
               setCourseFilter("");
             }}
-            sx={{ minWidth: 180 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {semesters.map((semester) => (
-              <MenuItem key={semester.id} value={String(semester.id)}>Semester {semester.number}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            size="small"
-            label="Course"
-            value={courseFilter}
-            onChange={(e) => setCourseFilter(e.target.value)}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {filteredCourses.map((course) => (
-              <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>
-            ))}
-          </TextField>
-        </Stack>
+            filters={(
+              <>
+                <TextField
+                  select
+                  size="small"
+                  label="Semester"
+                  value={semesterFilter}
+                  onChange={(e) => {
+                    setSemesterFilter(e.target.value);
+                    setCourseFilter("");
+                  }}
+                  sx={{ minWidth: 140 }}
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {semesters.map((semester) => (
+                    <MenuItem key={semester.id} value={String(semester.id)}>Semester {semester.number}</MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  select
+                  size="small"
+                  label="Course"
+                  value={courseFilter}
+                  onChange={(e) => setCourseFilter(e.target.value)}
+                  sx={{ minWidth: 180 }}
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {filteredCourses.map((course) => (
+                    <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>
+                  ))}
+                </TextField>
+              </>
+            )}
+          />
+        )}
+      >
         <CourseResultMatrix
           submissions={submissions}
           courseworks={courseworks}
@@ -154,7 +165,8 @@ const ReportsPage = () => {
           exportFilePrefix="admin-course-result"
           emptyText="No compiled result found for selected filters."
         />
-      </Paper>
+      </ListingPage>
+      </Box>
     </>
   );
 };

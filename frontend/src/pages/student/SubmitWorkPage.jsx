@@ -21,6 +21,9 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 
 import api from "../../api/client";
+import CompactTabs from "../../components/shared/CompactTabs";
+import ListingPage from "../../components/shared/ListingPage";
+import SearchToolbar from "../../components/shared/SearchToolbar";
 import StudentMemberList from "../../components/shared/StudentMemberList";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
@@ -561,141 +564,128 @@ const SubmitWorkPage = () => {
   };
 
   return (
-    <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={1.2}>Submit Work</Typography>
-        {message && <Alert severity="success">{message}</Alert>}
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} flexWrap="wrap">
-          <TextField
-            size="small"
-            label="Search assessment/course/type"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ minWidth: 260 }}
+    <ListingPage
+      title="Submit Work"
+      tabs={(
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+          <CompactTabs
+            value={viewMode}
+            onChange={setViewMode}
+            tabs={[
+              { value: "opening", label: `Open (${openingRows.length})` },
+              { value: "closed", label: `Closed (${closedRows.length})` },
+            ]}
           />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel id="semester-filter-label">Semester</InputLabel>
-            <Select
-              labelId="semester-filter-label"
-              label="Semester"
-              value={semesterFilter}
-              onChange={(e) => {
-                setSemesterFilter(e.target.value);
-                setCourseFilter("");
-                setTeacherFilter("");
-              }}
-            >
-              <MenuItem value="">All</MenuItem>
-              {semesters.map((semester) => (
-                <MenuItem key={semester.id} value={String(semester.id)}>
-                  Semester {semester.number}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel id="course-filter-label">Course</InputLabel>
-            <Select
-              labelId="course-filter-label"
-              label="Course"
-              value={courseFilter}
-              onChange={(e) => setCourseFilter(e.target.value)}
-            >
-              <MenuItem value="">All</MenuItem>
-              {courses
-                .filter((course) => !semesterFilter || String(course.semester) === String(semesterFilter))
-                .map((course) => (
-                  <MenuItem key={course.id} value={String(course.id)}>
-                    {course.title}
-                  </MenuItem>
-                ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel id="teacher-filter-label">Teacher</InputLabel>
-            <Select
-              labelId="teacher-filter-label"
-              label="Teacher"
-              value={teacherFilter}
-              onChange={(e) => setTeacherFilter(e.target.value)}
-            >
-              <MenuItem value="">All</MenuItem>
-              {teacherOptions.map((teacher) => (
-                <MenuItem key={teacher.id} value={teacher.id}>
-                  {teacher.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 170 }}>
-            <InputLabel id="coursework-type-filter-label">Assessment Type</InputLabel>
-            <Select
-              labelId="coursework-type-filter-label"
-              label="Assessment Type"
-              value={courseworkTypeFilter}
-              onChange={(e) => setCourseworkTypeFilter(e.target.value)}
-            >
-              <MenuItem value="">All</MenuItem>
-              {COURSEWORK_TYPE_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 170 }}>
-            <InputLabel id="submission-mode-filter-label">Submission Mode</InputLabel>
-            <Select
-              labelId="submission-mode-filter-label"
-              label="Submission Mode"
-              value={submissionModeFilter}
-              onChange={(e) => setSubmissionModeFilter(e.target.value)}
-            >
-              <MenuItem value="">All</MenuItem>
-              {SUBMISSION_TYPE_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Button
-            variant="text"
-            onClick={() => {
-              setSearch("");
-              setSemesterFilter("");
-              setCourseFilter("");
-              setTeacherFilter("");
-              setCourseworkTypeFilter("");
-              setSubmissionModeFilter("");
-            }}
-          >
-            Reset Filters
-          </Button>
+          {message && <Alert severity="success">{message}</Alert>}
         </Stack>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mt: 1 }}>
-          <Button
-            variant={viewMode === "opening" ? "contained" : "outlined"}
-            color="info"
-            onClick={() => setViewMode("opening")}
-          >
-            Open Assessment
-          </Button>
-          <Button
-            variant={viewMode === "closed" ? "contained" : "outlined"}
-            color="warning"
-            onClick={() => setViewMode("closed")}
-          >
-            Closed / History
-          </Button>
-        </Stack>
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1.5 }}>
-          <Chip size="small" color="info" label={`Opening: ${openingRows.length}`} />
-          <Chip size="small" color="warning" label={`Closed: ${closedRows.length}`} />
-        </Stack>
+      )}
+      filters={(
+        <SearchToolbar
+          label="Search"
+          search={search}
+          onSearchChange={setSearch}
+          onSearch={() => {}}
+          onReset={() => {
+            setSearch("");
+            setSemesterFilter("");
+            setCourseFilter("");
+            setTeacherFilter("");
+            setCourseworkTypeFilter("");
+            setSubmissionModeFilter("");
+          }}
+          filters={(
+            <>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel id="semester-filter-label">Semester</InputLabel>
+                <Select
+                  labelId="semester-filter-label"
+                  label="Semester"
+                  value={semesterFilter}
+                  onChange={(e) => {
+                    setSemesterFilter(e.target.value);
+                    setCourseFilter("");
+                    setTeacherFilter("");
+                  }}
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {semesters.map((semester) => (
+                    <MenuItem key={semester.id} value={String(semester.id)}>
+                      Semester {semester.number}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel id="course-filter-label">Course</InputLabel>
+                <Select
+                  labelId="course-filter-label"
+                  label="Course"
+                  value={courseFilter}
+                  onChange={(e) => setCourseFilter(e.target.value)}
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {courses
+                    .filter((course) => !semesterFilter || String(course.semester) === String(semesterFilter))
+                    .map((course) => (
+                      <MenuItem key={course.id} value={String(course.id)}>
+                        {course.title}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel id="teacher-filter-label">Teacher</InputLabel>
+                <Select
+                  labelId="teacher-filter-label"
+                  label="Teacher"
+                  value={teacherFilter}
+                  onChange={(e) => setTeacherFilter(e.target.value)}
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {teacherOptions.map((teacher) => (
+                    <MenuItem key={teacher.id} value={teacher.id}>
+                      {teacher.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel id="coursework-type-filter-label">Type</InputLabel>
+                <Select
+                  labelId="coursework-type-filter-label"
+                  label="Type"
+                  value={courseworkTypeFilter}
+                  onChange={(e) => setCourseworkTypeFilter(e.target.value)}
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {COURSEWORK_TYPE_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel id="submission-mode-filter-label">Mode</InputLabel>
+                <Select
+                  labelId="submission-mode-filter-label"
+                  label="Mode"
+                  value={submissionModeFilter}
+                  onChange={(e) => setSubmissionModeFilter(e.target.value)}
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {SUBMISSION_TYPE_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </>
+          )}
+        />
+      )}
+    >
         <Box>
           {(() => {
             const section = viewMode === "opening"
@@ -1185,8 +1175,7 @@ const SubmitWorkPage = () => {
             );
           })()}
         </Box>
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

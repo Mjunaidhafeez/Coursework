@@ -347,12 +347,12 @@ const CourseResultMatrix = ({
 
   return (
     <Stack spacing={1.2}>
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1} justifyContent="flex-end">
+      <Stack direction="row" spacing={0.8} justifyContent="flex-end" sx={{ mb: 0.4 }}>
         <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>
-          Export Excel
+          Excel
         </Button>
         <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>
-          Export PDF
+          PDF
         </Button>
       </Stack>
       {content.map((semesterNode) => (

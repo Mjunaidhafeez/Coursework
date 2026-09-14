@@ -17,8 +17,10 @@ import { useNavigate } from "react-router-dom";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import CompactTabs from "../../components/shared/CompactTabs";
 import CourseworkFormSection from "../../components/shared/CourseworkFormSection";
-import ModuleHero from "../../components/shared/ModuleHero";
+import ListingPage from "../../components/shared/ListingPage";
+import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
@@ -229,68 +231,14 @@ const CourseworkPage = () => {
   };
 
   return (
-    <Stack spacing={2}>
-      <ModuleHero
-        title="Assessment Management"
-        subtitle="Assessment creation and editing is managed here. Student topic approvals are available on the dedicated approvals page."
-        chips={[
-          { label: `Opening: ${openingCount}`, color: "success", variant: "outlined" },
-          { label: `Closed: ${closedCount}`, color: "warning", variant: "outlined" },
-          { label: `Total: ${total}`, variant: "outlined" },
-        ]}
-        actions={(
-          <Button size="small" variant="outlined" onClick={() => navigate("/admin/coursework-approvals")}>
-            Open Assessment Approvals
-          </Button>
-        )}
-      >
-
-        <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} sx={{ mb: 0.6 }}>
-          <TextField
-            size="small"
-            label="Search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ flex: 1, minWidth: 240 }}
-          />
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setPage(1);
-              loadData({ searchValue: search, pageValue: 1 });
-            }}
-          >
-            Search
-          </Button>
-          <Button
-            size="small"
-            variant="text"
-            onClick={() => {
-              setSearch("");
-              setPage(1);
-              loadData({ searchValue: "", pageValue: 1 });
-            }}
-          >
-            Reset
-          </Button>
-        </Stack>
-
-        <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} sx={{ mt: 0.6 }}>
-          <TextField select size="small" label="Filter by course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }} sx={{ minWidth: 200 }}>
-            <MenuItem value="">All Courses</MenuItem>
-            {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Filter by type" value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} sx={{ minWidth: 180 }}>
-            <MenuItem value="">All Types</MenuItem>
-            {courseworkTypeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Filter by submission" value={submissionFilter} onChange={(e) => { setSubmissionFilter(e.target.value); setPage(1); }} sx={{ minWidth: 200 }}>
-            <MenuItem value="">All Submission Types</MenuItem>
-            {SUBMISSION_TYPE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-          <Button size="small" variant="outlined" onClick={() => loadData({ pageValue: 1 })}>Apply Filters</Button>
-        </Stack>
+    <ListingPage
+      title="Assessment Management"
+      actions={(
+        <Button size="small" variant="outlined" onClick={() => navigate("/admin/coursework-approvals")}>
+          Approvals
+        </Button>
+      )}
+      addForm={(
         <CourseworkFormSection
           form={form}
           formErrors={formErrors}
@@ -309,27 +257,55 @@ const CourseworkPage = () => {
           setForm={setForm}
           setFormErrors={setFormErrors}
         />
-      </ModuleHero>
-
-      <Paper sx={{ p: 1 }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1.2 }}>
-          <Button
-            size="small"
-            variant={viewMode === "opening" ? "contained" : "outlined"}
-            color="info"
-            onClick={() => setViewMode("opening")}
-          >
-            Open Work
-          </Button>
-          <Button
-            size="small"
-            variant={viewMode === "closed" ? "contained" : "outlined"}
-            color="warning"
-            onClick={() => setViewMode("closed")}
-          >
-            Closed / History
-          </Button>
+      )}
+      tabs={(
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+          <CompactTabs
+            value={viewMode}
+            onChange={setViewMode}
+            tabs={[
+              { value: "opening", label: `Open (${openingCount})` },
+              { value: "closed", label: `Closed (${closedCount})` },
+            ]}
+          />
+          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
         </Stack>
+      )}
+      filters={(
+        <SearchToolbar
+          search={search}
+          onSearchChange={setSearch}
+          onSearch={() => {
+            setPage(1);
+            loadData({ searchValue: search, pageValue: 1 });
+          }}
+          onReset={() => {
+            setSearch("");
+            setCourseFilter("");
+            setTypeFilter("");
+            setSubmissionFilter("");
+            setPage(1);
+            loadData({ searchValue: "", pageValue: 1 });
+          }}
+          filters={(
+            <>
+              <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }} sx={{ minWidth: 150 }}>
+                <MenuItem value="">All Courses</MenuItem>
+                {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Type" value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} sx={{ minWidth: 130 }}>
+                <MenuItem value="">All Types</MenuItem>
+                {courseworkTypeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Submission" value={submissionFilter} onChange={(e) => { setSubmissionFilter(e.target.value); setPage(1); }} sx={{ minWidth: 140 }}>
+                <MenuItem value="">All</MenuItem>
+                {SUBMISSION_TYPE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+              </TextField>
+            </>
+          )}
+        />
+      )}
+    >
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
           {viewMode === "opening" && (
           <Paper variant="outlined" sx={{ p: 1, borderColor: "#dbeafe", bgcolor: "#f8fbff", maxHeight: "60vh", overflowY: "auto" }}>
@@ -443,9 +419,7 @@ const CourseworkPage = () => {
             onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
           />
         </Box>
-      </Paper>
-
-    </Stack>
+    </ListingPage>
   );
 };
 

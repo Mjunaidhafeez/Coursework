@@ -188,8 +188,8 @@ const DashboardLayout = () => {
             sx={{
               bgcolor: "rgba(29,79,191,0.95)",
               color: "white",
-              px: { xs: 2, md: 4 },
-              py: 1.8,
+              px: { xs: 1.5, md: 2.4 },
+              py: 1.05,
               borderBottom: "1px solid rgba(255,255,255,0.18)",
               boxShadow: "0 10px 24px rgba(9, 24, 62, 0.24)",
               backdropFilter: "blur(8px)",
@@ -201,7 +201,7 @@ const DashboardLayout = () => {
                   sx={{
                     fontWeight: 900,
                     lineHeight: 1.1,
-                    fontSize: { xs: "1.3rem", md: "2rem" },
+                    fontSize: { xs: "1.05rem", md: "1.28rem" },
                     letterSpacing: "0.01em",
                     background: "linear-gradient(92deg, #ffffff 0%, #dbeafe 45%, #93c5fd 100%)",
                     WebkitBackgroundClip: "text",
@@ -281,15 +281,15 @@ const DashboardLayout = () => {
               </Box>
             </Box>
           </Box>
-          <Box sx={{ p: { xs: 1.5, md: 2.2 } }}>
+          <Box sx={{ p: { xs: 1, md: 1.15 } }}>
             <Box
               sx={{
                 bgcolor: "rgba(255,255,255,0.78)",
                 backdropFilter: "blur(8px)",
                 border: "1px solid #e4eaf9",
-                p: 1.6,
+                p: { xs: 1, md: 1.1 },
                 borderRadius: 2,
-                minHeight: "calc(100vh - 96px)",
+                minHeight: "calc(100vh - 78px)",
                 boxShadow: "0 10px 24px rgba(11, 39, 98, 0.12)",
               }}
             >

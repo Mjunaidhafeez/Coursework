@@ -42,33 +42,48 @@ const LoginPage = () => {
       }}
     >
       <Box
+        component="img"
+        src={campusImage}
+        alt=""
         sx={{
           position: "absolute",
           inset: 0,
-          backgroundImage: `url(${campusImage})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "center",
+        }}
+      />
+      <Box
+        component="img"
+        src={classImage}
+        alt=""
+        sx={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          width: { xs: "100%", md: "58%" },
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "center 22%",
+          WebkitMaskImage: {
+            xs: "linear-gradient(180deg, transparent 0%, #000 28%, #000 100%)",
+            md: "linear-gradient(90deg, transparent 0%, #000 28%, #000 100%)",
+          },
+          maskImage: {
+            xs: "linear-gradient(180deg, transparent 0%, #000 28%, #000 100%)",
+            md: "linear-gradient(90deg, transparent 0%, #000 28%, #000 100%)",
+          },
         }}
       />
       <Box
         sx={{
           position: "absolute",
           inset: 0,
-          backgroundImage: `url(${classImage})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center 28%",
-          opacity: 0.55,
-          mixBlendMode: "soft-light",
-          WebkitMaskImage: "linear-gradient(180deg, transparent 12%, rgba(0,0,0,0.7) 48%, rgba(0,0,0,0.9) 100%)",
-          maskImage: "linear-gradient(180deg, transparent 12%, rgba(0,0,0,0.7) 48%, rgba(0,0,0,0.9) 100%)",
-        }}
-      />
-      <Box
-        sx={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(180deg, rgba(7,14,32,0.66) 0%, rgba(10,22,48,0.42) 40%, rgba(8,16,36,0.74) 100%)",
+          background: {
+            xs: "linear-gradient(180deg, rgba(7,14,32,0.42) 0%, rgba(10,22,48,0.28) 45%, rgba(8,16,36,0.58) 100%)",
+            md: "linear-gradient(90deg, rgba(7,14,32,0.38) 0%, rgba(10,22,48,0.22) 48%, rgba(8,16,36,0.46) 100%)",
+          },
         }}
       />
 

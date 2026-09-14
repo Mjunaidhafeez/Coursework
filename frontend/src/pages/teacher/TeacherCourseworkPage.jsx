@@ -18,8 +18,9 @@ import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import PaginationControls from "../../components/PaginationControls";
+import CompactTabs from "../../components/shared/CompactTabs";
 import CourseworkFormSection from "../../components/shared/CourseworkFormSection";
-import ModuleHero from "../../components/shared/ModuleHero";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useUi } from "../../context/UiContext";
 import { buildCourseworkTypeOptions, SUBMISSION_TYPE_OPTIONS } from "../../utils/courseworkOptions";
@@ -212,16 +213,44 @@ const TeacherCourseworkPage = () => {
   }, [openingGrouped, closedGrouped]);
 
   return (
-    <Stack spacing={2}>
-      <ModuleHero
-        title="Assessment Management"
-        subtitle="Assessment creation is managed here. Student topic approvals and submissions are managed on the submissions page."
-        actions={(
-          <Button size="small" variant="outlined" onClick={() => navigate("/teacher/submissions")}>
-            Open Submissions
-          </Button>
-        )}
-      >
+    <ListingPage
+      title="Assessment Management"
+      actions={(
+        <Button size="small" variant="outlined" onClick={() => navigate("/teacher/submissions")}>
+          Submissions
+        </Button>
+      )}
+      addForm={(
+        <CourseworkFormSection
+          form={form}
+          formErrors={formErrors}
+          editingId={editingId}
+          courses={courses}
+          courseworkTypeOptions={courseworkTypeOptions}
+          submissionTypeOptions={SUBMISSION_TYPE_OPTIONS}
+          toggleSx={toggleSx}
+          datalistId="teacher-coursework-type-options"
+          onSubmit={submit}
+          onClear={() => {
+            setEditingId(null);
+            setForm(emptyCourseworkForm);
+            setFormErrors({});
+          }}
+          setForm={setForm}
+          setFormErrors={setFormErrors}
+        />
+      )}
+      tabs={(
+        <CompactTabs
+          value={viewMode}
+          onChange={setViewMode}
+          tabs={[
+            { value: "opening", label: "Open Work" },
+            { value: "closed", label: "Closed / History" },
+          ]}
+        />
+      )}
+      filters={(
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}
@@ -231,65 +260,31 @@ const TeacherCourseworkPage = () => {
           }}
           onReset={() => {
             setSearch("");
+            setCourseFilter("");
+            setTypeFilter("");
+            setSubmissionFilter("");
             setPage(1);
             loadData({ searchValue: "", pageValue: 1 });
           }}
+          filters={(
+            <>
+              <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }} sx={{ minWidth: 150 }}>
+                <MenuItem value="">All Courses</MenuItem>
+                {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Type" value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} sx={{ minWidth: 130 }}>
+                <MenuItem value="">All Types</MenuItem>
+                {courseworkTypeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Submission" value={submissionFilter} onChange={(e) => { setSubmissionFilter(e.target.value); setPage(1); }} sx={{ minWidth: 140 }}>
+                <MenuItem value="">All</MenuItem>
+                {SUBMISSION_TYPE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+              </TextField>
+            </>
+          )}
         />
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mt: 0.8 }}>
-          <TextField select size="small" label="Filter by course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }}>
-            <MenuItem value="">All Courses</MenuItem>
-            {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Filter by type" value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}>
-            <MenuItem value="">All Types</MenuItem>
-            {courseworkTypeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Filter by submission" value={submissionFilter} onChange={(e) => { setSubmissionFilter(e.target.value); setPage(1); }}>
-            <MenuItem value="">All Submission Types</MenuItem>
-            {SUBMISSION_TYPE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-          <Button variant="outlined" onClick={() => loadData({ pageValue: 1 })}>Apply Filters</Button>
-        </Stack>
-      </ModuleHero>
-
-      <CourseworkFormSection
-        form={form}
-        formErrors={formErrors}
-        editingId={editingId}
-        courses={courses}
-        courseworkTypeOptions={courseworkTypeOptions}
-        submissionTypeOptions={SUBMISSION_TYPE_OPTIONS}
-        toggleSx={toggleSx}
-        datalistId="teacher-coursework-type-options"
-        onSubmit={submit}
-        onClear={() => {
-          setEditingId(null);
-          setForm(emptyCourseworkForm);
-          setFormErrors({});
-        }}
-        setForm={setForm}
-        setFormErrors={setFormErrors}
-      />
-
-      <Paper sx={{ p: 1.5 }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1 }}>
-          <Button
-            size="small"
-            variant={viewMode === "opening" ? "contained" : "outlined"}
-            color="info"
-            onClick={() => setViewMode("opening")}
-          >
-            Open Work
-          </Button>
-          <Button
-            size="small"
-            variant={viewMode === "closed" ? "contained" : "outlined"}
-            color="warning"
-            onClick={() => setViewMode("closed")}
-          >
-            Closed / History
-          </Button>
-        </Stack>
+      )}
+    >
         <Stack spacing={1.2}>
           {Object.entries(groupedCourseworks).map(([courseTitle, items]) => (
             <Paper key={courseTitle} variant="outlined" sx={{ p: 1.1, borderColor: "primary.main", bgcolor: "rgba(25, 118, 210, 0.04)" }}>
@@ -350,9 +345,7 @@ const TeacherCourseworkPage = () => {
             onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
           />
         </Box>
-      </Paper>
-
-    </Stack>
+    </ListingPage>
   );
 };
 

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import ListingPage from "../../components/shared/ListingPage";
 import StudentMemberList from "../../components/shared/StudentMemberList";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
@@ -41,9 +42,7 @@ const TeacherGroupsPage = () => {
   }, []);
 
   return (
-    <Stack spacing={2}>
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" mb={1.2}>Class Groups</Typography>
+    <ListingPage title="Class Groups">
         {!rows.length && !loading ? (
           <Typography variant="body2" color="text.secondary">No groups found.</Typography>
         ) : (
@@ -82,8 +81,7 @@ const TeacherGroupsPage = () => {
             onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
           />
         </Box>
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

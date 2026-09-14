@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
-import ModuleHero from "../../components/shared/ModuleHero";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import StudentMemberList from "../../components/shared/StudentMemberList";
 import { useUi } from "../../context/UiContext";
@@ -70,11 +70,9 @@ const StudentGroupsPage = () => {
   );
 
   return (
-    <Stack spacing={2}>
-      <ModuleHero
-        title="Groups Directory"
-        subtitle="Browse all approved class groups and quickly identify your own group."
-      >
+    <ListingPage
+      title="Groups Directory"
+      filters={(
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}
@@ -86,12 +84,11 @@ const StudentGroupsPage = () => {
             setPage(1);
           }}
         />
-      </ModuleHero>
-
-      <Paper sx={{ p: 2 }}>
-        <Stack direction="row" spacing={1} sx={{ mb: 1.2 }}>
-          <Chip label={`All Groups: ${filteredGroups.length}`} color="info" variant="outlined" />
-          <Chip label={`My Groups: ${myGroups.length}`} color="success" variant="outlined" />
+      )}
+    >
+        <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
+          <Chip size="small" label={`All Groups: ${filteredGroups.length}`} color="info" variant="outlined" />
+          <Chip size="small" label={`My Groups: ${myGroups.length}`} color="success" variant="outlined" />
         </Stack>
         <Typography sx={{ fontWeight: 700, mb: 1 }}>All Approved Groups</Typography>
         {!pagedGroups.length && !loading ? (
@@ -131,8 +128,7 @@ const StudentGroupsPage = () => {
             onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); }}
           />
         </Box>
-      </Paper>
-    </Stack>
+    </ListingPage>
   );
 };
 

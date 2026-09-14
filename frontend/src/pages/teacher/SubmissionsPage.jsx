@@ -33,7 +33,8 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
-import ModuleHero from "../../components/shared/ModuleHero";
+import CompactTabs from "../../components/shared/CompactTabs";
+import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
@@ -938,54 +939,54 @@ const SubmissionsPage = () => {
   }, [selectableIds]);
 
   return (
-    <Stack spacing={2}>
-      <ModuleHero
-        title={isAdminApprovalsView ? "Assessment Approvals" : "Submissions"}
-        subtitle={
-          isAdminApprovalsView
-            ? "Review and approve student topics/submissions across courses."
-            : "Review and approve student topics/submissions for your courses."
-        }
-      >
+    <Stack spacing={1}>
+    <ListingPage
+      title={isAdminApprovalsView ? "Assessment Approvals" : "Submissions"}
+      tabs={(
+        <CompactTabs
+          value={workflowFilter || "all"}
+          onChange={(next) => setWorkflowFilter(next === "all" ? "" : next)}
+          tabs={[
+            { value: "request_pending", label: `Pending (${workflowCounts.request_pending || 0})` },
+            { value: "topic_not_submitted", label: `Not Submitted (${pendingNoRequestEntries.length})` },
+            { value: "ready_for_upload", label: `Approved (${workflowCounts.ready_for_upload || 0})` },
+            { value: "file_submitted", label: `Files (${workflowCounts.file_submitted || 0})` },
+            { value: "marked", label: `Marked (${workflowCounts.marked || 0})` },
+            { value: "all", label: "All" },
+          ]}
+        />
+      )}
+      filters={(
         <SearchToolbar
-          label={isAdminApprovalsView ? "Search topic/student/group/course" : "Search"}
+          label={isAdminApprovalsView ? "Search topic/student/group" : "Search"}
           search={search}
           onSearchChange={setSearch}
           onSearch={runSearch}
           onReset={resetSearch}
+          filters={(
+            <TextField
+              select
+              size="small"
+              label="Status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              sx={{ minWidth: 130 }}
+            >
+              <MenuItem value="">All</MenuItem>
+              {SUBMISSION_STATUS_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+              ))}
+            </TextField>
+          )}
+          actions={isAdminApprovalsView ? (
+            <>
+              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
+              <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>PDF</Button>
+            </>
+          ) : null}
         />
-        <FormControl size="small" sx={{ minWidth: 180, mt: 0.8 }}>
-          <InputLabel id="teacher-submission-status-filter">
-            {isAdminApprovalsView ? "Submission Status" : "Status"}
-          </InputLabel>
-          <Select
-            labelId="teacher-submission-status-filter"
-            value={statusFilter}
-            label={isAdminApprovalsView ? "Submission Status" : "Status"}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <MenuItem value="">All</MenuItem>
-            {SUBMISSION_STATUS_OPTIONS.map((option) => (
-              <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 220, mt: 0.8, ml: { md: 1 } }}>
-          <InputLabel id="teacher-workflow-filter">Workflow</InputLabel>
-          <Select
-            labelId="teacher-workflow-filter"
-            value={workflowFilter}
-            label="Workflow"
-            onChange={(e) => setWorkflowFilter(e.target.value)}
-          >
-            {WORKFLOW_FILTER_OPTIONS.map((option) => (
-              <MenuItem key={option.value || "all"} value={option.value}>{option.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </ModuleHero>
-
-      <Paper sx={{ p: 1.5 }}>
+      )}
+    >
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} justifyContent="space-between" sx={{ mb: 1 }}>
           <Stack direction="row" spacing={1} alignItems="center">
             <Checkbox
@@ -1041,39 +1042,10 @@ const SubmissionsPage = () => {
             )}
           </Stack>
         </Stack>
-        {isAdminApprovalsView && (
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1} justifyContent="flex-end" sx={{ mb: 1 }}>
-            <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>
-              Export Excel
-            </Button>
-            <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>
-              Export PDF
-            </Button>
-          </Stack>
-        )}
-        <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: "wrap" }}>
-          <Chip label={`Total: ${total}`} variant="outlined" />
-          <Chip label={`Late: ${rows.filter((row) => row.status === "late").length}`} color="warning" variant="outlined" />
-          <Chip label={`Submitted: ${rows.filter((row) => row.status === "submitted").length}`} color="success" variant="outlined" />
-        </Stack>
-        <Stack direction="row" spacing={1} sx={{ mb: 1.2, flexWrap: "wrap" }}>
-          {workflowBadgeItems.map((badge) => (
-            <Chip
-              key={badge.value}
-              clickable
-              color={workflowFilter === badge.value ? badge.color : "default"}
-              variant={workflowFilter === badge.value ? "filled" : "outlined"}
-              onClick={() => setWorkflowFilter(badge.value)}
-              label={badge.label}
-            />
-          ))}
-          <Chip
-            clickable
-            variant={workflowFilter === "" ? "filled" : "outlined"}
-            color={workflowFilter === "" ? "primary" : "default"}
-            onClick={() => setWorkflowFilter("")}
-            label="Clear Workflow Filter"
-          />
+        <Stack direction="row" spacing={0.7} sx={{ mb: 0.8, flexWrap: "wrap" }}>
+          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
+          <Chip size="small" label={`Late: ${rows.filter((row) => row.status === "late").length}`} color="warning" variant="outlined" />
+          <Chip size="small" label={`Submitted: ${rows.filter((row) => row.status === "submitted").length}`} color="success" variant="outlined" />
         </Stack>
         {!displayRows.length && !loading && (
           <Typography variant="body2" color="text.secondary">No submissions found for current filter/search.</Typography>
@@ -1545,7 +1517,7 @@ const SubmissionsPage = () => {
         {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
         <PaginationControls page={page} pageSize={pageSize} total={total} onPageChange={changePage} onPageSizeChange={changePageSize} />
-      </Paper>
+    </ListingPage>
 
       <Dialog
         open={memberDialogOpen}

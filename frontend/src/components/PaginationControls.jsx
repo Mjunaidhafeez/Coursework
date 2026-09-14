@@ -6,7 +6,7 @@ const PaginationControls = ({ page, pageSize, total, onPageChange, onPageSizeCha
   const canNext = page < totalPages;
 
   return (
-    <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} alignItems={{ xs: "flex-start", md: "center" }} justifyContent="space-between">
+    <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} alignItems={{ xs: "flex-start", md: "center" }} justifyContent="space-between" sx={{ mt: 0.8 }}>
       <Typography variant="body2" color="text.secondary">
         {`Page ${page} of ${totalPages} · ${total} records`}
       </Typography>
