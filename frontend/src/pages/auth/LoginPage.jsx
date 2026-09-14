@@ -6,8 +6,8 @@ import { useState } from "react";
 
 import { useAuth } from "../../context/AuthContext";
 
-const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=3`;
-const classImage = `${import.meta.env.BASE_URL}login/class-group.png?v=3`;
+const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=4`;
+const classImage = `${import.meta.env.BASE_URL}login/class-group.png?v=4`;
 const developedBy = "Developed by : Junaid Hafeez (SVL) MBA NON Business 2025-2027";
 
 const LoginPage = () => {
@@ -53,27 +53,47 @@ const LoginPage = () => {
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          objectPosition: "center 42%",
+          objectPosition: "center 48%",
         }}
       />
       <Box
-        component="img"
-        src={classImage}
-        alt=""
         sx={{
           position: "absolute",
-          right: { xs: "50%", md: "1%" },
-          bottom: { xs: "-3%", md: "-2%" },
-          transform: { xs: "translateX(50%)", md: "none" },
-          width: { xs: "min(150vw, 760px)", md: "min(56vw, 840px)" },
-          height: { xs: "44vh", md: "86vh" },
-          objectFit: "contain",
-          objectPosition: "right bottom",
-          filter: "drop-shadow(0 20px 32px rgba(8,16,10,0.4))",
+          left: "50%",
+          bottom: { xs: "3%", md: "7%" },
+          transform: "translateX(-50%)",
+          width: { xs: "min(92vw, 640px)", md: "min(48vw, 720px)" },
+          height: { xs: "38vh", md: "58vh" },
           pointerEvents: "none",
           zIndex: 1,
         }}
-      />
+      >
+        <Box
+          sx={{
+            position: "absolute",
+            left: "50%",
+            bottom: 8,
+            transform: "translateX(-50%)",
+            width: "72%",
+            height: 34,
+            borderRadius: "50%",
+            background: "radial-gradient(ellipse, rgba(18,32,12,0.34) 0%, rgba(18,32,12,0) 72%)",
+          }}
+        />
+        <Box
+          component="img"
+          src={classImage}
+          alt=""
+          sx={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            objectPosition: "center bottom",
+            filter: "saturate(1.05) contrast(1.04) drop-shadow(0 10px 14px rgba(20,36,14,0.32))",
+          }}
+        />
+      </Box>
       <Box
         sx={{
           position: "absolute",
@@ -81,7 +101,7 @@ const LoginPage = () => {
           zIndex: 2,
           background: {
             xs: "linear-gradient(180deg, rgba(8,16,28,0.6) 0%, rgba(8,16,28,0.26) 40%, rgba(8,16,28,0.16) 100%)",
-            md: "linear-gradient(90deg, rgba(8,16,28,0.6) 0%, rgba(8,16,28,0.32) 32%, rgba(8,16,28,0.08) 56%, rgba(8,16,28,0.03) 100%)",
+            md: "linear-gradient(90deg, rgba(8,16,28,0.58) 0%, rgba(8,16,28,0.22) 28%, rgba(8,16,28,0.04) 50%, rgba(8,16,28,0.02) 100%)",
           },
         }}
       />
