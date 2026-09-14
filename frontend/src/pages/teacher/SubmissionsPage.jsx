@@ -9,12 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   IconButton,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -24,8 +19,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
@@ -46,19 +39,8 @@ import { shallowEqualObjects } from "../../utils/object";
 import { downloadSubmissionFile, openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { resolveSubmissionMembers } from "../../utils/submissionMembers";
 import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
-import { getSubmissionStatusColor, SUBMISSION_STATUS_OPTIONS } from "../../utils/submissionOptions";
 import { csvSafe, downloadTextFile, fileSafe } from "../../utils/export";
 import { confirmDelete } from "../../utils/confirm";
-
-const WORKFLOW_FILTER_OPTIONS = [
-  { value: "", label: "All Workflow States" },
-  { value: "topic_not_submitted", label: "Not Submitted" },
-  { value: "request_pending", label: "Request Pending" },
-  { value: "request_rejected", label: "Request Rejected" },
-  { value: "ready_for_upload", label: "Ready For Upload" },
-  { value: "file_submitted", label: "File Submitted" },
-  { value: "marked", label: "Marked" },
-];
 
 const SubmissionsPage = () => {
   const { user } = useAuth();
@@ -866,42 +848,6 @@ const SubmissionsPage = () => {
     pop.print();
   };
 
-  const workflowBadgeItems = useMemo(
-    () => [
-      {
-        value: "topic_not_submitted",
-        label: isAdminApprovalsView ? `Not Submitted: ${pendingNoRequestEntries.length}` : "Not Submitted",
-        color: "warning",
-      },
-      {
-        value: "request_pending",
-        label: `Pending Approvals: ${workflowCounts.request_pending}`,
-        color: "warning",
-      },
-      {
-        value: "ready_for_upload",
-        label: `Approved Topic: ${workflowCounts.ready_for_upload}`,
-        color: "info",
-      },
-      {
-        value: "file_submitted",
-        label: `File Submitted: ${workflowCounts.file_submitted}`,
-        color: "secondary",
-      },
-      {
-        value: "marked",
-        label: `Marked: ${workflowCounts.marked}`,
-        color: "success",
-      },
-      {
-        value: "request_rejected",
-        label: `Rejected: ${workflowCounts.request_rejected}`,
-        color: "error",
-      },
-    ],
-    [pendingNoRequestEntries.length, workflowCounts]
-  );
-
   useEffect(() => {
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
@@ -947,8 +893,8 @@ const SubmissionsPage = () => {
           value={workflowFilter || "all"}
           onChange={(next) => setWorkflowFilter(next === "all" ? "" : next)}
           tabs={[
-            { value: "request_pending", label: `Pending (${workflowCounts.request_pending || 0})` },
-            { value: "topic_not_submitted", label: `Not Submitted (${pendingNoRequestEntries.length})` },
+            { value: "request_pending", label: `To Approve (${workflowCounts.request_pending || 0})` },
+            { value: "topic_not_submitted", label: `Waiting (${pendingNoRequestEntries.length})` },
             { value: "ready_for_upload", label: `Approved (${workflowCounts.ready_for_upload || 0})` },
             { value: "file_submitted", label: `Files (${workflowCounts.file_submitted || 0})` },
             { value: "marked", label: `Marked (${workflowCounts.marked || 0})` },
@@ -957,171 +903,114 @@ const SubmissionsPage = () => {
         />
       )}
       filters={(
-        <SearchToolbar
-          label={isAdminApprovalsView ? "Search topic/student/group" : "Search"}
-          search={search}
-          onSearchChange={setSearch}
-          onSearch={runSearch}
-          onReset={resetSearch}
-          filters={(
-            <TextField
-              select
-              size="small"
-              label="Status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              sx={{ minWidth: 130 }}
-            >
-              <MenuItem value="">All</MenuItem>
-              {SUBMISSION_STATUS_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-              ))}
-            </TextField>
-          )}
-          actions={isAdminApprovalsView ? (
-            <>
-              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
-              <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>PDF</Button>
-            </>
-          ) : null}
-        />
+        <Stack spacing={0.6}>
+          <Typography variant="body2" sx={{ color: "#4b5d7a" }}>
+            First approve the topic, then open the file and enter marks.
+          </Typography>
+          <SearchToolbar
+            label="Search name, topic or group"
+            search={search}
+            onSearchChange={setSearch}
+            onSearch={runSearch}
+            onReset={resetSearch}
+            actions={isAdminApprovalsView ? (
+              <>
+                <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
+                <Button size="small" variant="outlined" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>PDF</Button>
+              </>
+            ) : null}
+          />
+        </Stack>
       )}
     >
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} justifyContent="space-between" sx={{ mb: 1 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Checkbox
-              size="small"
-              checked={allSelectableChecked}
-              indeterminate={selectedCount > 0 && !allSelectableChecked}
-              onChange={toggleSelectAllVisible}
-            />
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Select All Visible
+        {selectedCount > 0 && (
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={1}
+            alignItems={{ md: "center" }}
+            justifyContent="space-between"
+            sx={{ mb: 1.2, p: 1, borderRadius: 1.5, bgcolor: "#f3f7ff", border: "1px solid #dbeafe" }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 700, color: "#16356f" }}>
+              {selectedCount} selected
             </Typography>
-            <Chip size="small" color="primary" variant="outlined" label={`Selected: ${selectedCount}`} />
-          </Stack>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }}>
-            <TextField
-              size="small"
-              type="number"
-              label="Bulk Marks"
-              value={bulkMarks}
-              onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
-              inputProps={{ min: 0, step: 1 }}
-              sx={{ width: 120 }}
-            />
-            <TextField
-              size="small"
-              label="Bulk Feedback (optional)"
-              value={bulkFeedback}
-              onChange={(e) => setBulkFeedback(e.target.value)}
-              sx={{ width: 220 }}
-            />
-            <Button size="small" variant="contained" color="success" disabled={!selectedApproveRows.length} onClick={bulkApproveSelected}>
-              Bulk Approve
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              color="primary"
-              disabled={!selectedMarkRows.length || bulkSavingMarks}
-              onClick={bulkSaveSelectedMarks}
-            >
-              {bulkSavingMarks ? "Saving..." : "Bulk Save Marks"}
-            </Button>
-            {isAdminApprovalsView && (
-              <Button
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }}>
+              <TextField
                 size="small"
-                variant="outlined"
-                color="error"
-                disabled={!selectedDeleteRows.length || bulkDeleting}
-                onClick={bulkDeleteSelected}
-              >
-                {bulkDeleting ? "Deleting..." : "Bulk Delete"}
+                type="number"
+                label="Marks"
+                value={bulkMarks}
+                onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
+                inputProps={{ min: 0, step: 1 }}
+                sx={{ width: 110 }}
+              />
+              <TextField
+                size="small"
+                label="Feedback"
+                value={bulkFeedback}
+                onChange={(e) => setBulkFeedback(e.target.value)}
+                sx={{ width: 180 }}
+              />
+              <Button size="small" variant="contained" color="success" disabled={!selectedApproveRows.length} onClick={bulkApproveSelected}>
+                Approve
               </Button>
-            )}
+              <Button size="small" variant="contained" disabled={!selectedMarkRows.length || bulkSavingMarks} onClick={bulkSaveSelectedMarks}>
+                {bulkSavingMarks ? "Saving..." : "Save marks"}
+              </Button>
+              {isAdminApprovalsView && (
+                <Button size="small" color="error" disabled={!selectedDeleteRows.length || bulkDeleting} onClick={bulkDeleteSelected}>
+                  {bulkDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              )}
+            </Stack>
           </Stack>
-        </Stack>
-        <Stack direction="row" spacing={0.7} sx={{ mb: 0.8, flexWrap: "wrap" }}>
-          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
-          <Chip size="small" label={`Late: ${rows.filter((row) => row.status === "late").length}`} color="warning" variant="outlined" />
-          <Chip size="small" label={`Submitted: ${rows.filter((row) => row.status === "submitted").length}`} color="success" variant="outlined" />
-        </Stack>
-        {!displayRows.length && !loading && (
-          <Typography variant="body2" color="text.secondary">No submissions found for current filter/search.</Typography>
         )}
-        <Stack spacing={1.2} ref={resultsSectionRef}>
+        {!displayRows.length && !loading && (
+          <Typography variant="body2" color="text.secondary">Nothing to show in this tab.</Typography>
+        )}
+        <Stack spacing={2} ref={resultsSectionRef}>
           {Object.entries(groupedByCourseAndCoursework).map(([courseTitle, courseworkGroup]) => (
-            <Paper key={courseTitle} variant="outlined" sx={{ p: 1.1, borderColor: "primary.main", bgcolor: "rgba(25, 118, 210, 0.04)" }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.6 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                  Course: {courseTitle}
-                </Typography>
-                <IconButton size="small" onClick={() => setOpenCourses((prev) => ({ ...prev, [courseTitle]: !prev[courseTitle] }))}>
-                  {openCourses[courseTitle] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
-                </IconButton>
-              </Stack>
-              <Collapse in={!!openCourses[courseTitle]}>
-                <Stack spacing={0.9}>
-                  {Object.entries(courseworkGroup).map(([courseworkTitle, items]) => {
-                    const courseworkKey = `${courseTitle}__${courseworkTitle}`;
-                    const topicNotSubmittedCount = items.filter((item) => item.is_topic_not_submitted).length;
-                    return (
-                    <Paper key={courseworkTitle} variant="outlined" sx={{ p: 1, borderColor: "#90caf9", bgcolor: "#fff" }}>
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.6 }}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Typography sx={{ fontWeight: 700 }}>
-                            Assessment: {courseworkTitle}
-                          </Typography>
-                          {topicNotSubmittedCount > 0 && (
-                            <Chip size="small" color="warning" variant="outlined" label={`Not Submitted: ${topicNotSubmittedCount}`} />
-                          )}
-                        </Stack>
-                        <IconButton size="small" onClick={() => setOpenCourseworks((prev) => ({ ...prev, [courseworkKey]: !prev[courseworkKey] }))}>
-                          {openCourseworks[courseworkKey] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
-                        </IconButton>
-                      </Stack>
-                      <Collapse in={!!openCourseworks[courseworkKey]}>
-                        <Box sx={{ p: 0.9, borderRadius: 1, border: "1px solid #dbeafe", bgcolor: "#f8fbff" }}>
-                      <Typography variant="subtitle2" sx={{ mb: 0.7, fontWeight: 700 }}>
-                        Student Submissions
+            <Box key={courseTitle}>
+              <Typography sx={{ fontWeight: 800, color: "#13377a", mb: 1 }}>
+                {courseTitle}
+              </Typography>
+              <Stack spacing={1.5}>
+                {Object.entries(courseworkGroup).map(([courseworkTitle, items]) => (
+                    <Box key={courseworkTitle}>
+                      <Typography sx={{ fontWeight: 700, color: "#35507c", mb: 0.6 }}>
+                        {courseworkTitle}
                       </Typography>
-                      <Box
-                        sx={{
-                          maxHeight: items.length > 4 ? 420 : "unset",
-                          overflowY: items.length > 4 ? "auto" : "visible",
-                          borderRadius: 1.2,
-                          border: "1px solid #e6eefc",
-                          bgcolor: "#fff",
-                        }}
-                      >
                       <Table
                         size="small"
-                        stickyHeader
                         sx={{
-                          "& th, & td": { py: 0.75, verticalAlign: "top" },
+                          "& th": { py: 0.9, fontWeight: 700, color: "#35507c", bgcolor: "#f7faff" },
+                          "& td": { py: 1, verticalAlign: "middle" },
                           "& tbody tr:nth-of-type(even)": { bgcolor: "#fbfdff" },
-                          "& tbody tr:hover": { bgcolor: "#f3f8ff" },
                         }}
                       >
                         <TableHead>
                           <TableRow>
                             {workflowFilter === "topic_not_submitted" ? (
                               <>
-                                <TableCell>Name</TableCell>
+                                <TableCell>Student</TableCell>
                                 <TableCell>Roll No</TableCell>
                                 <TableCell>Status</TableCell>
-                                <TableCell>Feedbk</TableCell>
                               </>
                             ) : (
                               <>
-                                <TableCell>Select</TableCell>
-                                <TableCell>Student/Group</TableCell>
-                                <TableCell>Members</TableCell>
+                                <TableCell padding="checkbox">
+                                  <Checkbox
+                                    size="small"
+                                    checked={allSelectableChecked}
+                                    indeterminate={selectedCount > 0 && !allSelectableChecked}
+                                    onChange={toggleSelectAllVisible}
+                                  />
+                                </TableCell>
+                                <TableCell>Student / Group</TableCell>
                                 <TableCell>Status</TableCell>
-                                <TableCell>Approval</TableCell>
                                 <TableCell>File</TableCell>
-                                <TableCell align="right">Actions</TableCell>
+                                <TableCell>Marks</TableCell>
+                                <TableCell align="right">Action</TableCell>
                               </>
                             )}
                           </TableRow>
@@ -1130,14 +1019,6 @@ const SubmissionsPage = () => {
                           {items.map((item, idx) => {
                             const primarySubmissionId = getPrimarySubmissionId(item);
                             const isGroupRow = Boolean(item.group) && !item.force_individual_row;
-                            const isCollaborativeRequestRow =
-                              !item.group &&
-                              !item.force_individual_row &&
-                              (
-                                (item.requested_member_ids || []).length > 0 ||
-                                (item.requested_member_details || []).length > 0 ||
-                                (item.requested_member_names || []).length > 0
-                              );
                             const rowSaveScope = resolveRowSaveScope(item);
                             const canShowMarkingControls =
                               !item.is_topic_not_submitted &&
@@ -1152,75 +1033,94 @@ const SubmissionsPage = () => {
                             const groupMembers = (groupsById[String(item.group)]?.members || []).filter((member) => member.accepted !== false);
                             const groupMemberRows = item.group_member_rows || [];
                             const groupOpen = !!openGroupRows[String(primarySubmissionId)];
-                            const listColSpan = workflowFilter === "topic_not_submitted" ? 4 : 7;
-                            const recordLabel = item.group_name || item.student_name || item.student || "-";
-                            const recordBg = idx % 2 === 0 ? "#f8fbff" : "#ffffff";
+                            const studentLabel = item.force_individual_row
+                              ? (item.student_name || item.group_name || item.student || "-")
+                              : (item.group_name || item.student_name || item.student || "-");
+                            const maxMarks = courseworkById[String(item.coursework)]?.max_marks;
+                            const givenMarks = feedbackBySubmission[String(primarySubmissionId)]?.marks ?? item.obtained_marks ?? "-";
+                            const simpleStatus = item.is_topic_not_submitted
+                              ? { label: "Waiting", color: "warning" }
+                              : item.is_marked
+                                ? { label: "Marked", color: "success" }
+                                : item.approval_status === "rejected"
+                                  ? { label: "Rejected", color: "error" }
+                                  : item.approval_status === "approved"
+                                    ? { label: item.file ? "Approved · file in" : "Approved", color: "success" }
+                                    : { label: "Needs approval", color: "warning" };
 
                             return (
                               <Fragment key={item.id}>
-                                {workflowFilter !== "topic_not_submitted" && (
-                                  <TableRow>
-                                    <TableCell
-                                      colSpan={listColSpan}
-                                      sx={{
-                                        py: 0.45,
-                                        px: 0.9,
-                                        bgcolor: recordBg,
-                                        borderTop: "2px solid #dbeafe",
-                                        borderBottom: "1px dashed #dbeafe",
-                                      }}
-                                    >
-                                      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-                                        <Box
-                                          sx={{
-                                            display: "grid",
-                                            gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr)) auto" },
-                                            gap: 0.7,
-                                            alignItems: "center",
-                                            flex: 1,
-                                            minWidth: 0,
-                                          }}
-                                        >
-                                          <Chip size="small" color="primary" variant="outlined" label={`Record #${idx + 1}`} sx={{ width: "100%" }} />
-                                          <Chip
+                                <TableRow>
+                                  {workflowFilter === "topic_not_submitted" ? (
+                                    <>
+                                      <TableCell>
+                                        <Typography sx={{ fontWeight: 700 }}>{item.student_name || item.group_name || "-"}</Typography>
+                                      </TableCell>
+                                      <TableCell>{item.student_roll_no || "-"}</TableCell>
+                                      <TableCell>
+                                        <Chip size="small" color="warning" label="Waiting" />
+                                      </TableCell>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <TableCell padding="checkbox">
+                                        <Checkbox
+                                          size="small"
+                                          disabled={!canSelectSubmission(item)}
+                                          checked={!!selectedSubmissionIds[String(primarySubmissionId)]}
+                                          onChange={() => toggleSelectSubmission(item)}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Typography sx={{ fontWeight: 700, lineHeight: 1.3 }}>{studentLabel}</Typography>
+                                        <Typography variant="caption" color="text.secondary" display="block">
+                                          {item.topic ? item.topic : "No topic"}
+                                          {item.student_roll_no ? ` · ${item.student_roll_no}` : ""}
+                                          {item.submitted_at ? ` · ${formatDate(item.submitted_at)}` : ""}
+                                        </Typography>
+                                        {isGroupRow && (
+                                          <Button
                                             size="small"
-                                            color="default"
-                                            variant="outlined"
-                                            label={`Topic: ${item.topic || "-"}`}
-                                            sx={{ width: "100%", "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }}
-                                          />
-                                          <Chip
-                                            size="small"
-                                            color="info"
-                                            variant="outlined"
-                                            label={`Submitted By: ${recordLabel}`}
-                                            sx={{ width: "100%", "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }}
-                                          />
-                                          <Chip
-                                            size="small"
-                                            color="secondary"
-                                            variant="outlined"
-                                            label={`Date: ${item.submitted_at ? formatDate(item.submitted_at) : "-"}`}
-                                          />
-                                        </Box>
-                                        {canShowMarkingControls && (
-                                          <Stack direction="row" spacing={0.6} alignItems="center" sx={{ ml: "auto", mr: 1.8 }}>
-                                            <Chip
-                                              size="small"
-                                              color="primary"
-                                              variant="outlined"
-                                              label={`Total/Given: ${formatMarks(courseworkById[String(item.coursework)]?.max_marks)}/${formatMarks(
-                                                feedbackBySubmission[String(primarySubmissionId)]?.marks ?? item.obtained_marks ?? "-"
-                                              )}`}
-                                            />
+                                            sx={{ px: 0, minWidth: 0, mt: 0.2 }}
+                                            onClick={() =>
+                                              setOpenGroupRows((prev) => ({
+                                                ...prev,
+                                                [String(primarySubmissionId)]: !prev[String(primarySubmissionId)],
+                                              }))
+                                            }
+                                          >
+                                            {groupOpen ? "Hide members" : "Show members"}
+                                          </Button>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Chip size="small" color={simpleStatus.color} label={simpleStatus.label} />
+                                      </TableCell>
+                                      <TableCell>
+                                        {item.file ? (
+                                          <Stack direction="row" spacing={0.3}>
+                                            <IconButton size="small" onClick={() => openFilePreview(item)}>
+                                              <VisibilityOutlinedIcon fontSize="small" />
+                                            </IconButton>
+                                            <IconButton size="small" onClick={() => downloadFile(item)}>
+                                              <DownloadRoundedIcon fontSize="small" />
+                                            </IconButton>
+                                          </Stack>
+                                        ) : (
+                                          <Typography variant="caption" color="text.secondary">—</Typography>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        {canShowMarkingControls ? (
+                                          <Stack direction="row" spacing={0.6} alignItems="center">
                                             <TextField
                                               size="small"
                                               type="number"
-                                              label="Marks"
+                                              placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
                                               value={getFeedbackDraft(item, rowDraftKey).marks}
                                               onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
-                                              inputProps={{ min: 0, max: courseworkById[String(item.coursework)]?.max_marks || undefined, step: 1 }}
-                                              sx={{ width: 110, "& .MuiInputBase-root": { height: 30 } }}
+                                              inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
+                                              sx={{ width: 88 }}
                                             />
                                             <Button
                                               size="small"
@@ -1234,180 +1134,33 @@ const SubmissionsPage = () => {
                                                 })
                                               }
                                             >
-                                              {feedbackSavingBySubmission[rowDraftKey] ? "Saving..." : "Save"}
+                                              {feedbackSavingBySubmission[rowDraftKey] ? "..." : "Save"}
                                             </Button>
                                           </Stack>
-                                        )}
-                                      </Stack>
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                                <TableRow>
-                                  {workflowFilter === "topic_not_submitted" ? (
-                                    <>
-                                      <TableCell>{item.student_name || item.group_name || "-"}</TableCell>
-                                      <TableCell>{item.student_roll_no || "-"}</TableCell>
-                                      <TableCell>
-                                        {item.is_topic_not_submitted ? (
-                                          <Chip size="small" color="warning" label="Not submitted" />
                                         ) : (
-                                          <Chip size="small" color={getSubmissionStageMeta(item).color} label={getSubmissionStageMeta(item).label} />
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        {item.is_topic_not_submitted ? (
-                                          <Chip size="small" color="info" variant="outlined" label="Awaiting" />
-                                        ) : (
-                                          <Stack spacing={0.6} sx={{ minWidth: 230 }}>
-                                            <Chip
-                                              size="small"
-                                              color="primary"
-                                              variant="outlined"
-                                              label={`Total/Given: ${formatMarks(courseworkById[String(item.coursework)]?.max_marks)}/${formatMarks(
-                                                feedbackBySubmission[String(primarySubmissionId)]?.marks ?? item.obtained_marks ?? "-"
-                                              )}`}
-                                            />
-                                            <TextField
-                                              size="small"
-                                              type="number"
-                                              label="Marks"
-                                              value={getFeedbackDraft(item, rowDraftKey).marks}
-                                              onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
-                                              inputProps={{ min: 0, max: courseworkById[String(item.coursework)]?.max_marks || undefined, step: 1 }}
-                                            />
-                                            <TextField
-                                              size="small"
-                                              label="Feedback"
-                                              value={getFeedbackDraft(item).feedback}
-                                              onChange={(e) => updateFeedbackDraft(primarySubmissionId, { feedback: e.target.value })}
-                                            />
-                                            <Button
-                                              size="small"
-                                              variant="contained"
-                                              disabled={feedbackSavingBySubmission[rowDraftKey]}
-                                              onClick={() =>
-                                                saveFeedback(item, "single", {
-                                                  targetStudentId: item.force_individual_row ? item.student : null,
-                                                  draftKey: rowDraftKey,
-                                                  savingKey: rowDraftKey,
-                                                })
-                                              }
-                                            >
-                                              {feedbackSavingBySubmission[rowDraftKey] ? "Saving..." : "Save"}
-                                            </Button>
-                                          </Stack>
-                                        )}
-                                      </TableCell>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <TableCell>
-                                        <Checkbox
-                                          size="small"
-                                          disabled={!canSelectSubmission(item)}
-                                          checked={!!selectedSubmissionIds[String(primarySubmissionId)]}
-                                          onChange={() => toggleSelectSubmission(item)}
-                                        />
-                                      </TableCell>
-                                      <TableCell>{item.force_individual_row ? (item.student_name || item.group_name || item.student || "-") : (item.group_name || item.student_name || item.student || "-")}</TableCell>
-                                      <TableCell>
-                                        {item.is_topic_not_submitted ? (
-                                          <Button size="small" disabled>View</Button>
-                                        ) : isGroupRow ? (
-                                          <Button
-                                            size="small"
-                                            variant="outlined"
-                                            onClick={() =>
-                                              setOpenGroupRows((prev) => ({
-                                                ...prev,
-                                                [String(primarySubmissionId)]: !prev[String(primarySubmissionId)],
-                                              }))
-                                            }
-                                          >
-                                            {groupOpen ? "Hide Members" : "Members"}
-                                          </Button>
-                                        ) : (
-                                          <Button
-                                            size="small"
-                                            onClick={() =>
-                                              openSubmissionMembers(item, {
-                                                singleOnly: !!item.force_individual_row && workflowFilter === "marked",
-                                              })
-                                            }
-                                          >
-                                            View
-                                          </Button>
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        {item.is_topic_not_submitted ? (
-                                          <Chip size="small" color="warning" label="Not submitted" />
-                                        ) : (
-                                          <Chip size="small" color={getSubmissionStageMeta(item).color} label={getSubmissionStageMeta(item).label} />
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        {item.is_topic_not_submitted ? (
-                                          <Chip size="small" variant="outlined" color="warning" label="pending" />
-                                        ) : (
-                                          <Chip
-                                            size="small"
-                                            label={item.approval_status || "pending"}
-                                            color={item.approval_status === "approved" ? "success" : item.approval_status === "rejected" ? "error" : "warning"}
-                                          />
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        {item.is_topic_not_submitted ? (
-                                          <Chip size="small" variant="outlined" color="warning" label="not_submitted" />
-                                        ) : (
-                                          <Chip label={item.status} size="small" color={getSubmissionStatusColor(item.status)} />
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        {item.is_topic_not_submitted ? (
-                                          <Typography variant="caption" color="text.secondary">No file</Typography>
-                                        ) : (
-                                          <Stack direction="row" spacing={0.6} alignItems="center">
-                                            <Chip
-                                              size="small"
-                                              color={item.file ? "success" : "default"}
-                                              variant="outlined"
-                                              label={item.file ? "Uploaded" : "Pending"}
-                                            />
-                                            <IconButton size="small" disabled={!item.file} onClick={() => openFilePreview(item)}>
-                                              <VisibilityOutlinedIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton size="small" disabled={!item.file} onClick={() => downloadFile(item)}>
-                                              <DownloadRoundedIcon fontSize="small" />
-                                            </IconButton>
-                                          </Stack>
+                                          <Typography variant="body2" color="text.secondary">
+                                            {item.is_marked ? formatMarks(givenMarks) : "—"}
+                                          </Typography>
                                         )}
                                       </TableCell>
                                       <TableCell align="right">
-                                        {item.is_topic_not_submitted ? (
-                                          <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                            <Button size="small" color="success" disabled>Approve</Button>
-                                            <Button size="small" color="warning" disabled>Reject</Button>
-                                            <Button size="small" color="error" disabled>Delete</Button>
-                                          </Stack>
-                                        ) : (
-                                          <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                            {!item.is_marked && item.approval_status !== "approved" && (
-                                              <Button size="small" color="success" onClick={() => approve(item)}>
-                                                Approve
-                                              </Button>
-                                            )}
-                                            {!item.is_marked && item.approval_status !== "rejected" && (
-                                              <Button size="small" color="warning" onClick={() => reject(item)}>
-                                                Reject
-                                              </Button>
-                                            )}
-                                            {canShowDeleteAction && (
-                                              <Button size="small" color="error" onClick={() => remove(primarySubmissionId)}>Delete</Button>
-                                            )}
-                                          </Stack>
-                                        )}
+                                        <Stack direction="row" spacing={0.6} justifyContent="flex-end">
+                                          {!item.is_marked && item.approval_status !== "approved" && (
+                                            <Button size="small" color="success" variant="contained" onClick={() => approve(item)}>
+                                              Approve
+                                            </Button>
+                                          )}
+                                          {!item.is_marked && item.approval_status !== "rejected" && item.approval_status !== "approved" && (
+                                            <Button size="small" color="inherit" onClick={() => reject(item)}>
+                                              Reject
+                                            </Button>
+                                          )}
+                                          {canShowDeleteAction && (
+                                            <Button size="small" color="error" onClick={() => remove(primarySubmissionId)}>
+                                              Delete
+                                            </Button>
+                                          )}
+                                        </Stack>
                                       </TableCell>
                                     </>
                                   )}
@@ -1415,11 +1168,11 @@ const SubmissionsPage = () => {
 
                                 {workflowFilter !== "topic_not_submitted" && isGroupRow && (
                                   <TableRow>
-                                    <TableCell sx={{ p: 0 }} colSpan={7}>
+                                    <TableCell sx={{ p: 0 }} colSpan={6}>
                                       <Collapse in={groupOpen} timeout="auto" unmountOnExit>
-                                        <Box sx={{ m: 1, p: 1, border: "1px solid #dbeafe", borderRadius: 1.2, bgcolor: "#f8fbff" }}>
+                                        <Box sx={{ m: 1, p: 1, border: "1px solid #e6eefc", borderRadius: 1.2, bgcolor: "#f8fbff" }}>
                                           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.8 }}>
-                                            Group Members (Individual Marks)
+                                            Group members
                                           </Typography>
                                           <Table size="small">
                                             <TableHead>
@@ -1428,23 +1181,20 @@ const SubmissionsPage = () => {
                                                 <TableCell>Roll No</TableCell>
                                                 {canShowMarkingControls && (
                                                   <>
-                                                    <TableCell>Given Marks</TableCell>
                                                     <TableCell>Marks</TableCell>
-                                                    <TableCell>Feedback</TableCell>
-                                                    <TableCell align="right">Action</TableCell>
+                                                    <TableCell align="right">Save</TableCell>
                                                   </>
                                                 )}
                                               </TableRow>
                                             </TableHead>
                                             <TableBody>
-                                              {(groupMembers.length ? groupMembers : groupMemberRows).map((member, idx) => {
+                                              {(groupMembers.length ? groupMembers : groupMemberRows).map((member, memberIdx) => {
                                                 const memberStudentId = String(member.student || member.id || "");
                                                 const memberSubmission =
                                                   groupMemberRows.find((row) => String(row.student || "") === memberStudentId) ||
-                                                  groupMemberRows[idx] ||
+                                                  groupMemberRows[memberIdx] ||
                                                   item;
                                                 const memberSubmissionId = getPrimarySubmissionId(memberSubmission);
-                                                const givenMarks = feedbackBySubmission[String(memberSubmissionId)]?.marks ?? memberSubmission?.obtained_marks ?? "-";
                                                 const memberName =
                                                   member.student_name ||
                                                   member.student_display ||
@@ -1454,26 +1204,18 @@ const SubmissionsPage = () => {
                                                 const memberRollNo = member.student_roll_no || memberSubmission?.student_roll_no || "-";
 
                                                 return (
-                                                  <TableRow key={`${primarySubmissionId}-member-${memberStudentId || idx}`}>
+                                                  <TableRow key={`${primarySubmissionId}-member-${memberStudentId || memberIdx}`}>
                                                     <TableCell>{memberName}</TableCell>
                                                     <TableCell>{memberRollNo}</TableCell>
                                                     {canShowMarkingControls && (
                                                       <>
-                                                        <TableCell>{formatMarks(givenMarks)}</TableCell>
-                                                        <TableCell sx={{ minWidth: 120 }}>
+                                                        <TableCell sx={{ minWidth: 110 }}>
                                                           <TextField
                                                             size="small"
                                                             type="number"
                                                             value={getFeedbackDraft(memberSubmission).marks}
                                                             onChange={(e) => handleMarksDraftChange(memberSubmission, e.target.value)}
-                                                            inputProps={{ min: 0, max: courseworkById[String(item.coursework)]?.max_marks || undefined, step: 1 }}
-                                                          />
-                                                        </TableCell>
-                                                        <TableCell sx={{ minWidth: 180 }}>
-                                                          <TextField
-                                                            size="small"
-                                                            value={getFeedbackDraft(memberSubmission).feedback}
-                                                            onChange={(e) => updateFeedbackDraft(memberSubmissionId, { feedback: e.target.value })}
+                                                            inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
                                                           />
                                                         </TableCell>
                                                         <TableCell align="right">
@@ -1483,7 +1225,7 @@ const SubmissionsPage = () => {
                                                             disabled={feedbackSavingBySubmission[memberSubmissionId]}
                                                             onClick={() => saveFeedback(memberSubmission, "single")}
                                                           >
-                                                            {feedbackSavingBySubmission[memberSubmissionId] ? "Saving..." : "Save Individual"}
+                                                            {feedbackSavingBySubmission[memberSubmissionId] ? "Saving..." : "Save"}
                                                           </Button>
                                                         </TableCell>
                                                       </>
@@ -1503,16 +1245,11 @@ const SubmissionsPage = () => {
                           })}
                         </TableBody>
                       </Table>
-                      </Box>
                     </Box>
-                      </Collapse>
-                    </Paper>
-                    );
-                  })}
-                </Stack>
-              </Collapse>
-            </Paper>
-            ))}
+                ))}
+              </Stack>
+            </Box>
+          ))}
         </Stack>
         {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
