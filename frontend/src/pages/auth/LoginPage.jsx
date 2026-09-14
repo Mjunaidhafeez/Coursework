@@ -6,8 +6,7 @@ import { useState } from "react";
 
 import { useAuth } from "../../context/AuthContext";
 
-const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=6`;
-const classImage = `${import.meta.env.BASE_URL}login/class-group.png?v=6`;
+const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=7`;
 const developedBy = "Developed by : Junaid Hafeez (SVL) MBA NON Business 2025-2027";
 
 const LoginPage = () => {
@@ -36,9 +35,9 @@ const LoginPage = () => {
         minHeight: "100vh",
         position: "relative",
         overflow: "hidden",
-        backgroundColor: "#102016",
+        backgroundColor: "#0b1524",
         "@keyframes fadeUp": {
-          from: { opacity: 0, transform: "translateY(18px)" },
+          from: { opacity: 0, transform: "translateY(14px)" },
           to: { opacity: 1, transform: "translateY(0)" },
         },
       }}
@@ -53,45 +52,16 @@ const LoginPage = () => {
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          objectPosition: "center 36%",
+          objectPosition: "center 40%",
         }}
       />
       <Box
         sx={{
           position: "absolute",
-          left: "50%",
-          top: { xs: "24%", md: "28%" },
-          transform: "translateX(-50%)",
-          width: { xs: "min(86vw, 680px)", md: "min(50vw, 760px)" },
-          height: { xs: "32vh", md: "40vh" },
-          opacity: 0.78,
-          filter: "blur(0.8px)",
-          pointerEvents: "none",
-          zIndex: 1,
-          WebkitMaskImage: "radial-gradient(ellipse 78% 80% at 50% 55%, #000 52%, transparent 88%)",
-          maskImage: "radial-gradient(ellipse 78% 80% at 50% 55%, #000 52%, transparent 88%)",
-        }}
-      >
-        <Box
-          component="img"
-          src={classImage}
-          alt=""
-          sx={{
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-            objectPosition: "center bottom",
-          }}
-        />
-      </Box>
-      <Box
-        sx={{
-          position: "absolute",
           inset: 0,
-          zIndex: 2,
           background: {
-            xs: "linear-gradient(180deg, rgba(8,16,28,0.6) 0%, rgba(8,16,28,0.26) 40%, rgba(8,16,28,0.16) 100%)",
-            md: "linear-gradient(90deg, rgba(8,16,28,0.58) 0%, rgba(8,16,28,0.22) 28%, rgba(8,16,28,0.04) 50%, rgba(8,16,28,0.02) 100%)",
+            xs: "linear-gradient(180deg, rgba(8,16,30,0.72) 0%, rgba(8,16,30,0.38) 46%, rgba(8,16,30,0.28) 100%)",
+            md: "linear-gradient(105deg, rgba(8,16,30,0.78) 0%, rgba(8,16,30,0.52) 34%, rgba(8,16,30,0.16) 58%, rgba(8,16,30,0.08) 100%)",
           },
         }}
       />
@@ -99,146 +69,175 @@ const LoginPage = () => {
       <Box
         sx={{
           position: "relative",
-          zIndex: 3,
+          zIndex: 1,
           minHeight: "100vh",
           display: "flex",
           flexDirection: "column",
-          alignItems: { xs: "center", md: "flex-start" },
-          px: { xs: 2, md: 7 },
+          px: { xs: 2.2, md: 7 },
+          py: { xs: 2.2, md: 3 },
         }}
       >
-        <Stack spacing={0.55} sx={{ pt: { xs: 2.2, md: 2.8 }, maxWidth: 560, width: { xs: "100%", md: "auto" } }}>
+        <Box sx={{ maxWidth: 560 }}>
           <Typography
             sx={{
-              color: "#f3d38a",
-              letterSpacing: { xs: "0.14em", md: "0.2em" },
-              fontWeight: 800,
-              fontSize: { xs: "0.78rem", md: "0.9rem" },
+              color: "#e8c77a",
+              letterSpacing: { xs: "0.1em", md: "0.16em" },
+              fontWeight: 700,
+              fontSize: { xs: "0.72rem", md: "0.78rem" },
               textTransform: "uppercase",
               textAlign: { xs: "center", md: "left" },
-              textShadow: "0 2px 12px rgba(0,0,0,0.45)",
             }}
           >
             Superior University Lahore
           </Typography>
+          <Box
+            sx={{
+              mt: 1,
+              mb: 0.8,
+              width: 42,
+              height: 2,
+              borderRadius: 99,
+              background: "#e8c77a",
+              mx: { xs: "auto", md: 0 },
+            }}
+          />
           <Typography
             sx={{
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: { xs: "0.84rem", md: "0.95rem" },
+              color: "rgba(255,255,255,0.86)",
+              fontWeight: 500,
+              fontSize: { xs: "0.78rem", md: "0.82rem" },
+              letterSpacing: "0.01em",
+              wordSpacing: "0.08em",
               textAlign: { xs: "center", md: "left" },
-              textShadow: "0 4px 16px rgba(0,0,0,0.5)",
+              lineHeight: 1.5,
             }}
           >
             {developedBy}
           </Typography>
-        </Stack>
+        </Box>
 
         <Box
           sx={{
             flex: 1,
-            width: "100%",
-            maxWidth: { xs: "100%", md: 460 },
             display: "flex",
-            flexDirection: "column",
-            alignItems: { xs: "center", md: "flex-start" },
-            justifyContent: { xs: "flex-start", md: "center" },
-            pt: { xs: 3, md: 0 },
+            alignItems: { xs: "flex-start", md: "center" },
+            pt: { xs: 5, md: 0 },
             pb: { xs: 4, md: 6 },
-            gap: 2,
           }}
         >
-          <Typography
-            sx={{
-              color: "#fff",
-              fontWeight: 800,
-              textAlign: { xs: "center", md: "left" },
-              fontSize: { xs: "1.7rem", sm: "2.05rem", md: "2.4rem" },
-              lineHeight: 1.18,
-              letterSpacing: "0.01em",
-              textShadow: "0 8px 28px rgba(0,0,0,0.4)",
-              animation: "fadeUp 600ms ease-out",
-            }}
-          >
-            Student Assessment Tracking
-          </Typography>
-
-          <Paper
-            elevation={0}
+          <Box
             sx={{
               width: "100%",
-              maxWidth: 420,
-              p: { xs: 3, sm: 3.4 },
-              borderRadius: 3.5,
-              background: "rgba(255,255,255,0.94)",
-              backdropFilter: "blur(16px)",
-              border: "1px solid rgba(255,255,255,0.55)",
-              boxShadow: "0 22px 50px rgba(4, 10, 28, 0.38)",
-              animation: "fadeUp 700ms ease-out",
+              maxWidth: 430,
+              animation: "fadeUp 560ms ease-out",
             }}
           >
             <Typography
               sx={{
+                color: "#fff",
                 fontWeight: 800,
-                fontSize: "1.35rem",
-                color: "#16356f",
-                textAlign: "center",
-                mb: 2.4,
+                fontSize: { xs: "1.85rem", md: "2.15rem" },
+                lineHeight: 1.2,
+                letterSpacing: "-0.02em",
+                mb: 0.8,
+                textAlign: { xs: "center", md: "left" },
               }}
             >
-              Login Here
+              Student Assessment Tracking
             </Typography>
-            <form onSubmit={onSubmit}>
-              <Stack spacing={2}>
-                {error && <Alert severity="error">{error}</Alert>}
-                <TextField
-                  label="Username"
-                  value={form.username}
-                  onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
-                  required
-                  fullWidth
-                />
-                <TextField
-                  label="Password"
-                  type={showPassword ? "text" : "password"}
-                  value={form.password}
-                  onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-                  required
-                  fullWidth
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton size="small" onClick={() => setShowPassword((prev) => !prev)}>
-                          {showPassword ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
-                  size="large"
-                  disabled={loading}
-                  endIcon={<LockOpenRoundedIcon />}
-                  sx={{
-                    mt: 0.5,
-                    py: 1.15,
-                    textTransform: "none",
-                    fontWeight: 700,
-                    borderRadius: 2,
-                    background: "linear-gradient(90deg, #1d4cb4 0%, #2f63d9 100%)",
-                    boxShadow: "0 10px 22px rgba(31, 76, 180, 0.32)",
-                    "&:hover": {
-                      background: "linear-gradient(90deg, #173f96 0%, #2756c2 100%)",
-                    },
-                  }}
-                >
-                  {loading ? "Signing in..." : "Login"}
-                </Button>
-              </Stack>
-            </form>
-          </Paper>
+            <Typography
+              sx={{
+                color: "rgba(255,255,255,0.78)",
+                fontSize: "0.95rem",
+                lineHeight: 1.55,
+                mb: 3,
+                maxWidth: 380,
+                textAlign: { xs: "center", md: "left" },
+                mx: { xs: "auto", md: 0 },
+              }}
+            >
+              Sign in to manage coursework, submissions, and results.
+            </Typography>
+
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 3, sm: 3.5 },
+                borderRadius: 3,
+                background: "rgba(255,255,255,0.96)",
+                border: "1px solid rgba(255,255,255,0.7)",
+                boxShadow: "0 18px 48px rgba(6, 14, 32, 0.28)",
+              }}
+            >
+              <Typography
+                sx={{
+                  fontWeight: 800,
+                  fontSize: "1.2rem",
+                  color: "#122a57",
+                  letterSpacing: "-0.01em",
+                  mb: 0.4,
+                }}
+              >
+                Sign in
+              </Typography>
+              <Typography sx={{ color: "#5b6b86", fontSize: "0.86rem", mb: 2.4 }}>
+                Use your portal username and password.
+              </Typography>
+              <form onSubmit={onSubmit}>
+                <Stack spacing={2}>
+                  {error && <Alert severity="error">{error}</Alert>}
+                  <TextField
+                    label="Username"
+                    value={form.username}
+                    onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
+                    required
+                    fullWidth
+                    autoComplete="username"
+                  />
+                  <TextField
+                    label="Password"
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                    required
+                    fullWidth
+                    autoComplete="current-password"
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton size="small" onClick={() => setShowPassword((prev) => !prev)} aria-label="Toggle password visibility">
+                            {showPassword ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    size="large"
+                    disabled={loading}
+                    endIcon={<LockOpenRoundedIcon />}
+                    sx={{
+                      mt: 0.4,
+                      py: 1.2,
+                      textTransform: "none",
+                      fontWeight: 700,
+                      fontSize: "0.98rem",
+                      borderRadius: 2,
+                      background: "#1d4cb4",
+                      boxShadow: "0 10px 20px rgba(29, 76, 180, 0.28)",
+                      "&:hover": {
+                        background: "#173f96",
+                      },
+                    }}
+                  >
+                    {loading ? "Signing in..." : "Sign in"}
+                  </Button>
+                </Stack>
+              </form>
+            </Paper>
+          </Box>
         </Box>
       </Box>
     </Box>
