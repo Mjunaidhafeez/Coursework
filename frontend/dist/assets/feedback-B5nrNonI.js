@@ -1,1 +1,0 @@
-const n=(e=[])=>{const s={};return e.forEach(a=>{s[String(a.submission)]=a}),s},c=async(e,s,a=2e3)=>{const{data:t}=await e.get(`${s.feedback}?page_size=${a}`);return n(t.results||[])};export{n as b,c as f};
