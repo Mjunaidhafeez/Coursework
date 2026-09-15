@@ -79,7 +79,7 @@ export const toCourseworkEditForm = (row) => ({
   course: row.course,
   title: row.title,
   description: row.description,
-  coursework_type: row.coursework_type,
+  coursework_type: normalizeCourseworkType(row.coursework_type) || "assignment",
   submission_type: row.submission_type,
   max_group_members: row.max_group_members || "",
   lock_at_due_time: Boolean(row.lock_at_due_time),

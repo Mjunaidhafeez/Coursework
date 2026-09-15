@@ -1,7 +1,8 @@
-import { Paper, Stack, Typography } from "@mui/material";
+import { Box, Paper, Stack, Typography } from "@mui/material";
 
 const ListingPage = ({
   title,
+  subtitle = null,
   actions = null,
   addForm = null,
   tabs = null,
@@ -9,13 +10,20 @@ const ListingPage = ({
   children,
 }) => (
   <Stack spacing={0.9} sx={{ minHeight: "calc(100vh - 128px)" }}>
-    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-      <Typography sx={{ fontWeight: 800, fontSize: "1.02rem", color: "#13377a", lineHeight: 1.2 }}>
-        {title}
-      </Typography>
+    <Stack direction="row" spacing={1} alignItems="flex-start" justifyContent="space-between">
+      <Box>
+        <Typography sx={{ fontWeight: 800, fontSize: "1.02rem", color: "#13377a", lineHeight: 1.2 }}>
+          {title}
+        </Typography>
+        {subtitle ? (
+          <Typography variant="body2" sx={{ color: "#4b5d7a", mt: 0.35, maxWidth: 720 }}>
+            {subtitle}
+          </Typography>
+        ) : null}
+      </Box>
       {actions}
     </Stack>
-    {addForm}
+    {addForm ? <Box id="assessment-create-form">{addForm}</Box> : null}
     {tabs}
     {filters}
     <Paper

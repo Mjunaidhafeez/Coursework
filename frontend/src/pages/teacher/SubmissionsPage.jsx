@@ -14,6 +14,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -988,13 +989,14 @@ const SubmissionsPage = () => {
   return (
     <Stack spacing={1}>
     <ListingPage
-      title={isAdminApprovalsView ? "Assessment Approvals" : "Submissions"}
+      title={isAdminApprovalsView ? "Assessment Approvals" : "Assessment Approvals"}
+      subtitle="Work one step at a time: approve the topic, wait for the file, then enter marks and Save."
       tabs={(
         <CompactTabs
           value={workflowFilter || "all"}
           onChange={(next) => setWorkflowFilter(next === "all" ? "" : next)}
           tabs={[
-            { value: "request_pending", label: `To Approve (${workflowCounts.request_pending || 0})` },
+            { value: "request_pending", label: `Topics (${workflowCounts.request_pending || 0})` },
             { value: "topic_not_submitted", label: `Waiting (${pendingNoRequestEntries.length})` },
             { value: "ready_for_upload", label: `Approved (${workflowCounts.ready_for_upload || 0})` },
             { value: "file_submitted", label: `Files (${workflowCounts.file_submitted || 0})` },
@@ -1004,24 +1006,19 @@ const SubmissionsPage = () => {
         />
       )}
       filters={(
-        <Stack spacing={0.6}>
-          <Typography variant="body2" sx={{ color: "#4b5d7a" }}>
-            First approve the topic, then open the file and enter marks.
-          </Typography>
-          <SearchToolbar
-            label="Search name, topic or group"
-            search={search}
-            onSearchChange={setSearch}
-            onSearch={runSearch}
-            onReset={resetSearch}
-            actions={isAdminApprovalsView ? (
-              <>
-                <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
-                <Button size="small" variant="outlined" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>PDF</Button>
-              </>
-            ) : null}
-          />
-        </Stack>
+        <SearchToolbar
+          label="Search name, topic or group"
+          search={search}
+          onSearchChange={setSearch}
+          onSearch={runSearch}
+          onReset={resetSearch}
+          actions={isAdminApprovalsView ? (
+            <>
+              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
+              <Button size="small" variant="outlined" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>PDF</Button>
+            </>
+          ) : null}
+        />
       )}
     >
         {selectedCount > 0 && (
@@ -1048,7 +1045,12 @@ const SubmissionsPage = () => {
           </Stack>
         )}
         {!displayRows.length && !loading && (
-          <Typography variant="body2" color="text.secondary">Nothing to show in this tab.</Typography>
+          <Box sx={{ py: 5, textAlign: "center" }}>
+            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No work in this step</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Switch tabs to see waiting students, topics to approve, uploaded files, or marked work.
+            </Typography>
+          </Box>
         )}
         <Stack spacing={2} ref={resultsSectionRef}>
           {Object.entries(groupedByCourseAndCoursework).map(([courseTitle, courseworkGroup]) => {
@@ -1088,9 +1090,11 @@ const SubmissionsPage = () => {
                   {selectedTitle}
                 </Typography>
               )}
+                      <TableContainer sx={{ overflowX: "auto" }}>
                       <Table
                         size="small"
                         sx={{
+                          minWidth: workflowFilter === "topic_not_submitted" ? 420 : 720,
                           "& th": { py: 0.9, fontWeight: 700, color: "#35507c", bgcolor: "#f7faff" },
                           "& td": { py: 1, verticalAlign: "middle" },
                           "& tbody tr:nth-of-type(even)": { bgcolor: "#fbfdff" },
@@ -1206,7 +1210,8 @@ const SubmissionsPage = () => {
                                           {studentLabel}
                                         </Typography>
                                         <Typography variant="caption" color="text.secondary" display="block">
-                                          {canViewMembers ? `Sent by ${senderName}` : (item.topic ? item.topic : "No topic")}
+                                          {item.topic ? item.topic : "No topic"}
+                                          {canViewMembers ? ` · Sent by ${senderName}` : ""}
                                           {item.student_roll_no ? ` · ${item.student_roll_no}` : ""}
                                           {item.submitted_at ? ` · ${formatDate(item.submitted_at)}` : ""}
                                         </Typography>
@@ -1342,6 +1347,7 @@ const SubmissionsPage = () => {
                           })}
                         </TableBody>
                       </Table>
+                      </TableContainer>
             </Box>
             );
           })}

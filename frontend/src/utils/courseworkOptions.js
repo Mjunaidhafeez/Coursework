@@ -17,7 +17,7 @@ export const COURSEWORK_TYPE_OPTIONS = [
 export const SUBMISSION_TYPE_OPTIONS = [
   { value: "individual", label: "Individual" },
   { value: "group", label: "Group" },
-  { value: "both", label: "Both (Student Choice)" },
+  { value: "both", label: "Both" },
 ];
 
 export const humanizeCourseworkType = (value) => {

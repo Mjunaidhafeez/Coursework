@@ -1,23 +1,12 @@
-import {
-  Box,
-  Button,
-  Collapse,
-  IconButton,
-  MenuItem,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Box, Button, Chip, MenuItem, Stack, TextField } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import { useNavigate } from "react-router-dom";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import PaginationControls from "../../components/PaginationControls";
+import AssessmentList from "../../components/shared/AssessmentList";
 import CompactTabs from "../../components/shared/CompactTabs";
 import CourseworkFormSection from "../../components/shared/CourseworkFormSection";
 import ListingPage from "../../components/shared/ListingPage";
@@ -32,7 +21,28 @@ import {
   validateCourseworkForm,
   validateMaxMarks,
 } from "../../utils/courseworkForm";
-import { formatDate } from "../../utils/format";
+
+const toggleSx = {
+  "& .MuiSwitch-switchBase.Mui-checked": { color: "#1565c0" },
+  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+    bgcolor: "#90caf9",
+    opacity: 1,
+  },
+  "& .MuiSwitch-track": {
+    bgcolor: "#cfd8dc",
+    opacity: 1,
+    transition: "all 180ms ease",
+  },
+  "& .MuiSwitch-thumb": {
+    boxShadow: "0 2px 8px rgba(0,0,0,0.22)",
+  },
+};
+
+const scrollToForm = () => {
+  window.requestAnimationFrame(() => {
+    document.getElementById("assessment-create-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+};
 
 const TeacherCourseworkPage = () => {
   const navigate = useNavigate();
@@ -50,23 +60,6 @@ const TeacherCourseworkPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [viewMode, setViewMode] = useState("opening");
-  const [openCourseSections, setOpenCourseSections] = useState({});
-  const [openCourseworkSections, setOpenCourseworkSections] = useState({});
-  const toggleSx = {
-    "& .MuiSwitch-switchBase.Mui-checked": { color: "#1565c0" },
-    "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-      bgcolor: "#90caf9",
-      opacity: 1,
-    },
-    "& .MuiSwitch-track": {
-      bgcolor: "#cfd8dc",
-      opacity: 1,
-      transition: "all 180ms ease",
-    },
-    "& .MuiSwitch-thumb": {
-      boxShadow: "0 2px 8px rgba(0,0,0,0.22)",
-    },
-  };
 
   const loadData = async ({ searchValue = search, pageValue = page, pageSizeValue = pageSize } = {}) => {
     const params = new URLSearchParams();
@@ -110,16 +103,13 @@ const TeacherCourseworkPage = () => {
 
   const submit = async () => {
     const formValidation = validateCourseworkForm(form);
-    setFormErrors(formValidation.errors);
-    if (!formValidation.ok) {
-      const firstError = Object.values(formValidation.errors)[0] || "Please fill required fields";
-      notify(firstError, "error");
-      return;
-    }
-
     const marksValidation = validateMaxMarks(form.max_marks);
-    if (!marksValidation.ok) {
-      notify(marksValidation.error, "error");
+    const nextErrors = { ...formValidation.errors };
+    if (!marksValidation.ok) nextErrors.max_marks = marksValidation.error;
+    setFormErrors(nextErrors);
+    if (!formValidation.ok || !marksValidation.ok) {
+      const firstError = Object.values(nextErrors)[0] || "Please fill required fields";
+      notify(firstError, "error");
       return;
     }
 
@@ -150,6 +140,7 @@ const TeacherCourseworkPage = () => {
     setEditingId(row.id);
     setForm(toCourseworkEditForm(row));
     setFormErrors({});
+    scrollToForm();
   };
 
   const remove = async (id) => {
@@ -188,36 +179,18 @@ const TeacherCourseworkPage = () => {
   }, {});
   const openingGrouped = useMemo(() => groupByCourse(openingRows), [openingRows, courses]);
   const closedGrouped = useMemo(() => groupByCourse(closedRows), [closedRows, courses]);
-  const groupedCourseworks = viewMode === "opening" ? openingGrouped : closedGrouped;
   const courseworkTypeOptions = useMemo(
     () => buildCourseworkTypeOptions(rows.map((item) => item.coursework_type)),
     [rows]
   );
 
-  useEffect(() => {
-    const nextCourse = {};
-    const nextCoursework = {};
-    [
-      ["opening", Object.entries(openingGrouped)],
-      ["closed", Object.entries(closedGrouped)],
-    ].forEach(([section, groups]) => {
-      groups.forEach(([courseTitle, items], courseIdx) => {
-        nextCourse[`${section}-${courseTitle}`] = courseIdx === 0;
-        items.forEach((item, cwIdx) => {
-          nextCoursework[`${section}-cw-${item.id}`] = cwIdx === 0;
-        });
-      });
-    });
-    setOpenCourseSections(nextCourse);
-    setOpenCourseworkSections(nextCoursework);
-  }, [openingGrouped, closedGrouped]);
-
   return (
     <ListingPage
       title="Assessment Management"
+      subtitle="Create assignments, projects, presentations, quizzes, exams, or certifications for your subjects. Students can submit individually, in a group, or either — you decide."
       actions={(
         <Button size="small" variant="outlined" onClick={() => navigate("/teacher/submissions")}>
-          Submissions
+          Approvals
         </Button>
       )}
       addForm={(
@@ -229,7 +202,6 @@ const TeacherCourseworkPage = () => {
           courseworkTypeOptions={courseworkTypeOptions}
           submissionTypeOptions={SUBMISSION_TYPE_OPTIONS}
           toggleSx={toggleSx}
-          datalistId="teacher-coursework-type-options"
           onSubmit={submit}
           onClear={() => {
             setEditingId(null);
@@ -241,14 +213,17 @@ const TeacherCourseworkPage = () => {
         />
       )}
       tabs={(
-        <CompactTabs
-          value={viewMode}
-          onChange={setViewMode}
-          tabs={[
-            { value: "opening", label: "Open Work" },
-            { value: "closed", label: "Closed / History" },
-          ]}
-        />
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+          <CompactTabs
+            value={viewMode}
+            onChange={setViewMode}
+            tabs={[
+              { value: "opening", label: `Open (${openingRows.length})` },
+              { value: "closed", label: `Closed (${closedRows.length})` },
+            ]}
+          />
+          <Chip size="small" label={`Total ${total}`} variant="outlined" />
+        </Stack>
       )}
       filters={(
         <SearchToolbar
@@ -269,15 +244,15 @@ const TeacherCourseworkPage = () => {
           filters={(
             <>
               <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }} sx={{ minWidth: 150 }}>
-                <MenuItem value="">All Courses</MenuItem>
+                <MenuItem value="">All courses</MenuItem>
                 {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
               </TextField>
               <TextField select size="small" label="Type" value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} sx={{ minWidth: 130 }}>
-                <MenuItem value="">All Types</MenuItem>
+                <MenuItem value="">All types</MenuItem>
                 {courseworkTypeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
               </TextField>
               <TextField select size="small" label="Submission" value={submissionFilter} onChange={(e) => { setSubmissionFilter(e.target.value); setPage(1); }} sx={{ minWidth: 140 }}>
-                <MenuItem value="">All</MenuItem>
+                <MenuItem value="">All modes</MenuItem>
                 {SUBMISSION_TYPE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
               </TextField>
             </>
@@ -285,66 +260,25 @@ const TeacherCourseworkPage = () => {
         />
       )}
     >
-        <Stack spacing={1.2}>
-          {Object.entries(groupedCourseworks).map(([courseTitle, items]) => (
-            <Paper key={courseTitle} variant="outlined" sx={{ p: 1.1, borderColor: "primary.main", bgcolor: "rgba(25, 118, 210, 0.04)" }}>
-              <Stack direction="row" alignItems="center" spacing={0.6} sx={{ mb: 0.8 }}>
-                <IconButton
-                  size="small"
-                  onClick={() => setOpenCourseSections((prev) => ({ ...prev, [`${viewMode}-${courseTitle}`]: !prev[`${viewMode}-${courseTitle}`] }))}
-                >
-                  {openCourseSections[`${viewMode}-${courseTitle}`] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
-                </IconButton>
-                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                  Course: {courseTitle}
-                </Typography>
-              </Stack>
-              <Collapse in={Boolean(openCourseSections[`${viewMode}-${courseTitle}`])} timeout="auto" unmountOnExit>
-              <Stack spacing={0.9}>
-                {items.map((item) => (
-                  <Paper key={item.id} variant="outlined" sx={{ p: 1, borderColor: "#90caf9", bgcolor: "#fff" }}>
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} justifyContent="space-between" alignItems={{ md: "center" }}>
-                      <Stack spacing={0.1} direction="row" alignItems="center">
-                        <IconButton
-                          size="small"
-                          onClick={() => setOpenCourseworkSections((prev) => ({ ...prev, [`${viewMode}-cw-${item.id}`]: !prev[`${viewMode}-cw-${item.id}`] }))}
-                        >
-                          {openCourseworkSections[`${viewMode}-cw-${item.id}`] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
-                        </IconButton>
-                        <Stack spacing={0.1}>
-                          <Typography sx={{ fontWeight: 700 }}>Assessment: {item.title}</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {item.coursework_type} | {item.submission_type} | Approval: {item.approval_required ? "Required" : "Auto"} | Topic Dup: {item.topic_duplication_allowed ? "Allowed" : "Not Allowed"} | Auto-Approve All: {item.auto_approve_all_students ? "On" : "Off"} | Max Members: {item.max_group_members ?? "-"} | Max Marks: {item.max_marks ?? "-"} | Deadline: {formatDate(item.deadline)}
-                          </Typography>
-                        </Stack>
-                      </Stack>
-                      <Stack direction="row" spacing={1}>
-                        <Button size="small" onClick={() => edit(item)}>Edit</Button>
-                        <Button size="small" color="error" onClick={() => remove(item.id)}>Delete</Button>
-                      </Stack>
-                    </Stack>
-                  </Paper>
-                ))}
-              </Stack>
-              </Collapse>
-            </Paper>
-          ))}
-          {!Object.keys(groupedCourseworks).length && (
-            <Typography variant="body2" color="text.secondary">
-              {viewMode === "opening" ? "No open assessment found." : "No closed assessment found."}
-            </Typography>
-          )}
-        </Stack>
-
-        <Box sx={{ mt: 1.2 }}>
-          <PaginationControls
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={(newPage) => { setPage(newPage); loadData({ pageValue: newPage }); }}
-            onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
-          />
-        </Box>
+      <AssessmentList
+        grouped={viewMode === "opening" ? openingGrouped : closedGrouped}
+        emptyText={
+          viewMode === "opening"
+            ? "No open assessments. Create one above — it stays here until the deadline."
+            : "No closed assessments. Work past its deadline appears here."
+        }
+        onEdit={edit}
+        onDelete={remove}
+      />
+      <Box sx={{ mt: 1.2 }}>
+        <PaginationControls
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={(newPage) => { setPage(newPage); loadData({ pageValue: newPage }); }}
+          onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
+        />
+      </Box>
     </ListingPage>
   );
 };
