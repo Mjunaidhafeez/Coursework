@@ -31,6 +31,7 @@ import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
+import CompactTabs from "../../components/shared/CompactTabs";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useAuth } from "../../context/AuthContext";
@@ -230,6 +231,7 @@ const SubmissionsPage = () => {
   const [selectedCourseIds, setSelectedCourseIds] = useState([]);
   const [selectedAssessmentIds, setSelectedAssessmentIds] = useState([]);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState([]);
+  const [selectedCourseworkByCourse, setSelectedCourseworkByCourse] = useState({});
   const [courseworksMeta, setCourseworksMeta] = useState([]);
   const [courses, setCourses] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
@@ -766,20 +768,15 @@ const SubmissionsPage = () => {
 
   const courseFilterOptions = useMemo(() => {
     const ids = new Set(courseworksMeta.map((item) => String(item.course)));
-    const counts = {};
-    rosterRows.forEach((row) => {
-      const courseId = getRowCourseId(row);
-      counts[courseId] = (counts[courseId] || 0) + 1;
-    });
     return courses
       .filter((course) => ids.has(String(course.id)))
       .slice()
       .sort((a, b) => String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "base" }))
       .map((course) => ({
         value: String(course.id),
-        label: `${course.title || `Course ${course.id}`} (${counts[String(course.id)] || 0})`,
+        label: course.title || `Course ${course.id}`,
       }));
-  }, [courses, courseworksMeta, rosterRows, courseworkById]);
+  }, [courses, courseworksMeta]);
 
   const assessmentFilterOptions = useMemo(() => {
     const courseSet = new Set(selectedCourseIds);
@@ -811,17 +808,46 @@ const SubmissionsPage = () => {
     });
   }, [rosterRows, selectedCourseIds, selectedAssessmentIds, courseworkById]);
 
-  const displayRows = useMemo(
+  const filteredRows = useMemo(
     () => scopedRosterRows.filter((row) => rowMatchesSearch(row, search) && rowMatchesStudentStatuses(row, selectedStatusFilters)),
     [scopedRosterRows, search, selectedStatusFilters]
   );
 
   const groupedByCourseAndCoursework = useMemo(
-    () => groupRowsByCourseAndCoursework(displayRows, courseworksMeta, courses),
-    [displayRows, courseworksMeta, courses]
+    () => groupRowsByCourseAndCoursework(filteredRows, courseworksMeta, courses),
+    [filteredRows, courseworksMeta, courses]
   );
 
   const visibleGrouped = groupedByCourseAndCoursework;
+
+  useEffect(() => {
+    setSelectedCourseworkByCourse((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
+        const titles = Object.keys(courseworkGroup);
+        if (!titles.length) return;
+        const comingTitle = sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
+        if (!next[courseTitle] || !courseworkGroup[next[courseTitle]]) {
+          next[courseTitle] = comingTitle;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [visibleGrouped, courseworkById]);
+
+  const displayRows = useMemo(() => {
+    const list = [];
+    Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
+      const titles = Object.keys(courseworkGroup);
+      if (!titles.length) return;
+      const selectedTitle =
+        selectedCourseworkByCourse[courseTitle] || sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
+      (courseworkGroup[selectedTitle] || []).forEach((row) => list.push(row));
+    });
+    return list;
+  }, [visibleGrouped, selectedCourseworkByCourse, courseworkById]);
 
   const statusFilterOptions = useMemo(() => {
     const counts = Object.fromEntries(STUDENT_STATUS_OPTIONS.map((option) => [option.value, 0]));
@@ -1232,7 +1258,8 @@ const SubmissionsPage = () => {
 
   const courseSections = Object.entries(visibleGrouped).map(([courseTitle, courseworkGroup]) => {
     const assessmentTitles = sortAssessmentTitlesByComing(Object.keys(courseworkGroup), courseworkGroup, courseworkById);
-    const items = assessmentTitles.flatMap((title) => courseworkGroup[title] || []).sort(compareByRollNo);
+    const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
+    const items = (courseworkGroup[selectedTitle] || []).slice().sort(compareByRollNo);
     const selectedItems = items.filter((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
     const tableAllChecked = items.length > 0 && items.every((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
     const listCanApprove = items.some(canApproveSubmission);
@@ -1244,7 +1271,7 @@ const SubmissionsPage = () => {
       courseTitle,
       courseworkGroup,
       assessmentTitles,
-      showAssessmentCol: assessmentTitles.length > 1,
+      selectedTitle,
       items,
       selectedItems,
       selectedApprove: selectedItems.filter(canApproveSubmission),
@@ -1320,13 +1347,26 @@ const SubmissionsPage = () => {
             <Box key={section.courseTitle}>
               <Typography sx={{ fontWeight: 800, color: "#13377a", mb: 1 }}>
                 {section.courseTitle}
-                <Typography component="span" sx={{ ml: 1, fontWeight: 600, color: "#5b6f91", fontSize: "0.82rem" }}>
-                  {section.assessmentTitles.length === 1
-                    ? section.assessmentTitles[0]
-                    : `${section.assessmentTitles.length} assessments`}
-                  {` · ${section.items.length} students`}
-                </Typography>
               </Typography>
+              <Box sx={{ mb: 1.2 }}>
+                <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "#35507c", mb: 0.5 }}>
+                  Assessments
+                </Typography>
+                {section.assessmentTitles.length > 1 ? (
+                  <CompactTabs
+                    value={section.selectedTitle}
+                    onChange={(next) => setSelectedCourseworkByCourse((prev) => ({ ...prev, [section.courseTitle]: next }))}
+                    tabs={section.assessmentTitles.map((title) => ({
+                      value: title,
+                      label: `${title} (${(section.courseworkGroup[title] || []).length})`,
+                    }))}
+                  />
+                ) : (
+                  <Typography sx={{ fontWeight: 700, color: "#35507c" }}>
+                    {section.selectedTitle} ({section.items.length})
+                  </Typography>
+                )}
+              </Box>
               <Box
                 sx={{
                   p: 1.1,
@@ -1459,13 +1499,12 @@ const SubmissionsPage = () => {
               tableAllChecked,
               tableSomeChecked,
               showSelect,
-              showAssessmentCol,
               showFileCol,
               showMarksCol,
               showActionCol,
             } = section;
             const tableColSpan =
-              (showSelect ? 1 : 0) + 2 + (showAssessmentCol ? 1 : 0) + (showFileCol ? 1 : 0) + (showMarksCol ? 1 : 0) + (showActionCol ? 1 : 0);
+              (showSelect ? 1 : 0) + 2 + (showFileCol ? 1 : 0) + (showMarksCol ? 1 : 0) + (showActionCol ? 1 : 0);
             return (
             <Box key={courseTitle}>
                       <TableContainer sx={{ overflowX: "auto" }}>
@@ -1492,7 +1531,6 @@ const SubmissionsPage = () => {
                               </TableCell>
                             ) : null}
                             <TableCell>Student / Group</TableCell>
-                            {showAssessmentCol ? <TableCell>Assessment</TableCell> : null}
                             <TableCell>Status</TableCell>
                             {showFileCol ? <TableCell>File</TableCell> : null}
                             {showMarksCol ? <TableCell>Marks</TableCell> : null}
@@ -1584,13 +1622,6 @@ const SubmissionsPage = () => {
                                       </Button>
                                     )}
                                   </TableCell>
-                                  {showAssessmentCol ? (
-                                    <TableCell>
-                                      <Typography variant="body2" sx={{ fontWeight: 600, color: "#35507c" }}>
-                                        {item.coursework_title || courseworkById[String(item.coursework)]?.title || "—"}
-                                      </Typography>
-                                    </TableCell>
-                                  ) : null}
                                   <TableCell>
                                     <Chip size="small" color={simpleStatus.color} label={simpleStatus.label} />
                                   </TableCell>
