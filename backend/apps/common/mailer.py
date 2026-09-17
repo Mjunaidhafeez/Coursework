@@ -1,5 +1,6 @@
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 from html import escape
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
@@ -13,6 +14,19 @@ def _role_label(role):
     }.get(str(role or ""), "Portal user")
 
 
+def _smtp_from():
+    return (getattr(settings, "EMAIL_HOST_USER", "") or getattr(settings, "DEFAULT_FROM_EMAIL", "") or "").strip()
+
+
+def _message_id_domain():
+    smtp_from = _smtp_from()
+    if "@" in smtp_from:
+        return smtp_from.rsplit("@", 1)[-1].strip().lower()
+    portal_url = getattr(settings, "PORTAL_PUBLIC_URL", "") or ""
+    host = urlparse(portal_url).hostname or ""
+    return host or "mba.pythonanywhere.com"
+
+
 def render_student_email_html(sender, student, subject, message):
     sender_name = sender.get_full_name().strip() or sender.username
     sender_email = (sender.email or "").strip()
@@ -21,48 +35,51 @@ def render_student_email_html(sender, student, subject, message):
     portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
     portal_url = getattr(settings, "PORTAL_PUBLIC_URL", "")
     return f"""<!DOCTYPE html>
-<html>
-  <body style="margin:0;padding:0;background:#eef3fb;font-family:Segoe UI,Arial,sans-serif;color:#1e293b;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3fb;padding:24px 12px;">
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{escape(subject)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f8;padding:20px 10px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #dbeafe;">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #d7dee8;">
             <tr>
-              <td style="background:linear-gradient(135deg,#102a5c,#1d4ed8);padding:22px 28px;color:#ffffff;">
-                <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;opacity:.85;">Superior University Lahore</div>
-                <div style="font-size:22px;font-weight:700;margin-top:4px;">{escape(portal_name)}</div>
+              <td style="background:#102a5c;padding:18px 24px;color:#ffffff;">
+                <div style="font-size:12px;letter-spacing:0.4px;">Superior University Lahore</div>
+                <div style="font-size:20px;font-weight:700;margin-top:4px;">{escape(portal_name)}</div>
               </td>
             </tr>
             <tr>
-              <td style="padding:26px 28px 8px 28px;">
-                <div style="font-size:13px;color:#64748b;margin-bottom:6px;">Official message</div>
-                <div style="font-size:20px;font-weight:700;color:#102a5c;">{escape(subject)}</div>
+              <td style="padding:22px 24px 8px 24px;">
+                <div style="font-size:18px;font-weight:700;color:#102a5c;">{escape(subject)}</div>
               </td>
             </tr>
             <tr>
-              <td style="padding:8px 28px 0 28px;">
-                <table role="presentation" width="100%" style="background:#f8fbff;border:1px solid #e2e8f0;border-radius:10px;">
-                  <tr>
-                    <td style="padding:12px 14px;font-size:13px;color:#334155;">
-                      <strong>From:</strong> {escape(sender_name)} ({escape(_role_label(sender.role))})<br />
-                      <strong>Email:</strong> {escape(sender_email or "-")}<br />
-                      <strong>To:</strong> {escape(student_name)}
-                    </td>
-                  </tr>
-                </table>
+              <td style="padding:8px 24px 0 24px;font-size:13px;color:#334155;line-height:1.6;">
+                From: {escape(sender_name)} ({escape(_role_label(sender.role))})<br />
+                Reply to: {escape(sender_email or "-")}<br />
+                To: {escape(student_name)}
               </td>
             </tr>
             <tr>
-              <td style="padding:22px 28px;font-size:15px;line-height:1.7;color:#1e293b;">
+              <td style="padding:20px 24px;font-size:15px;line-height:1.7;color:#1f2937;">
                 <p style="margin:0 0 14px 0;">Dear {escape(student_name)},</p>
                 <div>{body}</div>
-                <p style="margin:22px 0 0 0;">Regards,<br /><strong>{escape(sender_name)}</strong><br />{escape(_role_label(sender.role))}<br />{escape(sender_email)}</p>
+                <p style="margin:22px 0 0 0;">
+                  Regards,<br />
+                  {escape(sender_name)}<br />
+                  {escape(_role_label(sender.role))}<br />
+                  {escape(sender_email)}
+                </p>
               </td>
             </tr>
             <tr>
-              <td style="padding:16px 28px 22px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;">
-                This email was sent from {escape(portal_name)} using {escape(sender_name)}'s portal email.
-                Reply directly to this message to contact the sender.
+              <td style="padding:14px 24px 18px 24px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;">
+                This is a coursework notice from {escape(portal_name)}.
+                Reply to this email to contact {escape(sender_name)}.
                 {f'<br /><a href="{escape(portal_url)}" style="color:#1d4ed8;">{escape(portal_url)}</a>' if portal_url else ""}
               </td>
             </tr>
@@ -77,23 +94,27 @@ def render_student_email_html(sender, student, subject, message):
 def render_student_email_text(sender, student, subject, message):
     sender_name = sender.get_full_name().strip() or sender.username
     student_name = student.get_full_name().strip() or student.username
+    portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
     return (
         f"{subject}\n\n"
         f"Dear {student_name},\n\n"
         f"{message}\n\n"
-        f"Regards,\n{sender_name}\n{_role_label(sender.role)}\n{sender.email}\n"
+        f"Regards,\n{sender_name}\n{_role_label(sender.role)}\n{sender.email}\n\n"
+        f"This is a coursework notice from {portal_name}.\n"
     )
 
 
 def send_student_emails(sender, students, subject, message):
     sender_email = (sender.email or "").strip()
     sender_name = sender.get_full_name().strip() or sender.username
-    smtp_from = (getattr(settings, "EMAIL_HOST_USER", "") or sender_email).strip()
-    from_email = formataddr((sender_name, smtp_from))
+    portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
+    smtp_from = _smtp_from() or sender_email
+    from_email = formataddr((f"{sender_name} via {portal_name}", smtp_from))
     connection = get_connection()
     sent = 0
     failed = []
     skipped = []
+    msgid_domain = _message_id_domain()
 
     for student in students:
         to_email = (student.email or "").strip()
@@ -102,13 +123,20 @@ def send_student_emails(sender, students, subject, message):
             continue
         html = render_student_email_html(sender, student, subject, message)
         text = render_student_email_text(sender, student, subject, message)
+        headers = {
+            "Date": formatdate(localtime=True),
+            "Message-ID": make_msgid(domain=msgid_domain),
+        }
+        if sender_email:
+            headers["Reply-To"] = formataddr((sender_name, sender_email))
         email = EmailMultiAlternatives(
             subject=subject,
             body=text,
             from_email=from_email,
             to=[to_email],
-            reply_to=[sender_email],
+            reply_to=[formataddr((sender_name, sender_email))] if sender_email else None,
             connection=connection,
+            headers=headers,
         )
         email.attach_alternative(html, "text/html")
         try:

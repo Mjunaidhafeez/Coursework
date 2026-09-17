@@ -204,7 +204,8 @@ const EmailStudentsPage = () => {
           <Alert severity="error">Your account has no email. Add it first — students will receive mail from that address.</Alert>
         ) : (
           <Alert severity="info">
-            Sending as <strong>{sender.name || user?.full_name}</strong> ({roleLabel(sender.role || user?.role)}) from <strong>{senderEmail}</strong>
+            Sending as <strong>{sender.name || user?.full_name}</strong> ({roleLabel(sender.role || user?.role)}) from <strong>{senderEmail}</strong>.
+            First delivery can land in Spam — ask students to open it, tap <strong>Not spam</strong>, and save the sender.
           </Alert>
         )}
 
@@ -255,7 +256,6 @@ const EmailStudentsPage = () => {
               <Typography sx={{ fontWeight: 800 }}>MBA Coursework Portal</Typography>
             </Box>
             <Box sx={{ p: 2 }}>
-              <Typography variant="caption" color="text.secondary">Official message</Typography>
               <Typography sx={{ fontWeight: 800, color: "#102a5c", mb: 1 }}>{subject || "Subject will appear here"}</Typography>
               <Box sx={{ bgcolor: "#f8fbff", border: "1px solid #e2e8f0", borderRadius: 1, p: 1, mb: 1.2, fontSize: 13 }}>
                 <div><strong>From:</strong> {sender.name || user?.full_name} ({roleLabel(sender.role || user?.role)})</div>
