@@ -142,7 +142,7 @@ const EmailStudentsPage = () => {
         notify(`${data.skipped_count} student(s) skipped because they have no email.`, "warning");
       }
       if (data.failed_count) {
-        notify(`${data.failed_count} email(s) failed. Check SMTP settings.`, "error");
+        notify(data.detail || `${data.failed_count} email(s) failed. Check SMTP settings.`, "error");
       }
       setSelectedIds({});
     } catch (err) {

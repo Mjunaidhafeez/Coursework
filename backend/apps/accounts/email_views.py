@@ -122,16 +122,18 @@ def send_student_email(request):
 
     result = send_student_emails(sender, students, subject, message)
     failed_count = len(result["failed"])
+    first_error = (result["failed"][0].get("detail") if result["failed"] else "") or ""
     return Response(
         {
             "sent_count": result["sent"],
             "failed_count": failed_count,
             "skipped_count": len(result["skipped"]),
             "skipped": result["skipped"][:20],
+            "failed": result["failed"][:5],
             "from_email": sender_email,
             "detail": (
                 f"Sent {result['sent']} email(s) from {sender_email}."
-                + (f" {failed_count} failed." if failed_count else "")
+                + (f" {failed_count} failed. {first_error}" if failed_count else "")
             ),
         },
         status=status.HTTP_200_OK,

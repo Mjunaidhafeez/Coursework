@@ -88,7 +88,8 @@ def render_student_email_text(sender, student, subject, message):
 def send_student_emails(sender, students, subject, message):
     sender_email = (sender.email or "").strip()
     sender_name = sender.get_full_name().strip() or sender.username
-    from_email = formataddr((sender_name, sender_email))
+    smtp_from = (getattr(settings, "EMAIL_HOST_USER", "") or sender_email).strip()
+    from_email = formataddr((sender_name, smtp_from))
     connection = get_connection()
     sent = 0
     failed = []
