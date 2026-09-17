@@ -19,7 +19,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
 import ListingPage from "../../components/shared/ListingPage";
@@ -27,6 +27,18 @@ import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
+
+const MAX_EMAIL_FILES = 5;
+const MAX_EMAIL_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_EMAIL_TOTAL_BYTES = 15 * 1024 * 1024;
+const EMAIL_FILE_ACCEPT = ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.png,.jpg,.jpeg,.txt,.csv";
+const EMAIL_FILE_TYPES = new Set(EMAIL_FILE_ACCEPT.split(","));
+
+const formatFileSize = (bytes) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.max(0.1, bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const roleLabel = (role) => {
   if (role === "super_admin") return "Administrator";
@@ -51,8 +63,10 @@ const EmailStudentsPage = () => {
     email: user?.email || "",
     role: user?.role || "",
   });
+  const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const fileInputRef = useRef(null);
 
   const loadFilters = async () => {
     const [courseRes, semesterRes] = await Promise.all([
@@ -106,6 +120,35 @@ const EmailStudentsPage = () => {
     setSelectedIds(next);
   };
 
+  const addFiles = (incoming) => {
+    const chosen = Array.from(incoming || []);
+    if (!chosen.length) return;
+    const next = [...files];
+    for (const file of chosen) {
+      const ext = `.${(file.name.split(".").pop() || "").toLowerCase()}`;
+      if (!EMAIL_FILE_TYPES.has(ext)) {
+        notify(`${file.name} is not allowed. Use PDF, Word, PowerPoint, Excel, ZIP, image, TXT or CSV.`, "warning");
+        continue;
+      }
+      if (file.size > MAX_EMAIL_FILE_BYTES) {
+        notify(`${file.name} is larger than 8 MB.`, "warning");
+        continue;
+      }
+      if (next.length >= MAX_EMAIL_FILES) {
+        notify(`Attach up to ${MAX_EMAIL_FILES} files.`, "warning");
+        break;
+      }
+      next.push(file);
+    }
+    const total = next.reduce((sum, file) => sum + file.size, 0);
+    if (total > MAX_EMAIL_TOTAL_BYTES) {
+      notify("Attachments together must stay under 15 MB.", "warning");
+    } else {
+      setFiles(next);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const sendEmail = async (mode) => {
     if (!senderEmail) {
       notify("Add your email address first. Mail is sent from your portal email.", "error");
@@ -115,28 +158,32 @@ const EmailStudentsPage = () => {
       notify("Subject and message are required.", "warning");
       return;
     }
-    const payload = {
-      subject: subject.trim(),
-      message: message.trim(),
-      mode,
-      course: courseId || null,
-      semester: semesterId || null,
-      search,
-    };
+    const payload = new FormData();
+    payload.append("subject", subject.trim());
+    payload.append("message", message.trim());
+    payload.append("mode", mode);
+    if (courseId) payload.append("course", courseId);
+    if (semesterId) payload.append("semester", semesterId);
+    if (search) payload.append("search", search);
     if (mode === "selected") {
-      payload.student_ids = selectedStudents.map((item) => item.id);
-      if (!payload.student_ids.length) {
+      const studentIds = selectedStudents.map((item) => item.id);
+      if (!studentIds.length) {
         notify("Select at least one student, or use Send to all.", "warning");
         return;
       }
+      studentIds.forEach((id) => payload.append("student_ids", String(id)));
     }
+    files.forEach((file) => payload.append("files", file));
     const count = mode === "all" ? students.length : selectedStudents.length;
-    if (!window.confirm(`Send this email from ${senderEmail} to ${count} student(s)?`)) {
+    const fileNote = files.length ? ` with ${files.length} file(s)` : "";
+    if (!window.confirm(`Send this email from ${senderEmail} to ${count} student(s)${fileNote}?`)) {
       return;
     }
     setSending(true);
     try {
-      const { data } = await api.post(ENDPOINTS.sendEmail, payload);
+      const { data } = await api.post(ENDPOINTS.sendEmail, payload, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       notify(data.detail || `Sent ${data.sent_count} email(s)`);
       if (data.skipped_count) {
         notify(`${data.skipped_count} student(s) skipped because they have no email.`, "warning");
@@ -145,6 +192,8 @@ const EmailStudentsPage = () => {
         notify(data.detail || `${data.failed_count} email(s) failed. Check SMTP settings.`, "error");
       }
       setSelectedIds({});
+      setFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
       notify(err?.response?.data?.detail || "Could not send email", "error");
     } finally {
@@ -230,6 +279,34 @@ const EmailStudentsPage = () => {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
+            <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mt: 1.1 }}>
+              <Button size="small" variant="outlined" component="label" disabled={sending || files.length >= MAX_EMAIL_FILES}>
+                Attach files
+                <input
+                  ref={fileInputRef}
+                  hidden
+                  type="file"
+                  multiple
+                  accept={EMAIL_FILE_ACCEPT}
+                  onChange={(e) => addFiles(e.target.files)}
+                />
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                Up to 5 files, 8 MB each, 15 MB total
+              </Typography>
+            </Stack>
+            {files.length > 0 && (
+              <Stack direction="row" spacing={0.6} useFlexGap flexWrap="wrap" sx={{ mt: 0.8 }}>
+                {files.map((file, index) => (
+                  <Chip
+                    key={`${file.name}-${index}`}
+                    size="small"
+                    label={`${file.name} (${formatFileSize(file.size)})`}
+                    onDelete={() => setFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                  />
+                ))}
+              </Stack>
+            )}
             <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" sx={{ mt: 1.1 }}>
               <Button
                 variant="contained"
@@ -261,6 +338,9 @@ const EmailStudentsPage = () => {
                 <div><strong>From:</strong> {sender.name || user?.full_name} ({roleLabel(sender.role || user?.role)})</div>
                 <div><strong>Email:</strong> {senderEmail || "-"}</div>
                 <div><strong>To:</strong> {previewName}</div>
+                {files.length > 0 && (
+                  <div><strong>Attached:</strong> {files.map((file) => file.name).join(", ")}</div>
+                )}
               </Box>
               <Typography sx={{ mb: 1 }}>Dear {previewName},</Typography>
               <Typography sx={{ whiteSpace: "pre-wrap", color: "#1e293b", minHeight: 72 }}>

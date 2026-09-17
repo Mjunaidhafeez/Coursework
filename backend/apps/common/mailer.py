@@ -27,13 +27,20 @@ def _message_id_domain():
     return host or "mba.pythonanywhere.com"
 
 
-def render_student_email_html(sender, student, subject, message):
+def render_student_email_html(sender, student, subject, message, attachment_names=None):
     sender_name = sender.get_full_name().strip() or sender.username
     sender_email = (sender.email or "").strip()
     student_name = student.get_full_name().strip() or student.username
     body = escape(message or "").replace("\n", "<br />")
     portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
     portal_url = getattr(settings, "PORTAL_PUBLIC_URL", "")
+    names = [escape(name) for name in (attachment_names or []) if name]
+    attachments_html = ""
+    if names:
+        attachments_html = (
+            "<p style=\"margin:16px 0 0 0;font-size:13px;color:#334155;\">"
+            f"Attached: {', '.join(names)}</p>"
+        )
     return f"""<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -68,6 +75,7 @@ def render_student_email_html(sender, student, subject, message):
               <td style="padding:20px 24px;font-size:15px;line-height:1.7;color:#1f2937;">
                 <p style="margin:0 0 14px 0;">Dear {escape(student_name)},</p>
                 <div>{body}</div>
+                {attachments_html}
                 <p style="margin:22px 0 0 0;">
                   Regards,<br />
                   {escape(sender_name)}<br />
@@ -91,20 +99,23 @@ def render_student_email_html(sender, student, subject, message):
 </html>"""
 
 
-def render_student_email_text(sender, student, subject, message):
+def render_student_email_text(sender, student, subject, message, attachment_names=None):
     sender_name = sender.get_full_name().strip() or sender.username
     student_name = student.get_full_name().strip() or student.username
     portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
+    names = [name for name in (attachment_names or []) if name]
+    attached = f"\nAttached: {', '.join(names)}\n" if names else ""
     return (
         f"{subject}\n\n"
         f"Dear {student_name},\n\n"
-        f"{message}\n\n"
+        f"{message}\n"
+        f"{attached}\n"
         f"Regards,\n{sender_name}\n{_role_label(sender.role)}\n{sender.email}\n\n"
         f"This is a coursework notice from {portal_name}.\n"
     )
 
 
-def send_student_emails(sender, students, subject, message):
+def send_student_emails(sender, students, subject, message, attachments=None):
     sender_email = (sender.email or "").strip()
     sender_name = sender.get_full_name().strip() or sender.username
     portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
@@ -115,14 +126,16 @@ def send_student_emails(sender, students, subject, message):
     failed = []
     skipped = []
     msgid_domain = _message_id_domain()
+    attachments = list(attachments or [])
+    attachment_names = [item[0] for item in attachments if item and item[0]]
 
     for student in students:
         to_email = (student.email or "").strip()
         if not to_email:
             skipped.append(student.get_full_name().strip() or student.username)
             continue
-        html = render_student_email_html(sender, student, subject, message)
-        text = render_student_email_text(sender, student, subject, message)
+        html = render_student_email_html(sender, student, subject, message, attachment_names)
+        text = render_student_email_text(sender, student, subject, message, attachment_names)
         headers = {
             "Date": formatdate(localtime=True),
             "Message-ID": make_msgid(domain=msgid_domain),
@@ -139,6 +152,8 @@ def send_student_emails(sender, students, subject, message):
             headers=headers,
         )
         email.attach_alternative(html, "text/html")
+        for filename, content, content_type in attachments:
+            email.attach(filename, content, content_type or "application/octet-stream")
         try:
             email.send()
             sent += 1
