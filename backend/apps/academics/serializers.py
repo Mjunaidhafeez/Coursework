@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Course, Enrollment, Semester
+from .models import Course, CourseStudyFile, Enrollment, Semester
 
 
 class SemesterSerializer(serializers.ModelSerializer):
@@ -9,10 +9,40 @@ class SemesterSerializer(serializers.ModelSerializer):
         fields = ["id", "number", "created_at", "updated_at"]
 
 
+class CourseStudyFileSerializer(serializers.ModelSerializer):
+    file_name = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CourseStudyFile
+        fields = [
+            "id",
+            "course",
+            "title",
+            "file",
+            "file_name",
+            "uploaded_by",
+            "uploaded_by_name",
+            "created_at",
+        ]
+        read_only_fields = ["course", "uploaded_by", "file_name", "uploaded_by_name", "created_at"]
+
+    def get_file_name(self, obj):
+        return obj.file.name.split("/")[-1] if obj.file else ""
+
+    def get_uploaded_by_name(self, obj):
+        user = getattr(obj, "uploaded_by", None)
+        if not user:
+            return ""
+        return user.get_full_name().strip() or user.username
+
+
 class CourseSerializer(serializers.ModelSerializer):
     semester_number = serializers.IntegerField(source="semester.number", read_only=True)
     semester_name = serializers.SerializerMethodField()
     teacher_names = serializers.SerializerMethodField()
+    study_files = CourseStudyFileSerializer(many=True, read_only=True)
+    study_file_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Course
@@ -25,6 +55,8 @@ class CourseSerializer(serializers.ModelSerializer):
             "semester_name",
             "teachers",
             "teacher_names",
+            "study_files",
+            "study_file_count",
             "created_at",
             "updated_at",
         ]
@@ -38,6 +70,13 @@ class CourseSerializer(serializers.ModelSerializer):
             full_name = teacher.get_full_name().strip()
             names.append(full_name or teacher.username)
         return names
+
+    def get_study_file_count(self, obj):
+        files = getattr(obj, "study_files", None)
+        if files is None:
+            return 0
+        all_files = files.all() if hasattr(files, "all") else files
+        return len(list(all_files))
 
     def validate(self, attrs):
         teachers = attrs.get("teachers")

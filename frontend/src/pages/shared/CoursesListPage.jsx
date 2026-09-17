@@ -14,12 +14,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import CourseStudyFilesCell from "../../components/shared/CourseStudyFiles";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
+import { useAuth } from "../../context/AuthContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import usePaginatedQuery from "../../hooks/usePaginatedQuery";
 
 const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
+  const { user } = useAuth();
+  const canManageFiles = ["teacher", "super_admin"].includes(user?.role);
   const [semesterFilter, setSemesterFilter] = useState("my");
   const [semesters, setSemesters] = useState([]);
 
@@ -36,7 +40,7 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
     return data;
   };
 
-  const { rows, total, search, setSearch, page, pageSize, runSearch, resetSearch, changePage, changePageSize } =
+  const { rows, total, search, setSearch, page, pageSize, loadData, runSearch, resetSearch, changePage, changePageSize } =
     usePaginatedQuery({ queryFn, dependencies: enableSemesterFilter ? [semesterFilter] : [] });
 
   useEffect(() => {
@@ -92,6 +96,7 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
               <TableCell>Title</TableCell>
               <TableCell>Semester</TableCell>
               <TableCell>Teachers</TableCell>
+              <TableCell>Files</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -101,6 +106,9 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
                 <TableCell>{item.title}</TableCell>
                 <TableCell>{item.semester_name || `Semester ${item.semester_number}`}</TableCell>
                 <TableCell>{(item.teacher_names || []).join(", ") || "-"}</TableCell>
+                <TableCell>
+                  <CourseStudyFilesCell course={item} canManage={canManageFiles} onChanged={() => loadData()} />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -29,6 +29,7 @@ import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import { getUserDisplayName } from "../../utils/userDisplay";
 import { confirmDelete } from "../../utils/confirm";
+import CourseStudyFilesCell from "../../components/shared/CourseStudyFiles";
 
 const emptyForm = { code: "", title: "", semester: "", teachers: [] };
 
@@ -187,6 +188,7 @@ const CoursesPage = () => {
               <TableCell>Title</TableCell>
               <TableCell>Semester</TableCell>
               <TableCell>Teachers</TableCell>
+              <TableCell>Files</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -204,6 +206,9 @@ const CoursesPage = () => {
                     })}
                   </Stack>
                 </TableCell>
+                <TableCell>
+                  <CourseStudyFilesCell course={course} canManage onChanged={() => loadData()} />
+                </TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
                     <Button size="small" onClick={() => edit(course)}>Edit</Button>
@@ -214,7 +219,7 @@ const CoursesPage = () => {
             ))}
             {!courses.length && !loading && (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <Typography variant="body2" color="text.secondary">No courses found for this filter/search.</Typography>
                 </TableCell>
               </TableRow>

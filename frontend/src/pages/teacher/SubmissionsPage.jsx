@@ -720,7 +720,7 @@ const SubmissionsPage = () => {
       const createdSubmission = created?.submissions?.[0];
       if (!createdSubmission?.id) {
         if (shouldNotify) notify("Could not create a submission to save marks", "error");
-        return false;
+      return false;
       }
       working = { ...working, ...createdSubmission, is_topic_not_submitted: false };
       submissionId = createdSubmission.id;
@@ -1553,22 +1553,22 @@ const SubmissionsPage = () => {
                   <Box sx={{ minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 800, color: "#16356f" }}>
                       {`${section.selectedItems.length} selected of ${section.items.length} students`}
-                    </Typography>
+            </Typography>
                     <Typography variant="caption" sx={{ color: "#5b6f91", display: "block", mt: 0.2 }}>
                       Use the action menu on each row, or apply a bulk action to selected or all students. Typed marks can also be saved from this list.
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center" justifyContent="flex-end">
-                    <TextField
-                      size="small"
-                      type="number"
+            <TextField
+              size="small"
+              type="number"
                       label="Bulk marks"
-                      value={bulkMarks}
+              value={bulkMarks}
                       onChange={(e) => {
                         const maxMarks = courseworkById[String(section.items[0]?.coursework)]?.max_marks;
                         setBulkMarks(clampMarksInput(e.target.value, maxMarks));
                       }}
-                      inputProps={{ min: 0, step: 1 }}
+              inputProps={{ min: 0, step: 1 }}
                       sx={{ width: 110 }}
                     />
                     <FormControl size="small" sx={{ minWidth: 250 }}>
@@ -1613,8 +1613,8 @@ const SubmissionsPage = () => {
                         </MenuItem>
                       </Select>
                     </FormControl>
-                  </Stack>
-                </Stack>
+          </Stack>
+        </Stack>
               </Box>
             </Box>
           ))}
@@ -1623,7 +1623,7 @@ const SubmissionsPage = () => {
       footer={displayRows.length ? (
         <Typography variant="body2" color="text.secondary" sx={{ pt: 0.8 }}>
           {displayRows.length} student{displayRows.length === 1 ? "" : "s"} in this view
-        </Typography>
+                </Typography>
       ) : null}
     >
         {!courseSections.length && !loading && (
@@ -1631,7 +1631,7 @@ const SubmissionsPage = () => {
             <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No students match these filters</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               Change course, assessment, or student status, or reset to All.
-            </Typography>
+                          </Typography>
           </Box>
         )}
         <Stack spacing={2}>
@@ -1666,12 +1666,12 @@ const SubmissionsPage = () => {
                               />
                             </TableCell>
                             <TableCell sx={{ width: 56 }}>Sr #</TableCell>
-                            <TableCell>Name</TableCell>
+                                <TableCell>Name</TableCell>
                             <TableCell>Roll no</TableCell>
                             <TableCell>Date / time</TableCell>
-                            <TableCell>Status</TableCell>
+                                <TableCell>Status</TableCell>
                             <TableCell>Marks</TableCell>
-                            <TableCell>File</TableCell>
+                                <TableCell>File</TableCell>
                             <TableCell align="right">Action</TableCell>
                           </TableRow>
                         </TableHead>
@@ -1695,7 +1695,7 @@ const SubmissionsPage = () => {
                               <TableRow key={item.id}>
                                 <TableCell padding="checkbox">
                                   <Checkbox
-                                    size="small"
+                                            size="small"
                                     checked={!!selectedSubmissionIds[getRowSelectKey(item, idx)]}
                                     onChange={() => toggleSelectSubmission(item, idx)}
                                   />
@@ -1707,8 +1707,8 @@ const SubmissionsPage = () => {
                                       {studentLabel}
                                     </Typography>
                                     {canViewMembers ? (
-                                      <Chip
-                                        size="small"
+                                          <Chip
+                                            size="small"
                                         label={`Members (${memberHintCount})`}
                                         onClick={() => openSubmissionMembers(item)}
                                         sx={{
@@ -1720,22 +1720,22 @@ const SubmissionsPage = () => {
                                         }}
                                       />
                                     ) : null}
-                                  </Stack>
+                                          </Stack>
                                   {item.topic ? (
                                     <Typography variant="caption" color="text.secondary" display="block">
                                       {item.topic}
                                     </Typography>
                                   ) : null}
-                                </TableCell>
-                                <TableCell>{item.student_roll_no || "-"}</TableCell>
-                                <TableCell>
+                                    </TableCell>
+                                      <TableCell>{item.student_roll_no || "-"}</TableCell>
+                                      <TableCell>
                                   <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
                                     {submittedAt ? formatDate(submittedAt) : "—"}
                                   </Typography>
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    size="small"
+                                      </TableCell>
+                                      <TableCell>
+                                            <Chip
+                                              size="small"
                                     label={statusChip.label}
                                     sx={{
                                       bgcolor: statusChip.bgcolor,
@@ -1745,12 +1745,12 @@ const SubmissionsPage = () => {
                                   />
                                 </TableCell>
                                 <TableCell>
-                                  <TextField
-                                    size="small"
-                                    type="number"
+                                            <TextField
+                                              size="small"
+                                              type="number"
                                     placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
-                                    value={getFeedbackDraft(item, rowDraftKey).marks}
-                                    onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
+                                              value={getFeedbackDraft(item, rowDraftKey).marks}
+                                              onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
                                     inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
                                     sx={{
                                       width: 96,
@@ -1764,25 +1764,25 @@ const SubmissionsPage = () => {
                                           }
                                         : {}),
                                     }}
-                                  />
-                                </TableCell>
-                                <TableCell>
+                                        />
+                                      </TableCell>
+                                      <TableCell>
                                   {item.file ? (
                                     <Stack direction="row" spacing={0.3}>
                                       <IconButton size="small" onClick={() => openFilePreview(item)} title="View file">
-                                        <VisibilityOutlinedIcon fontSize="small" />
-                                      </IconButton>
+                                              <VisibilityOutlinedIcon fontSize="small" />
+                                            </IconButton>
                                       <IconButton size="small" onClick={() => downloadFile(item)} title="Download file">
-                                        <DownloadRoundedIcon fontSize="small" />
-                                      </IconButton>
-                                    </Stack>
+                                              <DownloadRoundedIcon fontSize="small" />
+                                            </IconButton>
+                                          </Stack>
                                   ) : (
                                     <Typography variant="caption" color="text.secondary">No file</Typography>
                                   )}
-                                </TableCell>
-                                <TableCell align="right">
+                                                        </TableCell>
+                                                        <TableCell align="right">
                                   <IconButton
-                                    size="small"
+                                                            size="small"
                                     onClick={(e) => setActionMenu({ anchor: e.currentTarget, item, idx })}
                                   >
                                     <MoreVertIcon fontSize="small" />
@@ -1801,16 +1801,16 @@ const SubmissionsPage = () => {
                                       </MenuItem>
                                     ))}
                                   </Menu>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
+                                                        </TableCell>
+                                                  </TableRow>
+                                                );
+                                              })}
+                                            </TableBody>
+                                          </Table>
                       </TableContainer>
-            </Box>
-            );
-          })}
+                                        </Box>
+                    );
+                  })}
         </Stack>
         {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
     </ListingPage>
@@ -1851,7 +1851,7 @@ const SubmissionsPage = () => {
                             size="small"
                             color="primary"
                             variant="outlined"
-                            label={`Total/Given: ${formatMarks(maxMarks)}/${formatMarks(givenMarks)}`}
+                            label={`Obtained/Total: ${formatMarks(givenMarks)}/${formatMarks(maxMarks)}`}
                           />
                         ) : (
                           <Chip size="small" variant="outlined" color="warning" label="No submission record" />

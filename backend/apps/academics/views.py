@@ -5,8 +5,8 @@ from rest_framework.response import Response
 from apps.accounts.models import User
 from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
 
-from .models import Course, Enrollment, Semester
-from .serializers import CourseSerializer, EnrollmentSerializer, SemesterSerializer
+from .models import Course, CourseStudyFile, Enrollment, Semester
+from .serializers import CourseSerializer, CourseStudyFileSerializer, EnrollmentSerializer, SemesterSerializer
 
 
 class SemesterViewSet(viewsets.ModelViewSet):
@@ -31,16 +31,52 @@ class SemesterViewSet(viewsets.ModelViewSet):
 
 
 class CourseViewSet(viewsets.ModelViewSet):
-    queryset = Course.objects.select_related("semester").prefetch_related("teachers")
+    queryset = Course.objects.select_related("semester").prefetch_related("teachers", "study_files")
     serializer_class = CourseSerializer
     filterset_fields = ["semester", "teachers"]
     search_fields = ["title", "code"]
     ordering_fields = ["code", "title", "created_at"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.action in ["create", "update", "partial_update", "destroy", "upload_study_file", "delete_study_file"]:
             return [IsTeacherOrAdmin()]
         return [permissions.IsAuthenticated()]
+
+    def _can_manage_course_files(self, user, course):
+        if user.role == User.Role.SUPER_ADMIN:
+            return True
+        return user.role == User.Role.TEACHER and course.teachers.filter(id=user.id).exists()
+
+    @action(detail=True, methods=["post"], url_path="study-files")
+    def upload_study_file(self, request, pk=None):
+        course = self.get_object()
+        if not self._can_manage_course_files(request.user, course):
+            return Response({"detail": "You can only upload files for your courses."}, status=status.HTTP_403_FORBIDDEN)
+        title = str(request.data.get("title") or "").strip()
+        upload = request.FILES.get("file")
+        if not upload:
+            return Response({"detail": "A study file is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not title:
+            title = upload.name.rsplit(".", 1)[0]
+        study_file = CourseStudyFile.objects.create(
+            course=course,
+            title=title,
+            file=upload,
+            uploaded_by=request.user,
+        )
+        return Response(CourseStudyFileSerializer(study_file, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path="study-files/(?P<file_id>[^/.]+)")
+    def delete_study_file(self, request, pk=None, file_id=None):
+        course = self.get_object()
+        if not self._can_manage_course_files(request.user, course):
+            return Response({"detail": "You can only remove files from your courses."}, status=status.HTTP_403_FORBIDDEN)
+        study_file = CourseStudyFile.objects.filter(course=course, id=file_id).first()
+        if not study_file:
+            return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+        study_file.file.delete(save=False)
+        study_file.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def _enroll_semester_students(self, course):
         student_ids = User.objects.filter(
