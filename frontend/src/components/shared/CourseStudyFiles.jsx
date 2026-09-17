@@ -18,35 +18,29 @@ import {
 } from "@mui/material";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import { useUi } from "../../context/UiContext";
 import { confirmDelete } from "../../utils/confirm";
-import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 
-const openStudyFile = (file, notify) => {
-  const url = toAbsoluteMediaUrl(file?.file);
-  if (!url) {
-    notify?.("File is not available", "warning");
-    return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-};
+const PREVIEWABLE_EXT = ["pdf", "png", "jpg", "jpeg"];
 
-const downloadStudyFile = (file, notify) => {
-  const url = toAbsoluteMediaUrl(file?.file);
-  if (!url) {
-    notify?.("File is not available", "warning");
-    return;
-  }
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = file?.file_name || file?.title || "study-file";
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
+const fileExtension = (file) =>
+  String(file?.file_name || file?.title || file?.file || "")
+    .split("?")[0]
+    .split(".")
+    .pop()
+    .toLowerCase();
+
+const isPreviewable = (file) => PREVIEWABLE_EXT.includes(fileExtension(file));
+
+const fetchStudyFileBlob = async (courseId, fileId, mode) => {
+  const { data } = await api.get(`${ENDPOINTS.courses}${courseId}/study-files/${fileId}/${mode}/`, {
+    responseType: "blob",
+  });
+  return data;
 };
 
 export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClose, onChanged }) => {
@@ -55,7 +49,48 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
   const [title, setTitle] = useState("");
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(null);
   const files = course?.study_files || [];
+
+  useEffect(() => () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+  }, [preview]);
+
+  const openStudyFile = async (item) => {
+    if (!course?.id || !item?.id) return;
+    if (!isPreviewable(item)) {
+      notify("This file type cannot be previewed. Use Download.", "info");
+      return;
+    }
+    try {
+      const blob = await fetchStudyFileBlob(course.id, item.id, "view");
+      if (preview?.url) URL.revokeObjectURL(preview.url);
+      setPreview({
+        url: URL.createObjectURL(blob),
+        title: item.title || item.file_name || "Study file",
+        kind: fileExtension(item) === "pdf" ? "pdf" : "image",
+      });
+    } catch {
+      notify("Could not open file preview", "error");
+    }
+  };
+
+  const downloadStudyFile = async (item) => {
+    if (!course?.id || !item?.id) return;
+    try {
+      const blob = await fetchStudyFileBlob(course.id, item.id, "download");
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = item.file_name || item.title || "study-file";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch {
+      notify("Could not download file", "error");
+    }
+  };
 
   const resetUpload = () => {
     setTitle("");
@@ -143,10 +178,10 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
                   <TableCell>{item.file_name || "—"}</TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={0.4} justifyContent="flex-end">
-                      <IconButton size="small" title="View" onClick={() => openStudyFile(item, notify)}>
+                      <IconButton size="small" title="View" onClick={() => openStudyFile(item)}>
                         <VisibilityOutlinedIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" title="Download" onClick={() => downloadStudyFile(item, notify)}>
+                      <IconButton size="small" title="Download" onClick={() => downloadStudyFile(item)}>
                         <DownloadRoundedIcon fontSize="small" />
                       </IconButton>
                       {canManage ? (
@@ -169,6 +204,26 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+      <Dialog
+        open={Boolean(preview)}
+        onClose={() => setPreview(null)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>{preview?.title || "File preview"}</DialogTitle>
+        <DialogContent dividers sx={{ minHeight: "70vh", p: 0, bgcolor: "#0f172a" }}>
+          {preview?.kind === "image" ? (
+            <Box sx={{ p: 2, textAlign: "center" }}>
+              <Box component="img" src={preview.url} alt={preview.title} sx={{ maxWidth: "100%", maxHeight: "72vh" }} />
+            </Box>
+          ) : (
+            <Box component="iframe" title={preview?.title || "preview"} src={preview?.url} sx={{ width: "100%", height: "72vh", border: 0, bgcolor: "#fff" }} />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreview(null)}>Close preview</Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

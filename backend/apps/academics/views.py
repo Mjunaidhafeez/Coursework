@@ -1,3 +1,6 @@
+import mimetypes
+
+from django.http import FileResponse
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -77,6 +80,31 @@ class CourseViewSet(viewsets.ModelViewSet):
         study_file.file.delete(save=False)
         study_file.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def _study_file_or_404(self, course, file_id):
+        return CourseStudyFile.objects.filter(course=course, id=file_id).first()
+
+    def _serve_study_file(self, course, file_id, as_attachment):
+        study_file = self._study_file_or_404(course, file_id)
+        if not study_file or not study_file.file:
+            return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+        filename = study_file.file.name.split("/")[-1]
+        content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        handle = study_file.file.open("rb")
+        response = FileResponse(handle, as_attachment=as_attachment, filename=filename, content_type=content_type)
+        if as_attachment:
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        else:
+            response["Content-Disposition"] = f'inline; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=["get"], url_path="study-files/(?P<file_id>[^/.]+)/view")
+    def view_study_file(self, request, pk=None, file_id=None):
+        return self._serve_study_file(self.get_object(), file_id, as_attachment=False)
+
+    @action(detail=True, methods=["get"], url_path="study-files/(?P<file_id>[^/.]+)/download")
+    def download_study_file(self, request, pk=None, file_id=None):
+        return self._serve_study_file(self.get_object(), file_id, as_attachment=True)
 
     def _enroll_semester_students(self, course):
         student_ids = User.objects.filter(
