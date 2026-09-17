@@ -791,12 +791,13 @@ const SubmissionsPage = () => {
       })
       .map((item) => {
         const courseTitle = courses.find((course) => String(course.id) === String(item.course))?.title;
-        const count = rosterRows.filter((row) => String(row.coursework) === String(item.id)).length;
         const title = item.title || `Assessment #${item.id}`;
-        const base = showCoursePrefix && courseTitle ? `${courseTitle} · ${title}` : title;
-        return { value: String(item.id), label: `${base} (${count})` };
+        return {
+          value: String(item.id),
+          label: showCoursePrefix && courseTitle ? `${courseTitle} · ${title}` : title,
+        };
       });
-  }, [courseworksMeta, courses, selectedCourseIds, rosterRows]);
+  }, [courseworksMeta, courses, selectedCourseIds]);
 
   const scopedRosterRows = useMemo(() => {
     return rosterRows.filter((row) => {
@@ -849,17 +850,7 @@ const SubmissionsPage = () => {
     return list;
   }, [visibleGrouped, selectedCourseworkByCourse, courseworkById]);
 
-  const statusFilterOptions = useMemo(() => {
-    const counts = Object.fromEntries(STUDENT_STATUS_OPTIONS.map((option) => [option.value, 0]));
-    scopedRosterRows.filter((row) => rowMatchesSearch(row, search)).forEach((row) => {
-      const key = getStudentStatus(row);
-      if (counts[key] != null) counts[key] += 1;
-    });
-    return STUDENT_STATUS_OPTIONS.map((option) => ({
-      ...option,
-      label: `${option.label} (${counts[option.value] || 0})`,
-    }));
-  }, [scopedRosterRows, search]);
+  const statusFilterOptions = STUDENT_STATUS_OPTIONS;
 
   useEffect(() => {
     const allowed = new Set(assessmentFilterOptions.map((option) => option.value));
