@@ -1,1 +1,0 @@
-import{a as n}from"./index-DABDV7eJ.js";const s=t=>{if(!t)return null;if(/^https?:\/\//i.test(t))return t;const i=typeof window<"u"?window.location.origin:"http://localhost:8000";return`${new URL(n.defaults.baseURL,i).origin}${String(t).startsWith("/")?t:`/${t}`}`};export{s as t};
