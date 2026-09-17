@@ -10,7 +10,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from apps.accounts.views import CustomTokenObtainPairView
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path("django-admin/", admin.site.urls),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/docs/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
@@ -31,5 +31,5 @@ elif not getattr(settings, "USE_S3", False):
     ]
 
 urlpatterns += [
-    re_path(r"^(?!static/|media/|api/|admin/).*$", TemplateView.as_view(template_name="index.html"), name="spa"),
+    re_path(r"^(?!static/|media/|api/|django-admin/).*$", TemplateView.as_view(template_name="index.html"), name="spa"),
 ]
