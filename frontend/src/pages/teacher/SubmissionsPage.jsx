@@ -85,12 +85,12 @@ const STUDENT_STATUS_OPTIONS = [
 ];
 
 const STATUS_CHIP = {
-  waiting: { label: "Waiting", color: "warning" },
-  pending: { label: "Request for approval", color: "warning" },
-  approved: { label: "Approved", color: "success" },
-  file_submitted: { label: "File sent", color: "info" },
-  marked: { label: "Marked", color: "success" },
-  rejected: { label: "Rejected", color: "error" },
+  waiting: { label: "Waiting", bgcolor: "#e2e8f0", color: "#334155" },
+  pending: { label: "Request for approval", bgcolor: "#ffedd5", color: "#9a3412" },
+  approved: { label: "Approved", bgcolor: "#dbeafe", color: "#1d4ed8" },
+  file_submitted: { label: "File sent", bgcolor: "#e9d5ff", color: "#6b21a8" },
+  marked: { label: "Marked", bgcolor: "#dcfce7", color: "#15803d" },
+  rejected: { label: "Rejected", bgcolor: "#fee2e2", color: "#b91c1c" },
 };
 
 const getRowMemberCount = (item, groupsById = {}) => {
@@ -100,9 +100,32 @@ const getRowMemberCount = (item, groupsById = {}) => {
     (item.requested_member_ids || []).length ||
     (item.requested_member_names || []).length ||
     (item.group_member_rows || []).length ||
+    (item.group_member_ids || []).length ||
     (groupsById[String(item.group)]?.members || []).filter((member) => member.accepted !== false).length ||
     0
   );
+};
+
+const isTopicOrFileSender = (item) => {
+  if (!item || item.is_topic_not_submitted) return false;
+  if (item.is_request_sender === true) return true;
+  if (item.is_request_sender === false) return false;
+  const hasTopicOrFile = Boolean(String(item.topic || "").trim() || item.file);
+  if (!hasTopicOrFile) return false;
+  const requestedIds = (item.requested_member_ids || []).map(String);
+  const studentId = String(item.student || "");
+  if (requestedIds.length && studentId && requestedIds.includes(studentId)) return false;
+  return true;
+};
+
+const canShowMembersButton = (item, groupsById = {}) =>
+  getRowMemberCount(item, groupsById) > 0 && isTopicOrFileSender(item);
+
+const getDisplayedSubmittedAt = (item) => {
+  if (!item || item.is_topic_not_submitted) return null;
+  if (item.file || item.last_file_updated_at) return item.last_file_updated_at || item.submitted_at;
+  if (String(item.topic || "").trim()) return item.submitted_at;
+  return null;
 };
 
 const hasSentApprovalRequest = (row) => {
@@ -192,8 +215,41 @@ const toWaitingDisplayRow = (entry) => ({
   course_title: entry.courseTitle,
 });
 
+const pickRequestSender = (rows = []) =>
+  [...rows].sort((a, b) => {
+    const aFile = a.file ? 1 : 0;
+    const bFile = b.file ? 1 : 0;
+    if (bFile !== aFile) return bFile - aFile;
+    return new Date(b.submitted_at || b.created_at || 0).getTime() - new Date(a.submitted_at || a.created_at || 0).getTime();
+  })[0];
+
 const buildSubmissionDisplayRows = (sourceRows = []) => {
-  const nonGroupRows = sourceRows.filter((row) => !row.group).map((row) => ({ ...row, submission_id: row.id }));
+  const nonGroupSource = sourceRows.filter((row) => !row.group);
+  const collabGroups = new Map();
+  nonGroupSource.forEach((row) => {
+    const memberKey = [...(row.requested_member_ids || [])].map(String).sort().join(",");
+    const key = memberKey ? `${row.coursework}|${String(row.topic || "").trim().toLowerCase()}|${memberKey}` : `solo-${row.id}`;
+    if (!collabGroups.has(key)) collabGroups.set(key, []);
+    collabGroups.get(key).push(row);
+  });
+  const senderByRowId = new Map();
+  collabGroups.forEach((rows) => {
+    const sender = pickRequestSender(
+      rows.filter((row) => {
+        const requestedIds = (row.requested_member_ids || []).map(String);
+        const studentId = String(row.student || "");
+        return !requestedIds.length || !requestedIds.includes(studentId);
+      })
+    ) || pickRequestSender(rows);
+    rows.forEach((row) => {
+      senderByRowId.set(String(row.id), String(sender?.id) === String(row.id));
+    });
+  });
+  const nonGroupRows = nonGroupSource.map((row) => ({
+    ...row,
+    submission_id: row.id,
+    is_request_sender: Boolean(senderByRowId.get(String(row.id))),
+  }));
   const groupedRowsMap = new Map();
   sourceRows
     .filter((row) => !!row.group)
@@ -203,19 +259,22 @@ const buildSubmissionDisplayRows = (sourceRows = []) => {
       groupedRowsMap.get(key).push(row);
     });
 
-  const representativeGroupRows = [];
+  const expandedGroupRows = [];
   groupedRowsMap.forEach((groupRows) => {
-    const representative = [...groupRows].sort(
-      (a, b) => new Date(b.submitted_at || b.created_at || 0).getTime() - new Date(a.submitted_at || a.created_at || 0).getTime()
-    )[0];
-    representativeGroupRows.push({
-      ...representative,
-      submission_id: representative.id,
-      group_member_rows: groupRows.map((row) => ({ ...row, submission_id: row.id })).sort(compareByRollNo),
+    const sender = pickRequestSender(groupRows);
+    const senderId = String(sender?.student || sender?.id || "");
+    const memberRows = groupRows.map((row) => ({ ...row, submission_id: row.id })).sort(compareByRollNo);
+    groupRows.forEach((row) => {
+      expandedGroupRows.push({
+        ...row,
+        submission_id: row.id,
+        group_member_rows: memberRows,
+        is_request_sender: String(row.student || row.id) === senderId,
+      });
     });
   });
 
-  return [...nonGroupRows, ...representativeGroupRows].sort(compareByRollNo);
+  return [...nonGroupRows, ...expandedGroupRows].sort(compareByRollNo);
 };
 
 const groupRowsByCourseAndCoursework = (rows, courseworksMeta, courses) => {
@@ -1091,8 +1150,13 @@ const SubmissionsPage = () => {
     if (value === "approve-all") return bulkApproveSelected(section.allApprove);
     if (value === "reject-selected") return bulkRejectSelected(section.selectedReject);
     if (value === "reject-all") return bulkRejectSelected(section.allReject);
-    if (value === "mark-selected") return markRows(section.selectedItems, { useBulkField: true });
-    if (value === "mark-all") return markRows(section.items, { useBulkField: true });
+    if (value === "mark-selected" || value === "mark-all") {
+      if (String(bulkMarks ?? "").trim() === "") {
+        notify("Pehle Bulk marks field mein marks add karein.", "warning");
+        return null;
+      }
+      return markRows(value === "mark-selected" ? section.selectedItems : section.items, { useBulkField: true });
+    }
     if (value === "waiting-selected") {
       return applyWorkflow(section.selectedWaiting, "waiting", {
         emptyMessage: "Select students who are not already waiting",
@@ -1526,10 +1590,10 @@ const SubmissionsPage = () => {
                         <MenuItem value="reject-all" disabled={!section.allReject.length}>
                           {`Reject all (${section.allReject.length})`}
                         </MenuItem>
-                        <MenuItem value="mark-selected" disabled={!section.selectedItems.length}>
+                        <MenuItem value="mark-selected" disabled={!section.selectedItems.length || !String(bulkMarks ?? "").trim()}>
                           {`Mark selected (${section.selectedItems.length})`}
                         </MenuItem>
-                        <MenuItem value="mark-all" disabled={!section.items.length}>
+                        <MenuItem value="mark-all" disabled={!section.items.length || !String(bulkMarks ?? "").trim()}>
                           {`Mark all (${section.items.length})`}
                         </MenuItem>
                         <MenuItem value="waiting-selected" disabled={!section.selectedWaiting.length}>
@@ -1585,7 +1649,7 @@ const SubmissionsPage = () => {
                         size="small"
                         stickyHeader
                         sx={{
-                          minWidth: 920,
+                          minWidth: 1040,
                           "& th": { py: 0.9, fontWeight: 700, color: "#35507c", bgcolor: "#f7faff" },
                           "& td": { py: 1, verticalAlign: "middle" },
                           "& tbody tr:nth-of-type(even)": { bgcolor: "#fbfdff" },
@@ -1604,6 +1668,7 @@ const SubmissionsPage = () => {
                             <TableCell sx={{ width: 56 }}>Sr #</TableCell>
                             <TableCell>Name</TableCell>
                             <TableCell>Roll no</TableCell>
+                            <TableCell>Date / time</TableCell>
                             <TableCell>Status</TableCell>
                             <TableCell>Marks</TableCell>
                             <TableCell>File</TableCell>
@@ -1614,7 +1679,7 @@ const SubmissionsPage = () => {
                           {items.map((item, idx) => {
                             const primarySubmissionId = getPrimarySubmissionId(item);
                             const memberHintCount = getRowMemberCount(item, groupsById);
-                            const canViewMembers = memberHintCount > 0;
+                            const canViewMembers = canShowMembersButton(item, groupsById);
                             const rowDraftKey = getRowDraftKey(item, idx);
                             const senderName = item.student_name || item.submitted_by_name || item.student || "-";
                             const studentLabel = senderName;
@@ -1622,6 +1687,9 @@ const SubmissionsPage = () => {
                             const studentStatus = getStudentStatus(item);
                             const statusChip = STATUS_CHIP[studentStatus] || STATUS_CHIP.waiting;
                             const rowActions = getRowActions(item);
+                            const submittedAt = getDisplayedSubmittedAt(item);
+                            const savedMarks = feedbackBySubmission[String(primarySubmissionId)]?.marks ?? item.obtained_marks;
+                            const hasSavedMarks = Boolean(item.is_marked || (savedMarks !== "" && savedMarks !== null && savedMarks !== undefined));
 
                             return (
                               <TableRow key={item.id}>
@@ -1661,7 +1729,20 @@ const SubmissionsPage = () => {
                                 </TableCell>
                                 <TableCell>{item.student_roll_no || "-"}</TableCell>
                                 <TableCell>
-                                  <Chip size="small" color={statusChip.color} label={statusChip.label} />
+                                  <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
+                                    {submittedAt ? formatDate(submittedAt) : "—"}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    size="small"
+                                    label={statusChip.label}
+                                    sx={{
+                                      bgcolor: statusChip.bgcolor,
+                                      color: statusChip.color,
+                                      fontWeight: 700,
+                                    }}
+                                  />
                                 </TableCell>
                                 <TableCell>
                                   <TextField
@@ -1671,7 +1752,18 @@ const SubmissionsPage = () => {
                                     value={getFeedbackDraft(item, rowDraftKey).marks}
                                     onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
                                     inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
-                                    sx={{ width: 96 }}
+                                    sx={{
+                                      width: 96,
+                                      ...(hasSavedMarks
+                                        ? {
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: "#dcfce7",
+                                              "& fieldset": { borderColor: "#22c55e" },
+                                              "&:hover fieldset": { borderColor: "#16a34a" },
+                                            },
+                                          }
+                                        : {}),
+                                    }}
                                   />
                                 </TableCell>
                                 <TableCell>
