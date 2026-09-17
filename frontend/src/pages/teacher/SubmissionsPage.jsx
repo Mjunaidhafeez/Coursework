@@ -136,6 +136,37 @@ const buildSubmissionDisplayRows = (sourceRows = []) => {
   return [...nonGroupRows, ...representativeGroupRows].sort(compareByRollNo);
 };
 
+const flattenAssessments = (grouped) => {
+  const list = [];
+  Object.entries(grouped || {}).forEach(([courseTitle, courseworkGroup]) => {
+    Object.entries(courseworkGroup || {}).forEach(([title, rows]) => {
+      list.push({ courseTitle, title, rows });
+    });
+  });
+  return list;
+};
+
+const assessmentMatchesFilter = (rows, filter, searchValue) => {
+  const searched = (rows || []).filter((row) => rowMatchesSearch(row, searchValue));
+  if (!searched.length) return false;
+  if (!filter) return true;
+  return searched.some((row) => rowMatchesWorkflowState(row, filter));
+};
+
+const filterGroupedAssessments = (grouped, filter, searchValue) => {
+  const next = {};
+  Object.entries(grouped || {}).forEach(([courseTitle, courseworkGroup]) => {
+    const filtered = {};
+    Object.entries(courseworkGroup || {}).forEach(([title, rows]) => {
+      if (assessmentMatchesFilter(rows, filter, searchValue)) {
+        filtered[title] = rows;
+      }
+    });
+    if (Object.keys(filtered).length) next[courseTitle] = filtered;
+  });
+  return next;
+};
+
 const groupRowsByCourseAndCoursework = (rows, courseworksMeta, courses) => {
   const courseworkById = {};
   courseworksMeta.forEach((cw) => {
@@ -680,11 +711,16 @@ const SubmissionsPage = () => {
     [rosterRows, courseworksMeta, courses]
   );
 
+  const visibleGrouped = useMemo(
+    () => filterGroupedAssessments(groupedByCourseAndCoursework, workflowFilter, search),
+    [groupedByCourseAndCoursework, workflowFilter, search]
+  );
+
   useEffect(() => {
     setSelectedCourseworkByCourse((prev) => {
       const next = { ...prev };
       let changed = false;
-      Object.entries(groupedByCourseAndCoursework).forEach(([courseTitle, courseworkGroup]) => {
+      Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
         const titles = Object.keys(courseworkGroup);
         if (!titles.length) return;
         const comingTitle = sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
@@ -695,45 +731,36 @@ const SubmissionsPage = () => {
       });
       return changed ? next : prev;
     });
-  }, [groupedByCourseAndCoursework, courseworkById]);
+  }, [visibleGrouped, courseworkById]);
 
   const selectedRosterRows = useMemo(() => {
     const list = [];
-    Object.entries(groupedByCourseAndCoursework).forEach(([courseTitle, courseworkGroup]) => {
+    Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
       const titles = Object.keys(courseworkGroup);
       if (!titles.length) return;
       const selected = selectedCourseworkByCourse[courseTitle] || sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
       (courseworkGroup[selected] || []).forEach((row) => list.push(row));
     });
     return list;
-  }, [groupedByCourseAndCoursework, selectedCourseworkByCourse, courseworkById]);
+  }, [visibleGrouped, selectedCourseworkByCourse, courseworkById]);
 
-  const displayRows = useMemo(() => {
-    const filtered = selectedRosterRows.filter((row) => rowMatchesWorkflowState(row, workflowFilter) && rowMatchesSearch(row, search));
-    if (workflowFilter !== "marked") return filtered;
-    return filtered.flatMap((row) => {
-      if ((row.group_member_rows || []).length > 1) {
-        return row.group_member_rows.map((member) => ({
-          ...member,
-          force_individual_row: true,
-          submission_id: member.submission_id || member.id,
-        }));
-      }
-      return [{ ...row, force_individual_row: true }];
-    });
-  }, [selectedRosterRows, workflowFilter, search]);
+  const displayRows = useMemo(
+    () => selectedRosterRows.filter((row) => rowMatchesSearch(row, search)),
+    [selectedRosterRows, search]
+  );
 
   const filterCounts = useMemo(() => {
-    const searchable = selectedRosterRows.filter((row) => rowMatchesSearch(row, search));
+    const assessments = flattenAssessments(groupedByCourseAndCoursework);
+    const count = (filter) => assessments.filter((item) => assessmentMatchesFilter(item.rows, filter, search)).length;
     return {
-      all: searchable.length,
-      request_pending: searchable.filter((row) => rowMatchesWorkflowState(row, "request_pending")).length,
-      topic_not_submitted: searchable.filter((row) => rowMatchesWorkflowState(row, "topic_not_submitted")).length,
-      ready_for_upload: searchable.filter((row) => rowMatchesWorkflowState(row, "ready_for_upload")).length,
-      file_submitted: searchable.filter((row) => rowMatchesWorkflowState(row, "file_submitted")).length,
-      marked: searchable.filter((row) => rowMatchesWorkflowState(row, "marked")).length,
+      all: count(""),
+      request_pending: count("request_pending"),
+      topic_not_submitted: count("topic_not_submitted"),
+      ready_for_upload: count("ready_for_upload"),
+      file_submitted: count("file_submitted"),
+      marked: count("marked"),
     };
-  }, [selectedRosterRows, search]);
+  }, [groupedByCourseAndCoursework, search]);
 
   const courseNameById = useMemo(() => {
     const map = {};
@@ -1105,7 +1132,7 @@ const SubmissionsPage = () => {
     <Stack spacing={1}>
     <ListingPage
       title={isAdminApprovalsView ? "Assessment Approvals" : "Assessment Approvals"}
-      subtitle="All students of the current assessment, with status. Use the filters to see waiting, approved, submitted, or marked work."
+      subtitle="Filters pick assessments. Open an assessment to see every student and their status."
       tabs={(
         <CompactTabs
           value={workflowFilter || "all"}
@@ -1175,33 +1202,19 @@ const SubmissionsPage = () => {
             </Stack>
           </Stack>
         )}
-        {!Object.keys(groupedByCourseAndCoursework).length && !loading && (
+        {!Object.keys(visibleGrouped).length && !loading && (
           <Box sx={{ py: 5, textAlign: "center" }}>
-            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No students in this filter</Typography>
+            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No assessments in this filter</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Switch to All to see every student, or pick another status for this assessment.
+              Switch to All, or pick another status to see matching assessments.
             </Typography>
           </Box>
         )}
         <Stack spacing={2} ref={resultsSectionRef}>
-          {Object.entries(groupedByCourseAndCoursework).map(([courseTitle, courseworkGroup]) => {
+          {Object.entries(visibleGrouped).map(([courseTitle, courseworkGroup]) => {
             const assessmentTitles = sortAssessmentTitlesByComing(Object.keys(courseworkGroup), courseworkGroup, courseworkById);
             const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
-            const rawItems = (courseworkGroup[selectedTitle] || []).filter(
-              (row) => rowMatchesWorkflowState(row, workflowFilter) && rowMatchesSearch(row, search)
-            );
-            const items = workflowFilter === "marked"
-              ? rawItems.flatMap((row) => {
-                  if ((row.group_member_rows || []).length > 1) {
-                    return row.group_member_rows.map((member) => ({
-                      ...member,
-                      force_individual_row: true,
-                      submission_id: member.submission_id || member.id,
-                    }));
-                  }
-                  return [{ ...row, force_individual_row: true }];
-                })
-              : rawItems;
+            const items = (courseworkGroup[selectedTitle] || []).filter((row) => rowMatchesSearch(row, search));
             const canSaveMarks = items.some(
               (item) =>
                 !item.is_topic_not_submitted &&
@@ -1240,7 +1253,7 @@ const SubmissionsPage = () => {
                     onChange={(next) => setSelectedCourseworkByCourse((prev) => ({ ...prev, [courseTitle]: next }))}
                     tabs={assessmentTitles.map((title) => ({
                       value: title,
-                      label: `${title} (${(courseworkGroup[title] || []).filter((row) => rowMatchesWorkflowState(row, workflowFilter) && rowMatchesSearch(row, search)).length})`,
+                      label: `${title} (${(courseworkGroup[title] || []).length})`,
                     }))}
                   />
                 </Box>
