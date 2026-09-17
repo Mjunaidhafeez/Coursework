@@ -26,7 +26,6 @@ import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
-import PaginationControls from "../../components/PaginationControls";
 import CompactTabs from "../../components/shared/CompactTabs";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
@@ -70,12 +69,106 @@ const sortAssessmentTitlesByComing = (titles, courseworkGroup, courseworkById) =
     (a, b) => getAssessmentDeadlineScore(a, courseworkGroup, courseworkById) - getAssessmentDeadlineScore(b, courseworkGroup, courseworkById)
   );
 
+const rowMatchesWorkflowState = (row, filter) => {
+  if (!filter) return true;
+  if (filter === "topic_not_submitted") return Boolean(row.is_topic_not_submitted);
+  if (filter === "request_pending") {
+    return !row.is_topic_not_submitted && !row.is_marked && row.approval_status !== "approved" && row.approval_status !== "rejected";
+  }
+  if (filter === "ready_for_upload") {
+    return !row.is_topic_not_submitted && String(row.approval_status || "").toLowerCase() === "approved" && !row.file && !row.is_marked;
+  }
+  if (filter === "file_submitted") {
+    return !row.is_topic_not_submitted && Boolean(row.file) && !row.is_marked;
+  }
+  if (filter === "marked") return Boolean(row.is_marked);
+  return true;
+};
+
+const rowMatchesSearch = (row, searchValue) => {
+  const query = String(searchValue || "").trim().toLowerCase();
+  if (!query) return true;
+  return [row.student_name, row.group_name, row.topic, row.student_roll_no, row.coursework_title]
+    .some((value) => String(value || "").toLowerCase().includes(query));
+};
+
+const toWaitingDisplayRow = (entry) => ({
+  id: `missing-${entry.courseworkId}-${entry.rollNo}-${entry.studentName}`,
+  submission_id: null,
+  coursework: entry.courseworkId,
+  coursework_title: entry.courseworkTitle,
+  topic: "",
+  student: entry.studentId,
+  student_name: entry.studentName,
+  student_roll_no: entry.rollNo || "-",
+  group_name: "",
+  approval_status: "pending",
+  status: "not_submitted",
+  submitted_at: null,
+  file: null,
+  is_marked: false,
+  is_topic_not_submitted: true,
+});
+
+const buildSubmissionDisplayRows = (sourceRows = []) => {
+  const nonGroupRows = sourceRows.filter((row) => !row.group).map((row) => ({ ...row, submission_id: row.id }));
+  const groupedRowsMap = new Map();
+  sourceRows
+    .filter((row) => !!row.group)
+    .forEach((row) => {
+      const key = `${row.coursework}-${row.group}`;
+      if (!groupedRowsMap.has(key)) groupedRowsMap.set(key, []);
+      groupedRowsMap.get(key).push(row);
+    });
+
+  const representativeGroupRows = [];
+  groupedRowsMap.forEach((groupRows) => {
+    const representative = [...groupRows].sort(
+      (a, b) => new Date(b.submitted_at || b.created_at || 0).getTime() - new Date(a.submitted_at || a.created_at || 0).getTime()
+    )[0];
+    representativeGroupRows.push({
+      ...representative,
+      submission_id: representative.id,
+      group_member_rows: groupRows.map((row) => ({ ...row, submission_id: row.id })).sort(compareByRollNo),
+    });
+  });
+
+  return [...nonGroupRows, ...representativeGroupRows].sort(compareByRollNo);
+};
+
+const groupRowsByCourseAndCoursework = (rows, courseworksMeta, courses) => {
+  const courseworkById = {};
+  courseworksMeta.forEach((cw) => {
+    courseworkById[cw.id] = cw;
+  });
+  const courseById = {};
+  courses.forEach((course) => {
+    courseById[course.id] = course;
+  });
+
+  const grouped = {};
+  rows.forEach((row) => {
+    const cw = courseworkById[row.coursework];
+    const courseTitle = cw ? (courseById[cw.course]?.title || `Course ${cw.course}`) : "Unmapped Course";
+    const courseworkTitle = row.coursework_title || cw?.title || `Assessment #${row.coursework}`;
+    if (!grouped[courseTitle]) grouped[courseTitle] = {};
+    if (!grouped[courseTitle][courseworkTitle]) grouped[courseTitle][courseworkTitle] = [];
+    grouped[courseTitle][courseworkTitle].push(row);
+  });
+  Object.keys(grouped).forEach((courseTitle) => {
+    Object.keys(grouped[courseTitle]).forEach((courseworkTitle) => {
+      grouped[courseTitle][courseworkTitle].sort(compareByRollNo);
+    });
+  });
+  return grouped;
+};
+
 const SubmissionsPage = () => {
   const { user } = useAuth();
   const { notify, isGlobalLoading } = useUi();
   const isAdminApprovalsView = user?.role === "super_admin";
   const [statusFilter, setStatusFilter] = useState("");
-  const [workflowFilter, setWorkflowFilter] = useState("request_pending");
+  const [workflowFilter, setWorkflowFilter] = useState("");
   const [courseworksMeta, setCourseworksMeta] = useState([]);
   const [courses, setCourses] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
@@ -103,7 +196,6 @@ const SubmissionsPage = () => {
   const bulkDeleteLockRef = useRef(false);
   const resultsSectionRef = useRef(null);
   const hasMountedRef = useRef(false);
-  const didPickLandingTabRef = useRef(false);
   const [workflowCounts, setWorkflowCounts] = useState({
     request_pending: 0,
     ready_for_upload: 0,
@@ -111,7 +203,6 @@ const SubmissionsPage = () => {
     marked: 0,
     request_rejected: 0,
   });
-  const [metaReady, setMetaReady] = useState(false);
 
   const queryFn = async ({ search, page, pageSize }) => {
     const params = new URLSearchParams();
@@ -125,7 +216,7 @@ const SubmissionsPage = () => {
     return data;
   };
 
-  const { rows, total, search, setSearch, page, pageSize, loading, runSearch, resetSearch, changePage, changePageSize, setRows, loadData } =
+  const { rows, search, setSearch, loading, runSearch, resetSearch, setRows, loadData } =
     usePaginatedQuery({ queryFn, dependencies: [statusFilter, workflowFilter] });
 
   const courseworkById = useMemo(() => {
@@ -193,7 +284,6 @@ const SubmissionsPage = () => {
       const enrollmentsRes = await api.get(`${ENDPOINTS.enrollments}?page_size=2000`);
       setEnrollments(enrollmentsRes.data.results || []);
       await Promise.all([loadFeedbackMap(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
-      setMetaReady(true);
     };
     loadMeta();
   }, [statusFilter]);
@@ -565,6 +655,7 @@ const SubmissionsPage = () => {
           courseworkTitle: coursework.title || coursework.coursework_title || `Assessment #${coursework.id}`,
           courseTitle,
           semesterTitle: courseObj?.semester_name || "Semester",
+          studentId: enrollment.student,
           studentName: enrollment.student_name || `Student #${enrollment.student}`,
           rollNo: enrollment.student_roll_no || "-",
         });
@@ -578,103 +669,16 @@ const SubmissionsPage = () => {
     );
   }, [courseworksMeta, enrollments, submissionIndexRows, groupsById, courses]);
 
-  const pendingNoRequestEntries = useMemo(() => {
-    const shouldShow = workflowFilter === "" || workflowFilter === "request_pending" || workflowFilter === "topic_not_submitted";
-    if (!shouldShow) return [];
-    return allPendingNoRequestEntries;
-  }, [workflowFilter, allPendingNoRequestEntries]);
+  const rosterRows = useMemo(() => {
+    const submissionRows = buildSubmissionDisplayRows(submissionIndexRows);
+    const waitingRows = allPendingNoRequestEntries.map(toWaitingDisplayRow);
+    return [...submissionRows, ...waitingRows].sort(compareByRollNo);
+  }, [submissionIndexRows, allPendingNoRequestEntries]);
 
-  const waitingAssessmentCount = useMemo(
-    () => new Set(allPendingNoRequestEntries.map((entry) => String(entry.courseworkId))).size,
-    [allPendingNoRequestEntries]
+  const groupedByCourseAndCoursework = useMemo(
+    () => groupRowsByCourseAndCoursework(rosterRows, courseworksMeta, courses),
+    [rosterRows, courseworksMeta, courses]
   );
-
-  const displayRows = useMemo(() => {
-    if (workflowFilter === "topic_not_submitted") {
-      return pendingNoRequestEntries.map((entry) => ({
-        id: `missing-${entry.courseworkId}-${entry.rollNo}-${entry.studentName}`,
-        submission_id: null,
-        coursework: entry.courseworkId,
-        coursework_title: entry.courseworkTitle,
-        topic: "",
-        student_name: entry.studentName,
-        student_roll_no: entry.rollNo || "-",
-        group_name: "",
-        approval_status: "pending",
-        status: "not_submitted",
-        submitted_at: null,
-        file: null,
-        is_marked: false,
-        is_topic_not_submitted: true,
-      })).sort(compareByRollNo);
-    }
-    if (workflowFilter === "marked") {
-      const seen = new Set();
-      return rows
-        .filter((row) => {
-          const key = String(row?.id || "");
-          if (!key || seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .map((row) => ({
-          ...row,
-          submission_id: row.id,
-          force_individual_row: true,
-        }))
-        .sort(compareByRollNo);
-    }
-    const nonGroupRows = rows.filter((row) => !row.group).map((row) => ({ ...row, submission_id: row.id }));
-    const groupedRowsMap = new Map();
-    rows
-      .filter((row) => !!row.group)
-      .forEach((row) => {
-        const key = `${row.coursework}-${row.group}`;
-        if (!groupedRowsMap.has(key)) groupedRowsMap.set(key, []);
-        groupedRowsMap.get(key).push(row);
-      });
-
-    const representativeGroupRows = [];
-    groupedRowsMap.forEach((groupRows) => {
-      const representative = [...groupRows].sort(
-        (a, b) => new Date(b.submitted_at || b.created_at || 0).getTime() - new Date(a.submitted_at || a.created_at || 0).getTime()
-      )[0];
-      representativeGroupRows.push({
-        ...representative,
-        submission_id: representative.id,
-        group_member_rows: groupRows.map((row) => ({ ...row, submission_id: row.id })).sort(compareByRollNo),
-      });
-    });
-
-    return [...nonGroupRows, ...representativeGroupRows].sort(compareByRollNo);
-  }, [workflowFilter, rows, pendingNoRequestEntries, groupsById, enrollments]);
-
-  const groupedByCourseAndCoursework = useMemo(() => {
-    const courseworkById = {};
-    courseworksMeta.forEach((cw) => {
-      courseworkById[cw.id] = cw;
-    });
-    const courseById = {};
-    courses.forEach((course) => {
-      courseById[course.id] = course;
-    });
-
-    const grouped = {};
-    displayRows.forEach((row) => {
-      const cw = courseworkById[row.coursework];
-      const courseTitle = cw ? (courseById[cw.course]?.title || `Course ${cw.course}`) : "Unmapped Course";
-      const courseworkTitle = row.coursework_title || cw?.title || `Assessment #${row.coursework}`;
-      if (!grouped[courseTitle]) grouped[courseTitle] = {};
-      if (!grouped[courseTitle][courseworkTitle]) grouped[courseTitle][courseworkTitle] = [];
-      grouped[courseTitle][courseworkTitle].push(row);
-    });
-    Object.keys(grouped).forEach((courseTitle) => {
-      Object.keys(grouped[courseTitle]).forEach((courseworkTitle) => {
-        grouped[courseTitle][courseworkTitle].sort(compareByRollNo);
-      });
-    });
-    return grouped;
-  }, [displayRows, courseworksMeta, courses]);
 
   useEffect(() => {
     setSelectedCourseworkByCourse((prev) => {
@@ -693,27 +697,43 @@ const SubmissionsPage = () => {
     });
   }, [groupedByCourseAndCoursework, courseworkById]);
 
-  useEffect(() => {
-    if (didPickLandingTabRef.current) return;
-    const topics = workflowCounts.request_pending || 0;
-    const waiting = waitingAssessmentCount;
-    const approved = workflowCounts.ready_for_upload || 0;
-    const files = workflowCounts.file_submitted || 0;
-    const marked = workflowCounts.marked || 0;
-    if (!metaReady) return;
-    didPickLandingTabRef.current = true;
-    if (topics > 0) {
-      setWorkflowFilter("request_pending");
-      return;
-    }
-    if (waiting > 0) {
-      setWorkflowFilter("topic_not_submitted");
-      return;
-    }
-    if (approved > 0) setWorkflowFilter("ready_for_upload");
-    else if (files > 0) setWorkflowFilter("file_submitted");
-    else if (marked > 0) setWorkflowFilter("marked");
-  }, [metaReady, workflowCounts, waitingAssessmentCount]);
+  const selectedRosterRows = useMemo(() => {
+    const list = [];
+    Object.entries(groupedByCourseAndCoursework).forEach(([courseTitle, courseworkGroup]) => {
+      const titles = Object.keys(courseworkGroup);
+      if (!titles.length) return;
+      const selected = selectedCourseworkByCourse[courseTitle] || sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
+      (courseworkGroup[selected] || []).forEach((row) => list.push(row));
+    });
+    return list;
+  }, [groupedByCourseAndCoursework, selectedCourseworkByCourse, courseworkById]);
+
+  const displayRows = useMemo(() => {
+    const filtered = selectedRosterRows.filter((row) => rowMatchesWorkflowState(row, workflowFilter) && rowMatchesSearch(row, search));
+    if (workflowFilter !== "marked") return filtered;
+    return filtered.flatMap((row) => {
+      if ((row.group_member_rows || []).length > 1) {
+        return row.group_member_rows.map((member) => ({
+          ...member,
+          force_individual_row: true,
+          submission_id: member.submission_id || member.id,
+        }));
+      }
+      return [{ ...row, force_individual_row: true }];
+    });
+  }, [selectedRosterRows, workflowFilter, search]);
+
+  const filterCounts = useMemo(() => {
+    const searchable = selectedRosterRows.filter((row) => rowMatchesSearch(row, search));
+    return {
+      all: searchable.length,
+      request_pending: searchable.filter((row) => rowMatchesWorkflowState(row, "request_pending")).length,
+      topic_not_submitted: searchable.filter((row) => rowMatchesWorkflowState(row, "topic_not_submitted")).length,
+      ready_for_upload: searchable.filter((row) => rowMatchesWorkflowState(row, "ready_for_upload")).length,
+      file_submitted: searchable.filter((row) => rowMatchesWorkflowState(row, "file_submitted")).length,
+      marked: searchable.filter((row) => rowMatchesWorkflowState(row, "marked")).length,
+    };
+  }, [selectedRosterRows, search]);
 
   const courseNameById = useMemo(() => {
     const map = {};
@@ -1085,18 +1105,18 @@ const SubmissionsPage = () => {
     <Stack spacing={1}>
     <ListingPage
       title={isAdminApprovalsView ? "Assessment Approvals" : "Assessment Approvals"}
-      subtitle="Approve the topic, wait for the file, then enter marks and Save."
+      subtitle="All students of the current assessment, with status. Use the filters to see waiting, approved, submitted, or marked work."
       tabs={(
         <CompactTabs
           value={workflowFilter || "all"}
           onChange={(next) => setWorkflowFilter(next === "all" ? "" : next)}
           tabs={[
-            { value: "request_pending", label: `Topics (${workflowCounts.request_pending || 0})` },
-            { value: "topic_not_submitted", label: `Waiting (${waitingAssessmentCount})` },
-            { value: "ready_for_upload", label: `Approved (${workflowCounts.ready_for_upload || 0})` },
-            { value: "file_submitted", label: `Files (${workflowCounts.file_submitted || 0})` },
-            { value: "marked", label: `Marked (${workflowCounts.marked || 0})` },
-            { value: "all", label: "All" },
+            { value: "all", label: `All (${filterCounts.all || 0})` },
+            { value: "topic_not_submitted", label: `Waiting (${filterCounts.topic_not_submitted || 0})` },
+            { value: "request_pending", label: `Topics (${filterCounts.request_pending || 0})` },
+            { value: "ready_for_upload", label: `Approved (${filterCounts.ready_for_upload || 0})` },
+            { value: "file_submitted", label: `Files (${filterCounts.file_submitted || 0})` },
+            { value: "marked", label: `Marked (${filterCounts.marked || 0})` },
           ]}
         />
       )}
@@ -1155,11 +1175,11 @@ const SubmissionsPage = () => {
             </Stack>
           </Stack>
         )}
-        {!displayRows.length && !loading && (
+        {!Object.keys(groupedByCourseAndCoursework).length && !loading && (
           <Box sx={{ py: 5, textAlign: "center" }}>
-            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No work in this step</Typography>
+            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No students in this filter</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Switch tabs to see waiting students, topics to approve, uploaded files, or marked work.
+              Switch to All to see every student, or pick another status for this assessment.
             </Typography>
           </Box>
         )}
@@ -1167,7 +1187,21 @@ const SubmissionsPage = () => {
           {Object.entries(groupedByCourseAndCoursework).map(([courseTitle, courseworkGroup]) => {
             const assessmentTitles = sortAssessmentTitlesByComing(Object.keys(courseworkGroup), courseworkGroup, courseworkById);
             const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
-            const items = courseworkGroup[selectedTitle] || [];
+            const rawItems = (courseworkGroup[selectedTitle] || []).filter(
+              (row) => rowMatchesWorkflowState(row, workflowFilter) && rowMatchesSearch(row, search)
+            );
+            const items = workflowFilter === "marked"
+              ? rawItems.flatMap((row) => {
+                  if ((row.group_member_rows || []).length > 1) {
+                    return row.group_member_rows.map((member) => ({
+                      ...member,
+                      force_individual_row: true,
+                      submission_id: member.submission_id || member.id,
+                    }));
+                  }
+                  return [{ ...row, force_individual_row: true }];
+                })
+              : rawItems;
             const canSaveMarks = items.some(
               (item) =>
                 !item.is_topic_not_submitted &&
@@ -1206,7 +1240,7 @@ const SubmissionsPage = () => {
                     onChange={(next) => setSelectedCourseworkByCourse((prev) => ({ ...prev, [courseTitle]: next }))}
                     tabs={assessmentTitles.map((title) => ({
                       value: title,
-                      label: `${title} (${courseworkGroup[title].length})`,
+                      label: `${title} (${(courseworkGroup[title] || []).filter((row) => rowMatchesWorkflowState(row, workflowFilter) && rowMatchesSearch(row, search)).length})`,
                     }))}
                   />
                 </Box>
@@ -1219,7 +1253,7 @@ const SubmissionsPage = () => {
                       <Table
                         size="small"
                         sx={{
-                          minWidth: workflowFilter === "topic_not_submitted" ? 420 : 720,
+                          minWidth: 720,
                           "& th": { py: 0.9, fontWeight: 700, color: "#35507c", bgcolor: "#f7faff" },
                           "& td": { py: 1, verticalAlign: "middle" },
                           "& tbody tr:nth-of-type(even)": { bgcolor: "#fbfdff" },
@@ -1227,29 +1261,19 @@ const SubmissionsPage = () => {
                       >
                         <TableHead>
                           <TableRow>
-                            {workflowFilter === "topic_not_submitted" ? (
-                              <>
-                                <TableCell>Student</TableCell>
-                                <TableCell>Roll No</TableCell>
-                                <TableCell>Status</TableCell>
-                              </>
-                            ) : (
-                              <>
-                                <TableCell padding="checkbox">
-                                  <Checkbox
-                                    size="small"
-                                    checked={allSelectableChecked}
-                                    indeterminate={selectedCount > 0 && !allSelectableChecked}
-                                    onChange={toggleSelectAllVisible}
-                                  />
-                                </TableCell>
-                                <TableCell>Student / Group</TableCell>
-                                <TableCell>Status</TableCell>
-                                <TableCell>File</TableCell>
-                                <TableCell>Marks</TableCell>
-                                <TableCell align="right">Action</TableCell>
-                              </>
-                            )}
+                            <TableCell padding="checkbox">
+                              <Checkbox
+                                size="small"
+                                checked={allSelectableChecked}
+                                indeterminate={selectedCount > 0 && !allSelectableChecked}
+                                onChange={toggleSelectAllVisible}
+                              />
+                            </TableCell>
+                            <TableCell>Student / Group</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell>File</TableCell>
+                            <TableCell>Marks</TableCell>
+                            <TableCell align="right">Action</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -1296,118 +1320,104 @@ const SubmissionsPage = () => {
                                 : item.approval_status === "rejected"
                                   ? { label: "Rejected", color: "error" }
                                   : item.approval_status === "approved"
-                                    ? { label: item.file ? "Approved · file in" : "Approved", color: "success" }
+                                    ? { label: item.file ? "Submitted" : "Approved", color: item.file ? "info" : "success" }
                                     : { label: "Needs approval", color: "warning" };
 
                             return (
                               <Fragment key={item.id}>
                                 <TableRow>
-                                  {workflowFilter === "topic_not_submitted" ? (
-                                    <>
-                                      <TableCell>
-                                        <Typography sx={{ fontWeight: 700 }}>{item.student_name || item.group_name || "-"}</Typography>
-                                      </TableCell>
-                                      <TableCell>{item.student_roll_no || "-"}</TableCell>
-                                      <TableCell>
-                                        <Chip size="small" color="warning" label="Waiting" />
-                                      </TableCell>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <TableCell padding="checkbox">
-                                        <Checkbox
-                                          size="small"
-                                          disabled={!canSelectSubmission(item)}
-                                          checked={!!selectedSubmissionIds[String(primarySubmissionId)]}
-                                          onChange={() => toggleSelectSubmission(item)}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <Typography
-                                          sx={{
-                                            fontWeight: 700,
-                                            lineHeight: 1.3,
-                                            cursor: canViewMembers ? "pointer" : "default",
-                                            color: canViewMembers ? "#1d4fbf" : "inherit",
-                                          }}
-                                          onClick={canViewMembers ? () => openSubmissionMembers(item) : undefined}
-                                        >
-                                          {studentLabel}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary" display="block">
-                                          {item.topic ? item.topic : "No topic"}
-                                          {canViewMembers ? ` · Sent by ${senderName}` : ""}
-                                          {item.student_roll_no ? ` · ${item.student_roll_no}` : ""}
-                                          {item.submitted_at ? ` · ${formatDate(item.submitted_at)}` : ""}
-                                        </Typography>
-                                        {canViewMembers && (
-                                          <Button
-                                            size="small"
-                                            sx={{ px: 0, minWidth: 0, mt: 0.2 }}
-                                            onClick={() => openSubmissionMembers(item)}
-                                          >
-                                            {memberHintCount ? `View members (${memberHintCount})` : "View members"}
-                                          </Button>
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        <Chip size="small" color={simpleStatus.color} label={simpleStatus.label} />
-                                      </TableCell>
-                                      <TableCell>
-                                        {item.file ? (
-                                          <Stack direction="row" spacing={0.3}>
-                                            <IconButton size="small" onClick={() => openFilePreview(item)}>
-                                              <VisibilityOutlinedIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton size="small" onClick={() => downloadFile(item)}>
-                                              <DownloadRoundedIcon fontSize="small" />
-                                            </IconButton>
-                                          </Stack>
-                                        ) : (
-                                          <Typography variant="caption" color="text.secondary">—</Typography>
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        {canShowMarkingControls ? (
-                                          <TextField
-                                            size="small"
-                                            type="number"
-                                            placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
-                                            value={getFeedbackDraft(item, rowDraftKey).marks}
-                                            onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
-                                            inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
-                                            sx={{ width: 88 }}
-                                          />
-                                        ) : (
-                                          <Typography variant="body2" color="text.secondary">
-                                            {item.is_marked ? formatMarks(givenMarks) : "—"}
-                                          </Typography>
-                                        )}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        <Stack direction="row" spacing={0.6} justifyContent="flex-end">
-                                          {!item.is_marked && item.approval_status !== "approved" && (
-                                            <Button size="small" color="success" variant="contained" onClick={() => approve(item)}>
-                                              Approve
-                                            </Button>
-                                          )}
-                                          {!item.is_marked && item.approval_status !== "rejected" && item.approval_status !== "approved" && (
-                                            <Button size="small" color="inherit" onClick={() => reject(item)}>
-                                              Reject
-                                            </Button>
-                                          )}
-                                          {canShowDeleteAction && (
-                                            <Button size="small" color="error" onClick={() => remove(primarySubmissionId)}>
-                                              Delete
-                                            </Button>
-                                          )}
-                                        </Stack>
-                                      </TableCell>
-                                    </>
-                                  )}
+                                  <TableCell padding="checkbox">
+                                    <Checkbox
+                                      size="small"
+                                      disabled={!canSelectSubmission(item)}
+                                      checked={!!selectedSubmissionIds[String(primarySubmissionId)]}
+                                      onChange={() => toggleSelectSubmission(item)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Typography
+                                      sx={{
+                                        fontWeight: 700,
+                                        lineHeight: 1.3,
+                                        cursor: canViewMembers ? "pointer" : "default",
+                                        color: canViewMembers ? "#1d4fbf" : "inherit",
+                                      }}
+                                      onClick={canViewMembers ? () => openSubmissionMembers(item) : undefined}
+                                    >
+                                      {studentLabel}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                      {item.topic ? item.topic : "No topic"}
+                                      {canViewMembers ? ` · Sent by ${senderName}` : ""}
+                                      {item.student_roll_no ? ` · ${item.student_roll_no}` : ""}
+                                      {item.submitted_at ? ` · ${formatDate(item.submitted_at)}` : ""}
+                                    </Typography>
+                                    {canViewMembers && (
+                                      <Button
+                                        size="small"
+                                        sx={{ px: 0, minWidth: 0, mt: 0.2 }}
+                                        onClick={() => openSubmissionMembers(item)}
+                                      >
+                                        {memberHintCount ? `View members (${memberHintCount})` : "View members"}
+                                      </Button>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Chip size="small" color={simpleStatus.color} label={simpleStatus.label} />
+                                  </TableCell>
+                                  <TableCell>
+                                    {item.file ? (
+                                      <Stack direction="row" spacing={0.3}>
+                                        <IconButton size="small" onClick={() => openFilePreview(item)}>
+                                          <VisibilityOutlinedIcon fontSize="small" />
+                                        </IconButton>
+                                        <IconButton size="small" onClick={() => downloadFile(item)}>
+                                          <DownloadRoundedIcon fontSize="small" />
+                                        </IconButton>
+                                      </Stack>
+                                    ) : (
+                                      <Typography variant="caption" color="text.secondary">—</Typography>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {canShowMarkingControls ? (
+                                      <TextField
+                                        size="small"
+                                        type="number"
+                                        placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
+                                        value={getFeedbackDraft(item, rowDraftKey).marks}
+                                        onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
+                                        inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
+                                        sx={{ width: 88 }}
+                                      />
+                                    ) : (
+                                      <Typography variant="body2" color="text.secondary">
+                                        {item.is_marked ? formatMarks(givenMarks) : "—"}
+                                      </Typography>
+                                    )}
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    <Stack direction="row" spacing={0.6} justifyContent="flex-end">
+                                      {!item.is_topic_not_submitted && !item.is_marked && item.approval_status !== "approved" && (
+                                        <Button size="small" color="success" variant="contained" onClick={() => approve(item)}>
+                                          Approve
+                                        </Button>
+                                      )}
+                                      {!item.is_topic_not_submitted && !item.is_marked && item.approval_status !== "rejected" && item.approval_status !== "approved" && (
+                                        <Button size="small" color="inherit" onClick={() => reject(item)}>
+                                          Reject
+                                        </Button>
+                                      )}
+                                      {canShowDeleteAction && primarySubmissionId && (
+                                        <Button size="small" color="error" onClick={() => remove(primarySubmissionId)}>
+                                          Delete
+                                        </Button>
+                                      )}
+                                    </Stack>
+                                  </TableCell>
                                 </TableRow>
 
-                                {workflowFilter !== "topic_not_submitted" && isGroupRow && (
+                                {isGroupRow && (
                                   <TableRow>
                                     <TableCell sx={{ p: 0 }} colSpan={6}>
                                       <Collapse in={groupOpen} timeout="auto" unmountOnExit>
@@ -1478,8 +1488,9 @@ const SubmissionsPage = () => {
           })}
         </Stack>
         {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
-
-        <PaginationControls page={page} pageSize={pageSize} total={total} onPageChange={changePage} onPageSizeChange={changePageSize} />
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          {displayRows.length} student{displayRows.length === 1 ? "" : "s"} in this view
+        </Typography>
     </ListingPage>
 
       <Dialog
