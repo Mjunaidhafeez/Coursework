@@ -9,6 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   Stack,
   Table,
@@ -336,6 +337,14 @@ const SubmissionsPage = () => {
   };
 
   const getPrimarySubmissionId = (submission) => submission?.submission_id || submission?.id;
+  const hasPersistedSubmission = (submission) => {
+    if (!submission || submission.is_topic_not_submitted) return false;
+    const id = getPrimarySubmissionId(submission);
+    if (!id) return false;
+    return !String(submission.id || "").startsWith("missing-");
+  };
+  const getRowSelectKey = (submission, idx = 0) =>
+    String(getPrimarySubmissionId(submission) || submission?.id || `row-${submission?.coursework}-${submission?.student || idx}`);
 
   const resolveActionScope = (submission) => (submission?.group && !submission?.is_topic_not_submitted ? "group" : "single");
   const resolveRowSaveScope = (submission) => {
@@ -356,13 +365,7 @@ const SubmissionsPage = () => {
     !submission?.is_topic_not_submitted &&
     String(submission?.approval_status || "").toLowerCase() === "approved" &&
     Boolean(getPrimarySubmissionId(submission));
-  const canBulkDeleteSubmission = (submission) =>
-    isAdminApprovalsView &&
-    !submission?.is_topic_not_submitted &&
-    ["ready_for_upload", "file_submitted", "marked"].includes(workflowFilter) &&
-    Boolean(getPrimarySubmissionId(submission));
-  const canSelectSubmission = (submission) =>
-    canApproveSubmission(submission) || canBulkMarkSubmission(submission) || canBulkDeleteSubmission(submission);
+  const canBulkDeleteSubmission = (submission) => isAdminApprovalsView && hasPersistedSubmission(submission);
 
   const approve = async (submission) => {
     const submissionId = getPrimarySubmissionId(submission);
@@ -396,11 +399,22 @@ const SubmissionsPage = () => {
     }
   };
 
-  const toggleSelectSubmission = (submission) => {
-    const submissionId = getPrimarySubmissionId(submission);
-    if (!submissionId || !canSelectSubmission(submission)) return;
-    const key = String(submissionId);
+  const toggleSelectSubmission = (submission, idx = 0) => {
+    const key = getRowSelectKey(submission, idx);
     setSelectedSubmissionIds((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleSelectAllItems = (items = []) => {
+    if (!items.length) return;
+    const keys = items.map((item, idx) => getRowSelectKey(item, idx));
+    const allOn = keys.every((key) => selectedSubmissionIds[key]);
+    setSelectedSubmissionIds((prev) => {
+      const next = { ...prev };
+      keys.forEach((key) => {
+        next[key] = !allOn;
+      });
+      return next;
+    });
   };
 
   const openSubmissionMembers = async (submission, options = {}) => {
@@ -817,44 +831,23 @@ const SubmissionsPage = () => {
       })),
     }));
   }, [displayRows, courseworkById, courseNameById, courseTeacherById, feedbackBySubmission]);
-  const selectableRows = useMemo(() => displayRows.filter(canSelectSubmission), [displayRows, workflowFilter, isAdminApprovalsView]);
-  const selectableIds = useMemo(
-    () =>
-      selectableRows
-        .map((row) => String(getPrimarySubmissionId(row)))
-        .filter((id) => Boolean(id)),
-    [selectableRows]
-  );
-  const selectedCount = useMemo(
-    () => selectableIds.filter((id) => selectedSubmissionIds[id]).length,
-    [selectableIds, selectedSubmissionIds]
-  );
   const selectedRows = useMemo(
-    () => selectableRows.filter((row) => selectedSubmissionIds[String(getPrimarySubmissionId(row))]),
-    [selectableRows, selectedSubmissionIds]
+    () => displayRows.filter((row, idx) => selectedSubmissionIds[getRowSelectKey(row, idx)]),
+    [displayRows, selectedSubmissionIds]
   );
   const selectedApproveRows = useMemo(() => selectedRows.filter(canApproveSubmission), [selectedRows]);
   const selectedMarkRows = useMemo(() => selectedRows.filter(canBulkMarkSubmission), [selectedRows]);
   const selectedDeleteRows = useMemo(() => selectedRows.filter(canBulkDeleteSubmission), [selectedRows]);
-  const allSelectableChecked = selectableIds.length > 0 && selectedCount === selectableIds.length;
+  const visibleSelectKeys = useMemo(
+    () => displayRows.map((row, idx) => getRowSelectKey(row, idx)),
+    [displayRows]
+  );
 
-  const toggleSelectAllVisible = () => {
-    if (!selectableIds.length) return;
-    setSelectedSubmissionIds((prev) => {
-      const next = { ...prev };
-      const shouldSelectAll = !allSelectableChecked;
-      selectableIds.forEach((id) => {
-        next[id] = shouldSelectAll;
-      });
-      return next;
-    });
-  };
-
-  const bulkApproveSelected = async () => {
+  const bulkApproveSelected = async (rowList) => {
     if (bulkApproveLockRef.current) return;
-    const targets = selectedApproveRows;
+    const targets = (rowList || selectedApproveRows).filter(canApproveSubmission);
     if (!targets.length) {
-      notify("Please select at least one submission", "warning");
+      notify("Select students who still need topic approval", "warning");
       return;
     }
     bulkApproveLockRef.current = true;
@@ -880,10 +873,11 @@ const SubmissionsPage = () => {
       bulkApproveLockRef.current = false;
     }
   };
-  const bulkSaveSelectedMarks = async () => {
+  const bulkSaveSelectedMarks = async (rowList) => {
     if (bulkSaveLockRef.current) return;
-    if (!selectedMarkRows.length) {
-      notify("Select approved rows for bulk marks save", "warning");
+    const markRows = (rowList || selectedMarkRows).filter(canBulkMarkSubmission);
+    if (!markRows.length) {
+      notify("Select approved students to give the same marks", "warning");
       return;
     }
     const normalizedBulkMarks = normalizeMarksValue(bulkMarks);
@@ -895,7 +889,7 @@ const SubmissionsPage = () => {
     setBulkSavingMarks(true);
     try {
       const payload = {
-        items: selectedMarkRows.map((row) => ({
+        items: markRows.map((row) => ({
           submission: getPrimarySubmissionId(row),
           scope: resolveRowSaveScope(row),
           target_student_id: row.force_individual_row ? row.student : null,
@@ -969,10 +963,11 @@ const SubmissionsPage = () => {
       bulkSaveLockRef.current = false;
     }
   };
-  const bulkDeleteSelected = async () => {
+  const bulkDeleteSelected = async (rowList) => {
     if (bulkDeleteLockRef.current) return;
-    if (!selectedDeleteRows.length) {
-      notify("Select rows from approved/submitted/marked to bulk delete", "warning");
+    const deleteRows = (rowList || selectedDeleteRows).filter(canBulkDeleteSubmission);
+    if (!deleteRows.length) {
+      notify("Select submitted records to delete", "warning");
       return;
     }
     if (!confirmDelete("selected records")) {
@@ -981,7 +976,7 @@ const SubmissionsPage = () => {
     bulkDeleteLockRef.current = true;
     setBulkDeleting(true);
     try {
-      const ids = selectedDeleteRows.map((row) => getPrimarySubmissionId(row)).filter(Boolean);
+      const ids = deleteRows.map((row) => getPrimarySubmissionId(row)).filter(Boolean);
       const { data } = await api.post(`${ENDPOINTS.submissions}bulk_delete/`, { ids });
       const deletedCount = Number(data?.deleted_count || 0);
       notify(`${deletedCount} record(s) deleted`);
@@ -1121,87 +1116,53 @@ const SubmissionsPage = () => {
   useEffect(() => {
     setSelectedSubmissionIds((prev) => {
       const next = {};
-      selectableIds.forEach((id) => {
+      visibleSelectKeys.forEach((id) => {
         if (prev[id]) next[id] = true;
       });
       return shallowEqualObjects(prev, next) ? prev : next;
     });
-  }, [selectableIds]);
+  }, [visibleSelectKeys]);
 
   return (
     <Stack spacing={1}>
     <ListingPage
-      title={isAdminApprovalsView ? "Assessment Approvals" : "Assessment Approvals"}
-      subtitle="Filters pick assessments. Open an assessment to see every student and their status."
-      tabs={(
-        <CompactTabs
-          value={workflowFilter || "all"}
-          onChange={(next) => setWorkflowFilter(next === "all" ? "" : next)}
-          tabs={[
-            { value: "all", label: `All (${filterCounts.all || 0})` },
-            { value: "topic_not_submitted", label: `Waiting (${filterCounts.topic_not_submitted || 0})` },
-            { value: "request_pending", label: `Topics (${filterCounts.request_pending || 0})` },
-            { value: "ready_for_upload", label: `Approved (${filterCounts.ready_for_upload || 0})` },
-            { value: "file_submitted", label: `Files (${filterCounts.file_submitted || 0})` },
-            { value: "marked", label: `Marked (${filterCounts.marked || 0})` },
-          ]}
-        />
-      )}
+      title="Assessment Approvals"
+      subtitle="First pick assessments by status, then open one class list. Select students to approve, mark, or delete."
+      actions={isAdminApprovalsView ? (
+        <Stack direction="row" spacing={0.8}>
+          <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
+          <Button size="small" variant="outlined" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>PDF</Button>
+        </Stack>
+      ) : null}
       filters={(
-        <SearchToolbar
-          label="Search name, topic or group"
-          search={search}
-          onSearchChange={setSearch}
-          onSearch={runSearch}
-          onReset={resetSearch}
-          actions={isAdminApprovalsView ? (
-            <>
-              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
-              <Button size="small" variant="outlined" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>PDF</Button>
-            </>
-          ) : null}
-        />
+        <Stack spacing={1}>
+          <Box>
+            <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "#35507c", mb: 0.5 }}>
+              Assessments
+            </Typography>
+            <CompactTabs
+              value={workflowFilter || "all"}
+              onChange={(next) => setWorkflowFilter(next === "all" ? "" : next)}
+              tabs={[
+                { value: "all", label: `All (${filterCounts.all || 0})` },
+                { value: "topic_not_submitted", label: `Waiting (${filterCounts.topic_not_submitted || 0})` },
+                { value: "request_pending", label: `Topics (${filterCounts.request_pending || 0})` },
+                { value: "ready_for_upload", label: `Approved (${filterCounts.ready_for_upload || 0})` },
+                { value: "file_submitted", label: `Files (${filterCounts.file_submitted || 0})` },
+                { value: "marked", label: `Marked (${filterCounts.marked || 0})` },
+              ]}
+            />
+          </Box>
+          <SearchToolbar
+            label="Search student, topic or group"
+            search={search}
+            onSearchChange={setSearch}
+            onSearch={runSearch}
+            onReset={resetSearch}
+          />
+        </Stack>
       )}
     >
-        {selectedCount > 0 && (
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            spacing={1}
-            alignItems={{ md: "center" }}
-            justifyContent="space-between"
-            sx={{ mb: 1.2, p: 1, borderRadius: 1.5, bgcolor: "#f3f7ff", border: "1px solid #dbeafe" }}
-          >
-            <Typography variant="body2" sx={{ fontWeight: 700, color: "#16356f" }}>
-              {selectedCount} selected
-            </Typography>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }}>
-              {selectedMarkRows.length > 0 && (
-                <>
-                  <TextField
-                    size="small"
-                    type="number"
-                    label="Bulk marks"
-                    value={bulkMarks}
-                    onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
-                    inputProps={{ min: 0, step: 1 }}
-                    sx={{ width: 110 }}
-                  />
-                  <Button size="small" variant="contained" disabled={bulkSavingMarks} onClick={bulkSaveSelectedMarks}>
-                    {bulkSavingMarks ? "Saving..." : "Apply to selected"}
-                  </Button>
-                </>
-              )}
-              <Button size="small" variant="contained" color="success" disabled={!selectedApproveRows.length} onClick={bulkApproveSelected}>
-                Approve
-              </Button>
-              {isAdminApprovalsView && (
-                <Button size="small" color="error" disabled={!selectedDeleteRows.length || bulkDeleting} onClick={bulkDeleteSelected}>
-                  {bulkDeleting ? "Deleting..." : "Delete"}
-                </Button>
-              )}
-            </Stack>
-          </Stack>
-        )}
         {!Object.keys(visibleGrouped).length && !loading && (
           <Box sx={{ py: 5, textAlign: "center" }}>
             <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No assessments in this filter</Typography>
@@ -1215,6 +1176,12 @@ const SubmissionsPage = () => {
             const assessmentTitles = sortAssessmentTitlesByComing(Object.keys(courseworkGroup), courseworkGroup, courseworkById);
             const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
             const items = (courseworkGroup[selectedTitle] || []).filter((row) => rowMatchesSearch(row, search));
+            const selectedItems = items.filter((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
+            const selectedApprove = selectedItems.filter(canApproveSubmission);
+            const selectedMark = selectedItems.filter(canBulkMarkSubmission);
+            const selectedDelete = selectedItems.filter(canBulkDeleteSubmission);
+            const tableAllChecked = items.length > 0 && items.every((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
+            const tableSomeChecked = selectedItems.length > 0 && !tableAllChecked;
             const canSaveMarks = items.some(
               (item) =>
                 !item.is_topic_not_submitted &&
@@ -1222,32 +1189,14 @@ const SubmissionsPage = () => {
             );
             return (
             <Box key={courseTitle}>
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} justifyContent="space-between" sx={{ mb: 1 }}>
-                <Typography sx={{ fontWeight: 800, color: "#13377a" }}>
-                  {courseTitle}
+              <Typography sx={{ fontWeight: 800, color: "#13377a", mb: 1 }}>
+                {courseTitle}
+              </Typography>
+              <Box sx={{ mb: 1.2 }}>
+                <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "#35507c", mb: 0.5 }}>
+                  Class list
                 </Typography>
-                {canSaveMarks && (
-                  <Stack direction="row" spacing={0.8} alignItems="center" useFlexGap flexWrap="wrap">
-                    <TextField
-                      size="small"
-                      type="number"
-                      label="Bulk marks"
-                      value={bulkMarks}
-                      onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
-                      inputProps={{ min: 0, step: 1 }}
-                      sx={{ width: 110 }}
-                    />
-                    <Button size="small" variant="outlined" disabled={bulkSavingMarks} onClick={() => applyBulkMarksToAssessment(items)}>
-                      {bulkSavingMarks ? "Saving..." : "Apply to all"}
-                    </Button>
-                    <Button size="small" variant="contained" disabled={savingAllMarks} onClick={() => saveAllDraftMarks(items)}>
-                      {savingAllMarks ? "Saving..." : "Save marks"}
-                    </Button>
-                  </Stack>
-                )}
-              </Stack>
-              {assessmentTitles.length > 1 ? (
-                <Box sx={{ mb: 1.2 }}>
+                {assessmentTitles.length > 1 ? (
                   <CompactTabs
                     value={selectedTitle}
                     onChange={(next) => setSelectedCourseworkByCourse((prev) => ({ ...prev, [courseTitle]: next }))}
@@ -1256,12 +1205,85 @@ const SubmissionsPage = () => {
                       label: `${title} (${(courseworkGroup[title] || []).length})`,
                     }))}
                   />
-                </Box>
-              ) : (
-                <Typography sx={{ fontWeight: 700, color: "#35507c", mb: 0.8 }}>
-                  {selectedTitle}
+                ) : (
+                  <Typography sx={{ fontWeight: 700, color: "#35507c" }}>
+                    {selectedTitle} ({items.length})
+                  </Typography>
+                )}
+              </Box>
+              <Box
+                sx={{
+                  mb: 1.2,
+                  p: 1.1,
+                  borderRadius: 1.5,
+                  bgcolor: "#f3f7ff",
+                  border: "1px solid #dbeafe",
+                }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 700, color: "#16356f", mb: 0.8 }}>
+                  {selectedItems.length} selected of {items.length} students
                 </Typography>
-              )}
+                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap" alignItems="center">
+                  <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center">
+                    <TextField
+                      size="small"
+                      type="number"
+                      label="Marks"
+                      value={bulkMarks}
+                      onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
+                      inputProps={{ min: 0, step: 1 }}
+                      sx={{ width: 96 }}
+                    />
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={bulkSavingMarks || !selectedMark.length}
+                      onClick={() => bulkSaveSelectedMarks(selectedMark)}
+                    >
+                      {bulkSavingMarks ? "Saving..." : "Give to selected"}
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={bulkSavingMarks || !canSaveMarks}
+                      onClick={() => applyBulkMarksToAssessment(items)}
+                    >
+                      Give to all approved
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="text"
+                      disabled={savingAllMarks || !canSaveMarks}
+                      onClick={() => saveAllDraftMarks(items)}
+                    >
+                      {savingAllMarks ? "Saving..." : "Save typed marks"}
+                    </Button>
+                  </Stack>
+                  <Divider flexItem orientation="vertical" sx={{ display: { xs: "none", md: "block" } }} />
+                  <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center">
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="success"
+                      disabled={!selectedApprove.length}
+                      onClick={() => bulkApproveSelected(selectedApprove)}
+                    >
+                      Approve selected
+                    </Button>
+                    {isAdminApprovalsView && (
+                      <Button
+                        size="small"
+                        color="error"
+                        variant="outlined"
+                        disabled={!selectedDelete.length || bulkDeleting}
+                        onClick={() => bulkDeleteSelected(selectedDelete)}
+                      >
+                        {bulkDeleting ? "Deleting..." : "Delete selected"}
+                      </Button>
+                    )}
+                  </Stack>
+                </Stack>
+              </Box>
                       <TableContainer sx={{ overflowX: "auto" }}>
                       <Table
                         size="small"
@@ -1277,9 +1299,9 @@ const SubmissionsPage = () => {
                             <TableCell padding="checkbox">
                               <Checkbox
                                 size="small"
-                                checked={allSelectableChecked}
-                                indeterminate={selectedCount > 0 && !allSelectableChecked}
-                                onChange={toggleSelectAllVisible}
+                                checked={tableAllChecked}
+                                indeterminate={tableSomeChecked}
+                                onChange={() => toggleSelectAllItems(items)}
                               />
                             </TableCell>
                             <TableCell>Student / Group</TableCell>
@@ -1312,9 +1334,10 @@ const SubmissionsPage = () => {
                             const canShowMarkingControls =
                               !item.is_topic_not_submitted &&
                               String(item.approval_status || "").toLowerCase() === "approved";
-                            const canShowDeleteAction =
+                            const canShowDeleteAction = hasPersistedSubmission(item) && (
                               isAdminApprovalsView ||
-                              !["ready_for_upload", "file_submitted", "marked"].includes(workflowFilter);
+                              !["ready_for_upload", "file_submitted", "marked"].includes(workflowFilter)
+                            );
                             const rowDraftKey =
                               item.force_individual_row && item.synthetic_member_row
                                 ? String(item.id || `row-${item.coursework}-${item.student || idx}`)
@@ -1342,9 +1365,8 @@ const SubmissionsPage = () => {
                                   <TableCell padding="checkbox">
                                     <Checkbox
                                       size="small"
-                                      disabled={!canSelectSubmission(item)}
-                                      checked={!!selectedSubmissionIds[String(primarySubmissionId)]}
-                                      onChange={() => toggleSelectSubmission(item)}
+                                      checked={!!selectedSubmissionIds[getRowSelectKey(item, idx)]}
+                                      onChange={() => toggleSelectSubmission(item, idx)}
                                     />
                                   </TableCell>
                                   <TableCell>
