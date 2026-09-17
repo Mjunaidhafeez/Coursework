@@ -34,10 +34,33 @@ const MAX_EMAIL_TOTAL_BYTES = 15 * 1024 * 1024;
 const EMAIL_FILE_ACCEPT = ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.png,.jpg,.jpeg,.txt,.csv";
 const EMAIL_FILE_TYPES = new Set(EMAIL_FILE_ACCEPT.split(","));
 
+const TEMPLATE_STORAGE_KEY = "mba-email-template";
+const DEFAULT_HEADER_TOP = "Superior University Lahore";
+const DEFAULT_HEADER_TITLE = "MBA Coursework Portal";
+
 const formatFileSize = (bytes) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.max(0.1, bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const defaultFooter = (senderName) => (
+  `This is a coursework notice from ${DEFAULT_HEADER_TITLE}.\nReply to this email to contact ${senderName || "the sender"}.\nhttps://mba.pythonanywhere.com`
+);
+
+const readStoredTemplate = () => {
+  try {
+    const raw = window.localStorage.getItem(TEMPLATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      headerTop: String(parsed.headerTop ?? ""),
+      headerTitle: String(parsed.headerTitle ?? ""),
+      footer: String(parsed.footer ?? ""),
+    };
+  } catch {
+    return null;
+  }
 };
 
 const roleLabel = (role) => {
@@ -64,9 +87,13 @@ const EmailStudentsPage = () => {
     role: user?.role || "",
   });
   const [files, setFiles] = useState([]);
+  const [headerTop, setHeaderTop] = useState(DEFAULT_HEADER_TOP);
+  const [headerTitle, setHeaderTitle] = useState(DEFAULT_HEADER_TITLE);
+  const [footer, setFooter] = useState(() => defaultFooter(user?.full_name || user?.username || ""));
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const fileInputRef = useRef(null);
+  const templateLoadedRef = useRef(false);
 
   const loadFilters = async () => {
     const [courseRes, semesterRes] = await Promise.all([
@@ -87,6 +114,14 @@ const EmailStudentsPage = () => {
       const { data } = await api.get(`${ENDPOINTS.emailRecipients}?${params.toString()}`);
       setStudents(data.results || []);
       if (data.sender) setSender(data.sender);
+      if (!templateLoadedRef.current) {
+        const stored = readStoredTemplate();
+        const apiTemplate = data.template || {};
+        setHeaderTop(stored?.headerTop || apiTemplate.header_top || DEFAULT_HEADER_TOP);
+        setHeaderTitle(stored?.headerTitle || apiTemplate.header_title || DEFAULT_HEADER_TITLE);
+        setFooter(stored?.footer || apiTemplate.footer || defaultFooter(data.sender?.name || ""));
+        templateLoadedRef.current = true;
+      }
     } finally {
       setLoading(false);
     }
@@ -99,6 +134,22 @@ const EmailStudentsPage = () => {
   useEffect(() => {
     loadRecipients();
   }, [courseId, semesterId]);
+
+  useEffect(() => {
+    if (!templateLoadedRef.current) return;
+    window.localStorage.setItem(
+      TEMPLATE_STORAGE_KEY,
+      JSON.stringify({ headerTop, headerTitle, footer })
+    );
+  }, [headerTop, headerTitle, footer]);
+
+  const resetTemplate = () => {
+    window.localStorage.removeItem(TEMPLATE_STORAGE_KEY);
+    const nextFooter = defaultFooter(sender.name || user?.full_name || user?.username || "");
+    setHeaderTop(DEFAULT_HEADER_TOP);
+    setHeaderTitle(DEFAULT_HEADER_TITLE);
+    setFooter(nextFooter);
+  };
 
   const selectedStudents = useMemo(
     () => students.filter((item) => selectedIds[item.id]),
@@ -162,6 +213,9 @@ const EmailStudentsPage = () => {
     payload.append("subject", subject.trim());
     payload.append("message", message.trim());
     payload.append("mode", mode);
+    payload.append("header_top", headerTop.trim());
+    payload.append("header_title", headerTitle.trim());
+    payload.append("footer", footer.trim());
     if (courseId) payload.append("course", courseId);
     if (semesterId) payload.append("semester", semesterId);
     if (search) payload.append("search", search);
@@ -261,6 +315,36 @@ const EmailStudentsPage = () => {
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2} alignItems="stretch">
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontWeight: 800, color: "#13377a", mb: 1 }}>Compose</Typography>
+            <Typography sx={{ fontWeight: 700, color: "#334155", mb: 0.8, fontSize: 13 }}>Template</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              label="Header line"
+              value={headerTop}
+              onChange={(e) => setHeaderTop(e.target.value.slice(0, 120))}
+              sx={{ mb: 1 }}
+            />
+            <TextField
+              size="small"
+              fullWidth
+              label="Header title"
+              value={headerTitle}
+              onChange={(e) => setHeaderTitle(e.target.value.slice(0, 120))}
+              sx={{ mb: 1 }}
+            />
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              minRows={3}
+              label="Footer"
+              value={footer}
+              onChange={(e) => setFooter(e.target.value.slice(0, 1000))}
+              sx={{ mb: 1 }}
+            />
+            <Button size="small" onClick={resetTemplate} sx={{ mb: 1.2 }}>
+              Reset template
+            </Button>
             <TextField
               size="small"
               fullWidth
@@ -327,10 +411,14 @@ const EmailStudentsPage = () => {
 
           <Box sx={{ flex: 1, minWidth: 0, border: "1px solid #dbeafe", borderRadius: 2, overflow: "hidden" }}>
             <Box sx={{ bgcolor: "#102a5c", color: "#fff", px: 2, py: 1.4 }}>
-              <Typography sx={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", opacity: 0.8 }}>
-                Superior University Lahore
-              </Typography>
-              <Typography sx={{ fontWeight: 800 }}>MBA Coursework Portal</Typography>
+              {headerTop.trim() && (
+                <Typography sx={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", opacity: 0.8 }}>
+                  {headerTop}
+                </Typography>
+              )}
+              {headerTitle.trim() && (
+                <Typography sx={{ fontWeight: 800 }}>{headerTitle}</Typography>
+              )}
             </Box>
             <Box sx={{ p: 2 }}>
               <Typography sx={{ fontWeight: 800, color: "#102a5c", mb: 1 }}>{subject || "Subject will appear here"}</Typography>
@@ -352,6 +440,11 @@ const EmailStudentsPage = () => {
                 {roleLabel(sender.role || user?.role)}<br />
                 {senderEmail}
               </Typography>
+              {footer.trim() && (
+                <Typography sx={{ mt: 2, pt: 1.4, borderTop: "1px solid #e5e7eb", color: "#6b7280", fontSize: 12, whiteSpace: "pre-wrap" }}>
+                  {footer}
+                </Typography>
+              )}
             </Box>
           </Box>
         </Stack>

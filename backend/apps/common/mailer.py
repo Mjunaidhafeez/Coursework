@@ -27,13 +27,38 @@ def _message_id_domain():
     return host or "mba.pythonanywhere.com"
 
 
-def render_student_email_html(sender, student, subject, message, attachment_names=None):
+def default_email_template(sender=None):
+    sender_name = ""
+    if sender:
+        sender_name = sender.get_full_name().strip() or sender.username
+    portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
+    portal_url = getattr(settings, "PORTAL_PUBLIC_URL", "")
+    footer = f"This is a coursework notice from {portal_name}.\nReply to this email to contact {sender_name or 'the sender'}."
+    if portal_url:
+        footer = f"{footer}\n{portal_url}"
+    return {
+        "header_top": "Superior University Lahore",
+        "header_title": portal_name,
+        "footer": footer,
+    }
+
+
+def _template_text(template, key, fallback, limit):
+    value = str((template or {}).get(key) or "").strip()
+    if not value:
+        return fallback
+    return value[:limit]
+
+
+def render_student_email_html(sender, student, subject, message, attachment_names=None, template=None):
     sender_name = sender.get_full_name().strip() or sender.username
     sender_email = (sender.email or "").strip()
     student_name = student.get_full_name().strip() or student.username
     body = escape(message or "").replace("\n", "<br />")
-    portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
-    portal_url = getattr(settings, "PORTAL_PUBLIC_URL", "")
+    defaults = default_email_template(sender)
+    header_top = escape(_template_text(template, "header_top", defaults["header_top"], 120))
+    header_title = escape(_template_text(template, "header_title", defaults["header_title"], 120))
+    footer = escape(_template_text(template, "footer", defaults["footer"], 1000)).replace("\n", "<br />")
     names = [escape(name) for name in (attachment_names or []) if name]
     attachments_html = ""
     if names:
@@ -55,8 +80,8 @@ def render_student_email_html(sender, student, subject, message, attachment_name
           <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #d7dee8;">
             <tr>
               <td style="background:#102a5c;padding:18px 24px;color:#ffffff;">
-                <div style="font-size:12px;letter-spacing:0.4px;">Superior University Lahore</div>
-                <div style="font-size:20px;font-weight:700;margin-top:4px;">{escape(portal_name)}</div>
+                {f'<div style="font-size:12px;letter-spacing:0.4px;">{header_top}</div>' if header_top else ""}
+                {f'<div style="font-size:20px;font-weight:700;margin-top:4px;">{header_title}</div>' if header_title else ""}
               </td>
             </tr>
             <tr>
@@ -86,9 +111,7 @@ def render_student_email_html(sender, student, subject, message, attachment_name
             </tr>
             <tr>
               <td style="padding:14px 24px 18px 24px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;">
-                This is a coursework notice from {escape(portal_name)}.
-                Reply to this email to contact {escape(sender_name)}.
-                {f'<br /><a href="{escape(portal_url)}" style="color:#1d4ed8;">{escape(portal_url)}</a>' if portal_url else ""}
+                {footer}
               </td>
             </tr>
           </table>
@@ -99,28 +122,33 @@ def render_student_email_html(sender, student, subject, message, attachment_name
 </html>"""
 
 
-def render_student_email_text(sender, student, subject, message, attachment_names=None):
+def render_student_email_text(sender, student, subject, message, attachment_names=None, template=None):
     sender_name = sender.get_full_name().strip() or sender.username
     student_name = student.get_full_name().strip() or student.username
-    portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
+    defaults = default_email_template(sender)
+    header_top = _template_text(template, "header_top", defaults["header_top"], 120)
+    header_title = _template_text(template, "header_title", defaults["header_title"], 120)
+    footer = _template_text(template, "footer", defaults["footer"], 1000)
     names = [name for name in (attachment_names or []) if name]
     attached = f"\nAttached: {', '.join(names)}\n" if names else ""
+    heading = " / ".join(part for part in (header_top, header_title) if part)
     return (
-        f"{subject}\n\n"
+        f"{heading}\n{subject}\n\n"
         f"Dear {student_name},\n\n"
         f"{message}\n"
         f"{attached}\n"
         f"Regards,\n{sender_name}\n{_role_label(sender.role)}\n{sender.email}\n\n"
-        f"This is a coursework notice from {portal_name}.\n"
+        f"{footer}\n"
     )
 
 
-def send_student_emails(sender, students, subject, message, attachments=None):
+def send_student_emails(sender, students, subject, message, attachments=None, template=None):
     sender_email = (sender.email or "").strip()
     sender_name = sender.get_full_name().strip() or sender.username
-    portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
+    defaults = default_email_template(sender)
+    header_title = _template_text(template, "header_title", defaults["header_title"], 120)
     smtp_from = _smtp_from() or sender_email
-    from_email = formataddr((f"{sender_name} via {portal_name}", smtp_from))
+    from_email = formataddr((f"{sender_name} via {header_title}", smtp_from))
     connection = get_connection()
     sent = 0
     failed = []
@@ -134,8 +162,8 @@ def send_student_emails(sender, students, subject, message, attachments=None):
         if not to_email:
             skipped.append(student.get_full_name().strip() or student.username)
             continue
-        html = render_student_email_html(sender, student, subject, message, attachment_names)
-        text = render_student_email_text(sender, student, subject, message, attachment_names)
+        html = render_student_email_html(sender, student, subject, message, attachment_names, template)
+        text = render_student_email_text(sender, student, subject, message, attachment_names, template)
         headers = {
             "Date": formatdate(localtime=True),
             "Message-ID": make_msgid(domain=msgid_domain),

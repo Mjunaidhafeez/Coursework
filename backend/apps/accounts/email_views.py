@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from apps.academics.models import Enrollment
 from apps.accounts.models import User
 from apps.accounts.permissions import IsTeacherOrAdmin
-from apps.common.mailer import send_student_emails
+from apps.common.mailer import default_email_template, send_student_emails
 
 MAX_EMAIL_FILES = 5
 MAX_EMAIL_FILE_BYTES = 8 * 1024 * 1024
@@ -123,6 +123,15 @@ def _collect_email_attachments(files):
     return attachments
 
 
+def _email_template_from_request(data, sender):
+    defaults = default_email_template(sender)
+    return {
+        "header_top": str(data.get("header_top") or defaults["header_top"]).strip()[:120],
+        "header_title": str(data.get("header_title") or defaults["header_title"]).strip()[:120],
+        "footer": str(data.get("footer") or defaults["footer"]).strip()[:1000],
+    }
+
+
 def _serialize_student(student):
     profile = getattr(student, "student_profile", None)
     return {
@@ -155,6 +164,7 @@ def email_recipients(request):
                 "email": request.user.email or "",
                 "role": request.user.role,
             },
+            "template": default_email_template(request.user),
         }
     )
 
@@ -207,7 +217,8 @@ def send_student_email(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    result = send_student_emails(sender, students, subject, message, attachments=attachments)
+    template = _email_template_from_request(request.data, sender)
+    result = send_student_emails(sender, students, subject, message, attachments=attachments, template=template)
     failed_count = len(result["failed"])
     first_error = (result["failed"][0].get("detail") if result["failed"] else "") or ""
     attached_names = [item[0] for item in attachments]
