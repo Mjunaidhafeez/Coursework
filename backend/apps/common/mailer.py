@@ -168,8 +168,6 @@ def send_student_emails(sender, students, subject, message, attachments=None, te
             "Date": formatdate(localtime=True),
             "Message-ID": make_msgid(domain=msgid_domain),
         }
-        if sender_email:
-            headers["Reply-To"] = formataddr((sender_name, sender_email))
         email = EmailMultiAlternatives(
             subject=subject,
             body=text,
