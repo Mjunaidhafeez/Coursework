@@ -2,7 +2,7 @@ import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
-import { Button, Chip, Collapse, IconButton, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Button, Chip, Collapse, IconButton, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import { formatMarks } from "../../utils/format";
@@ -382,7 +382,8 @@ const CourseResultMatrix = ({
                   </Stack>
 
                   <Collapse in={!!openCourses[`${semesterNode.title}__${course.id}`]}>
-                    <Table size="small">
+                    <TableContainer sx={{ overflowX: "auto" }}>
+                    <Table size="small" stickyHeader>
                       <TableHead>
                         <TableRow>
                           <TableCell sx={{ cursor: "pointer" }} onClick={() => toggleSort("studentName")}>{sortLabel("studentName", "Name of Student")}</TableCell>
@@ -408,6 +409,7 @@ const CourseResultMatrix = ({
                         ))}
                       </TableBody>
                     </Table>
+                    </TableContainer>
                   </Collapse>
                 </Paper>
               ))}

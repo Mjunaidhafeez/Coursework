@@ -6,9 +6,9 @@ const PaginationControls = ({ page, pageSize, total, onPageChange, onPageSizeCha
   const canNext = page < totalPages;
 
   return (
-    <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} alignItems={{ xs: "flex-start", md: "center" }} justifyContent="space-between" sx={{ mt: 0.8 }}>
+    <Stack className="listing-pagination" direction={{ xs: "column", md: "row" }} spacing={0.8} alignItems={{ xs: "flex-start", md: "center" }} justifyContent="space-between" sx={{ mt: 0.8 }}>
       <Typography variant="body2" color="text.secondary">
-        {`Page ${page} of ${totalPages} ∑ ${total} records`}
+        {`Page ${page} of ${totalPages} ù ${total} records`}
       </Typography>
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
         <TextField

@@ -1,4 +1,4 @@
-import { Box, Grid2 as Grid, MenuItem, TextField } from "@mui/material";
+import { Box, Grid2 as Grid, MenuItem, Stack, TextField } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
@@ -95,15 +95,15 @@ const ReportsPage = () => {
   );
 
   return (
-    <>
-      <Grid container spacing={1}>
+    <Stack spacing={1} sx={{ height: "100%", minHeight: 0, overflow: "hidden" }}>
+      <Grid container spacing={1} sx={{ flexShrink: 0 }}>
         {statCards.map((card) => (
           <Grid key={card.label} size={{ xs: 12, md: 3 }}>
             <StatCard label={card.label} value={card.value} valueFontSize={card.valueFontSize} />
           </Grid>
         ))}
       </Grid>
-      <Box sx={{ mt: 1.2 }}>
+      <Box sx={{ flex: 1, minHeight: 0 }}>
       <ListingPage
         title="Course Result"
         filters={(
@@ -167,7 +167,7 @@ const ReportsPage = () => {
         />
       </ListingPage>
       </Box>
-    </>
+    </Stack>
   );
 };
 

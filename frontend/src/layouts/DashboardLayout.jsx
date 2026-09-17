@@ -170,22 +170,25 @@ const DashboardLayout = () => {
   return (
     <Box
       sx={{
-        minHeight: "100vh",
+        height: "100vh",
+        overflow: "hidden",
         background: "linear-gradient(130deg, #0f1c3f 0%, #1a2f69 45%, #2354c7 100%)",
       }}
     >
       <Box
         sx={{
           width: "100vw",
-          minHeight: "100vh",
+          height: "100%",
           display: "flex",
+          overflow: "hidden",
           bgcolor: "rgba(243, 246, 252, 0.9)",
         }}
       >
         <Sidebar role={user?.role} />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, height: "100%", display: "flex", flexDirection: "column" }}>
           <Box
             sx={{
+              flexShrink: 0,
               bgcolor: "rgba(29,79,191,0.95)",
               color: "white",
               px: { xs: 1.5, md: 2.4 },
@@ -281,21 +284,28 @@ const DashboardLayout = () => {
               </Box>
             </Box>
           </Box>
-          <Box sx={{ p: { xs: 1, md: 1.15 } }}>
+          <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", p: { xs: 1, md: 1.15 }, display: "flex" }}>
             <Box
               sx={{
+                flex: 1,
+                minHeight: 0,
+                minWidth: 0,
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
                 bgcolor: "rgba(255,255,255,0.78)",
                 backdropFilter: "blur(8px)",
                 border: "1px solid #e4eaf9",
                 p: { xs: 1, md: 1.1 },
                 borderRadius: 2,
-                minHeight: "calc(100vh - 78px)",
                 boxShadow: "0 10px 24px rgba(11, 39, 98, 0.12)",
               }}
             >
-              <Suspense fallback={<RouteFallback />}>
-                <Outlet />
-              </Suspense>
+              <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, overflow: "auto", display: "flex", flexDirection: "column" }}>
+                <Suspense fallback={<RouteFallback />}>
+                  <Outlet />
+                </Suspense>
+              </Box>
             </Box>
           </Box>
         </Box>
