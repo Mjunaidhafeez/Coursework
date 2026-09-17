@@ -9,7 +9,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   IconButton,
+  InputLabel,
+  ListItemText,
+  MenuItem,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -26,7 +31,6 @@ import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
-import CompactTabs from "../../components/shared/CompactTabs";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useAuth } from "../../context/AuthContext";
@@ -69,21 +73,74 @@ const sortAssessmentTitlesByComing = (titles, courseworkGroup, courseworkById) =
     (a, b) => getAssessmentDeadlineScore(a, courseworkGroup, courseworkById) - getAssessmentDeadlineScore(b, courseworkGroup, courseworkById)
   );
 
-const rowMatchesWorkflowState = (row, filter) => {
-  if (!filter) return true;
-  if (filter === "topic_not_submitted") return Boolean(row.is_topic_not_submitted);
-  if (filter === "request_pending") {
-    return !row.is_topic_not_submitted && !row.is_marked && row.approval_status !== "approved" && row.approval_status !== "rejected";
-  }
-  if (filter === "ready_for_upload") {
-    return !row.is_topic_not_submitted && String(row.approval_status || "").toLowerCase() === "approved" && !row.file && !row.is_marked;
-  }
-  if (filter === "file_submitted") {
-    return !row.is_topic_not_submitted && Boolean(row.file) && !row.is_marked;
-  }
-  if (filter === "marked") return Boolean(row.is_marked);
-  return true;
+const STUDENT_STATUS_OPTIONS = [
+  { value: "waiting", label: "Waiting" },
+  { value: "pending", label: "Request for approval" },
+  { value: "approved", label: "Approved" },
+  { value: "file_submitted", label: "Files submitted" },
+  { value: "marked", label: "Marked" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const hasSentApprovalRequest = (row) => {
+  if (!row || row.is_topic_not_submitted) return false;
+  const id = row.submission_id || row.id;
+  if (!id || String(row.id || "").startsWith("missing-")) return false;
+  const approval = String(row.approval_status || "pending").toLowerCase();
+  return approval === "pending" || approval === "request_pending";
 };
+
+const getStudentStatus = (row) => {
+  if (row?.is_topic_not_submitted) return "waiting";
+  if (row?.is_marked) return "marked";
+  if (String(row?.approval_status || "").toLowerCase() === "rejected") return "rejected";
+  if (String(row?.approval_status || "").toLowerCase() === "approved") {
+    return row?.file ? "file_submitted" : "approved";
+  }
+  return hasSentApprovalRequest(row) ? "pending" : "waiting";
+};
+
+const rowMatchesStudentStatuses = (row, statuses = []) => {
+  if (!statuses.length) return true;
+  return statuses.includes(getStudentStatus(row));
+};
+
+const normalizeMultiFilter = (current, nextValue) => {
+  const next = typeof nextValue === "string" ? nextValue.split(",") : nextValue;
+  if (!current.length) return next.filter((value) => value && value !== "all");
+  if (next.includes("all")) return [];
+  return next.filter((value) => value && value !== "all");
+};
+
+const MultiFilterSelect = ({ label, value = [], options = [], onChange, minWidth = 188 }) => (
+  <FormControl size="small" sx={{ minWidth, maxWidth: { xs: "100%", md: 280 } }}>
+    <InputLabel>{label}</InputLabel>
+    <Select
+      multiple
+      label={label}
+      value={value.length ? value : ["all"]}
+      onChange={(event) => onChange(normalizeMultiFilter(value, event.target.value))}
+      renderValue={() => {
+        if (!value.length) return `All ${label.toLowerCase()}`;
+        const labels = options.filter((option) => value.includes(option.value)).map((option) => option.label);
+        if (!labels.length) return `All ${label.toLowerCase()}`;
+        return labels.length <= 2 ? labels.join(", ") : `${labels.length} selected`;
+      }}
+      MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
+    >
+      <MenuItem value="all">
+        <Checkbox size="small" checked={!value.length} />
+        <ListItemText primary={`All ${label.toLowerCase()}`} />
+      </MenuItem>
+      {options.map((option) => (
+        <MenuItem key={option.value} value={option.value}>
+          <Checkbox size="small" checked={value.includes(option.value)} />
+          <ListItemText primary={option.label} />
+        </MenuItem>
+      ))}
+    </Select>
+  </FormControl>
+);
 
 const rowMatchesSearch = (row, searchValue) => {
   const query = String(searchValue || "").trim().toLowerCase();
@@ -108,6 +165,8 @@ const toWaitingDisplayRow = (entry) => ({
   file: null,
   is_marked: false,
   is_topic_not_submitted: true,
+  course: entry.courseId,
+  course_title: entry.courseTitle,
 });
 
 const buildSubmissionDisplayRows = (sourceRows = []) => {
@@ -134,37 +193,6 @@ const buildSubmissionDisplayRows = (sourceRows = []) => {
   });
 
   return [...nonGroupRows, ...representativeGroupRows].sort(compareByRollNo);
-};
-
-const flattenAssessments = (grouped) => {
-  const list = [];
-  Object.entries(grouped || {}).forEach(([courseTitle, courseworkGroup]) => {
-    Object.entries(courseworkGroup || {}).forEach(([title, rows]) => {
-      list.push({ courseTitle, title, rows });
-    });
-  });
-  return list;
-};
-
-const assessmentMatchesFilter = (rows, filter, searchValue) => {
-  const searched = (rows || []).filter((row) => rowMatchesSearch(row, searchValue));
-  if (!searched.length) return false;
-  if (!filter) return true;
-  return searched.some((row) => rowMatchesWorkflowState(row, filter));
-};
-
-const filterGroupedAssessments = (grouped, filter, searchValue) => {
-  const next = {};
-  Object.entries(grouped || {}).forEach(([courseTitle, courseworkGroup]) => {
-    const filtered = {};
-    Object.entries(courseworkGroup || {}).forEach(([title, rows]) => {
-      if (assessmentMatchesFilter(rows, filter, searchValue)) {
-        filtered[title] = rows;
-      }
-    });
-    if (Object.keys(filtered).length) next[courseTitle] = filtered;
-  });
-  return next;
 };
 
 const groupRowsByCourseAndCoursework = (rows, courseworksMeta, courses) => {
@@ -199,7 +227,9 @@ const SubmissionsPage = () => {
   const { notify, isGlobalLoading } = useUi();
   const isAdminApprovalsView = user?.role === "super_admin";
   const [statusFilter, setStatusFilter] = useState("");
-  const [workflowFilter, setWorkflowFilter] = useState("");
+  const [selectedCourseIds, setSelectedCourseIds] = useState([]);
+  const [selectedAssessmentIds, setSelectedAssessmentIds] = useState([]);
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState([]);
   const [courseworksMeta, setCourseworksMeta] = useState([]);
   const [courses, setCourses] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
@@ -222,7 +252,6 @@ const SubmissionsPage = () => {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkRejecting, setBulkRejecting] = useState(false);
   const [savingAllMarks, setSavingAllMarks] = useState(false);
-  const [selectedCourseworkByCourse, setSelectedCourseworkByCourse] = useState({});
   const bulkApproveLockRef = useRef(false);
   const bulkSaveLockRef = useRef(false);
   const bulkDeleteLockRef = useRef(false);
@@ -242,7 +271,6 @@ const SubmissionsPage = () => {
     params.append("ordering", "student__username");
     if (search) params.append("search", search);
     if (statusFilter) params.append("status", statusFilter);
-    if (workflowFilter && workflowFilter !== "topic_not_submitted") params.append("workflow_state", workflowFilter);
     params.append("page", String(page));
     params.append("page_size", String(pageSize));
     const { data } = await api.get(`${ENDPOINTS.submissions}?${params.toString()}`);
@@ -250,7 +278,7 @@ const SubmissionsPage = () => {
   };
 
   const { rows, search, setSearch, loading, runSearch, resetSearch, setRows, loadData } =
-    usePaginatedQuery({ queryFn, dependencies: [statusFilter, workflowFilter] });
+    usePaginatedQuery({ queryFn, dependencies: [statusFilter] });
 
   const courseworkById = useMemo(() => {
     const map = {};
@@ -358,7 +386,9 @@ const SubmissionsPage = () => {
         (submission?.requested_member_details || []).length > 0 ||
         (submission?.requested_member_names || []).length > 0
       );
-    return workflowFilter === "marked" ? "single" : (isGroupRow || isCollaborativeRequestRow ? "group" : "single");
+    return selectedStatusFilters.length === 1 && selectedStatusFilters[0] === "marked"
+      ? "single"
+      : (isGroupRow || isCollaborativeRequestRow ? "group" : "single");
   };
   const canApproveSubmission = (submission) =>
     !submission?.is_topic_not_submitted && !submission?.is_marked && submission?.approval_status !== "approved";
@@ -375,7 +405,7 @@ const SubmissionsPage = () => {
   const canShowRowDelete = (submission) =>
     hasPersistedSubmission(submission) && (
       isAdminApprovalsView ||
-      !["ready_for_upload", "file_submitted", "marked"].includes(workflowFilter)
+      !["approved", "file_submitted", "marked"].includes(selectedStatusFilters[0])
     );
 
   const approve = async (submission) => {
@@ -731,61 +761,87 @@ const SubmissionsPage = () => {
     return [...submissionRows, ...waitingRows].sort(compareByRollNo);
   }, [submissionIndexRows, allPendingNoRequestEntries]);
 
-  const groupedByCourseAndCoursework = useMemo(
-    () => groupRowsByCourseAndCoursework(rosterRows, courseworksMeta, courses),
-    [rosterRows, courseworksMeta, courses]
-  );
+  const getRowCourseId = (row) =>
+    String(row?.course || courseworkById[String(row?.coursework)]?.course || "");
 
-  const visibleGrouped = useMemo(
-    () => filterGroupedAssessments(groupedByCourseAndCoursework, workflowFilter, search),
-    [groupedByCourseAndCoursework, workflowFilter, search]
-  );
+  const courseFilterOptions = useMemo(() => {
+    const ids = new Set(courseworksMeta.map((item) => String(item.course)));
+    const counts = {};
+    rosterRows.forEach((row) => {
+      const courseId = getRowCourseId(row);
+      counts[courseId] = (counts[courseId] || 0) + 1;
+    });
+    return courses
+      .filter((course) => ids.has(String(course.id)))
+      .slice()
+      .sort((a, b) => String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "base" }))
+      .map((course) => ({
+        value: String(course.id),
+        label: `${course.title || `Course ${course.id}`} (${counts[String(course.id)] || 0})`,
+      }));
+  }, [courses, courseworksMeta, rosterRows, courseworkById]);
 
-  useEffect(() => {
-    setSelectedCourseworkByCourse((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
-        const titles = Object.keys(courseworkGroup);
-        if (!titles.length) return;
-        const comingTitle = sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
-        if (!next[courseTitle] || !courseworkGroup[next[courseTitle]]) {
-          next[courseTitle] = comingTitle;
-          changed = true;
-        }
+  const assessmentFilterOptions = useMemo(() => {
+    const courseSet = new Set(selectedCourseIds);
+    const showCoursePrefix = selectedCourseIds.length !== 1;
+    return courseworksMeta
+      .filter((item) => !courseSet.size || courseSet.has(String(item.course)))
+      .slice()
+      .sort((a, b) => {
+        const group = { [a.title]: [{ coursework: a.id }], [b.title]: [{ coursework: b.id }] };
+        return getAssessmentDeadlineScore(a.title, group, { [String(a.id)]: a, [String(b.id)]: b })
+          - getAssessmentDeadlineScore(b.title, group, { [String(a.id)]: a, [String(b.id)]: b });
+      })
+      .map((item) => {
+        const courseTitle = courses.find((course) => String(course.id) === String(item.course))?.title;
+        const count = rosterRows.filter((row) => String(row.coursework) === String(item.id)).length;
+        const title = item.title || `Assessment #${item.id}`;
+        const base = showCoursePrefix && courseTitle ? `${courseTitle} · ${title}` : title;
+        return { value: String(item.id), label: `${base} (${count})` };
       });
-      return changed ? next : prev;
-    });
-  }, [visibleGrouped, courseworkById]);
+  }, [courseworksMeta, courses, selectedCourseIds, rosterRows]);
 
-  const selectedRosterRows = useMemo(() => {
-    const list = [];
-    Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
-      const titles = Object.keys(courseworkGroup);
-      if (!titles.length) return;
-      const selected = selectedCourseworkByCourse[courseTitle] || sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
-      (courseworkGroup[selected] || []).forEach((row) => list.push(row));
+  const scopedRosterRows = useMemo(() => {
+    return rosterRows.filter((row) => {
+      const courseId = getRowCourseId(row);
+      const assessmentId = String(row.coursework || "");
+      if (selectedCourseIds.length && !selectedCourseIds.includes(courseId)) return false;
+      if (selectedAssessmentIds.length && !selectedAssessmentIds.includes(assessmentId)) return false;
+      return true;
     });
-    return list;
-  }, [visibleGrouped, selectedCourseworkByCourse, courseworkById]);
+  }, [rosterRows, selectedCourseIds, selectedAssessmentIds, courseworkById]);
 
   const displayRows = useMemo(
-    () => selectedRosterRows.filter((row) => rowMatchesSearch(row, search)),
-    [selectedRosterRows, search]
+    () => scopedRosterRows.filter((row) => rowMatchesSearch(row, search) && rowMatchesStudentStatuses(row, selectedStatusFilters)),
+    [scopedRosterRows, search, selectedStatusFilters]
   );
 
-  const filterCounts = useMemo(() => {
-    const assessments = flattenAssessments(groupedByCourseAndCoursework);
-    const count = (filter) => assessments.filter((item) => assessmentMatchesFilter(item.rows, filter, search)).length;
-    return {
-      all: count(""),
-      request_pending: count("request_pending"),
-      topic_not_submitted: count("topic_not_submitted"),
-      ready_for_upload: count("ready_for_upload"),
-      file_submitted: count("file_submitted"),
-      marked: count("marked"),
-    };
-  }, [groupedByCourseAndCoursework, search]);
+  const groupedByCourseAndCoursework = useMemo(
+    () => groupRowsByCourseAndCoursework(displayRows, courseworksMeta, courses),
+    [displayRows, courseworksMeta, courses]
+  );
+
+  const visibleGrouped = groupedByCourseAndCoursework;
+
+  const statusFilterOptions = useMemo(() => {
+    const counts = Object.fromEntries(STUDENT_STATUS_OPTIONS.map((option) => [option.value, 0]));
+    scopedRosterRows.filter((row) => rowMatchesSearch(row, search)).forEach((row) => {
+      const key = getStudentStatus(row);
+      if (counts[key] != null) counts[key] += 1;
+    });
+    return STUDENT_STATUS_OPTIONS.map((option) => ({
+      ...option,
+      label: `${option.label} (${counts[option.value] || 0})`,
+    }));
+  }, [scopedRosterRows, search]);
+
+  useEffect(() => {
+    const allowed = new Set(assessmentFilterOptions.map((option) => option.value));
+    setSelectedAssessmentIds((prev) => {
+      const next = prev.filter((id) => allowed.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [assessmentFilterOptions]);
 
   const courseNameById = useMemo(() => {
     const map = {};
@@ -1144,7 +1200,7 @@ const SubmissionsPage = () => {
       return;
     }
     resultsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [workflowFilter]);
+  }, [selectedCourseIds, selectedAssessmentIds, selectedStatusFilters]);
 
   useEffect(() => {
     const courseKeys = Object.keys(groupedByCourseAndCoursework);
@@ -1176,8 +1232,7 @@ const SubmissionsPage = () => {
 
   const courseSections = Object.entries(visibleGrouped).map(([courseTitle, courseworkGroup]) => {
     const assessmentTitles = sortAssessmentTitlesByComing(Object.keys(courseworkGroup), courseworkGroup, courseworkById);
-    const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
-    const items = (courseworkGroup[selectedTitle] || []).filter((row) => rowMatchesSearch(row, search));
+    const items = assessmentTitles.flatMap((title) => courseworkGroup[title] || []).sort(compareByRollNo);
     const selectedItems = items.filter((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
     const tableAllChecked = items.length > 0 && items.every((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
     const listCanApprove = items.some(canApproveSubmission);
@@ -1189,7 +1244,7 @@ const SubmissionsPage = () => {
       courseTitle,
       courseworkGroup,
       assessmentTitles,
-      selectedTitle,
+      showAssessmentCol: assessmentTitles.length > 1,
       items,
       selectedItems,
       selectedApprove: selectedItems.filter(canApproveSubmission),
@@ -1214,7 +1269,7 @@ const SubmissionsPage = () => {
     <Box sx={{ flex: 1, minHeight: 0, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
     <ListingPage
       title="Assessment Approvals"
-      subtitle="First pick assessments by status, then open one class list. Select students to approve, mark, or delete."
+      subtitle="Filter students by course, assessment, and status. All is selected by default."
       actions={isAdminApprovalsView ? (
         <Stack direction="row" spacing={0.8}>
           <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
@@ -1222,32 +1277,42 @@ const SubmissionsPage = () => {
         </Stack>
       ) : null}
       filters={(
-        <Stack spacing={1}>
-          <Box>
-            <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "#35507c", mb: 0.5 }}>
-              Assessments
-            </Typography>
-            <CompactTabs
-              value={workflowFilter || "all"}
-              onChange={(next) => setWorkflowFilter(next === "all" ? "" : next)}
-              tabs={[
-                { value: "all", label: `All (${filterCounts.all || 0})` },
-                { value: "topic_not_submitted", label: `Waiting (${filterCounts.topic_not_submitted || 0})` },
-                { value: "request_pending", label: `Topics (${filterCounts.request_pending || 0})` },
-                { value: "ready_for_upload", label: `Approved (${filterCounts.ready_for_upload || 0})` },
-                { value: "file_submitted", label: `Files (${filterCounts.file_submitted || 0})` },
-                { value: "marked", label: `Marked (${filterCounts.marked || 0})` },
-              ]}
-            />
-          </Box>
-          <SearchToolbar
-            label="Search student, topic or group"
-            search={search}
-            onSearchChange={setSearch}
-            onSearch={runSearch}
-            onReset={resetSearch}
-          />
-        </Stack>
+        <SearchToolbar
+          label="Search student, topic or group"
+          search={search}
+          onSearchChange={setSearch}
+          onSearch={runSearch}
+          onReset={() => {
+            setSelectedCourseIds([]);
+            setSelectedAssessmentIds([]);
+            setSelectedStatusFilters([]);
+            resetSearch();
+          }}
+          filters={(
+            <>
+              <MultiFilterSelect
+                label="Course"
+                value={selectedCourseIds}
+                options={courseFilterOptions}
+                onChange={setSelectedCourseIds}
+              />
+              <MultiFilterSelect
+                label="Assessment"
+                value={selectedAssessmentIds}
+                options={assessmentFilterOptions}
+                onChange={setSelectedAssessmentIds}
+                minWidth={220}
+              />
+              <MultiFilterSelect
+                label="Student status"
+                value={selectedStatusFilters}
+                options={statusFilterOptions}
+                onChange={setSelectedStatusFilters}
+                minWidth={200}
+              />
+            </>
+          )}
+        />
       )}
       toolbar={courseSections.length ? (
         <Stack spacing={1.2} ref={resultsSectionRef}>
@@ -1255,26 +1320,13 @@ const SubmissionsPage = () => {
             <Box key={section.courseTitle}>
               <Typography sx={{ fontWeight: 800, color: "#13377a", mb: 1 }}>
                 {section.courseTitle}
-              </Typography>
-              <Box sx={{ mb: 1.2 }}>
-                <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "#35507c", mb: 0.5 }}>
-                  Class list
+                <Typography component="span" sx={{ ml: 1, fontWeight: 600, color: "#5b6f91", fontSize: "0.82rem" }}>
+                  {section.assessmentTitles.length === 1
+                    ? section.assessmentTitles[0]
+                    : `${section.assessmentTitles.length} assessments`}
+                  {` · ${section.items.length} students`}
                 </Typography>
-                {section.assessmentTitles.length > 1 ? (
-                  <CompactTabs
-                    value={section.selectedTitle}
-                    onChange={(next) => setSelectedCourseworkByCourse((prev) => ({ ...prev, [section.courseTitle]: next }))}
-                    tabs={section.assessmentTitles.map((title) => ({
-                      value: title,
-                      label: `${title} (${(section.courseworkGroup[title] || []).length})`,
-                    }))}
-                  />
-                ) : (
-                  <Typography sx={{ fontWeight: 700, color: "#35507c" }}>
-                    {section.selectedTitle} ({section.items.length})
-                  </Typography>
-                )}
-              </Box>
+              </Typography>
               <Box
                 sx={{
                   p: 1.1,
@@ -1300,7 +1352,7 @@ const SubmissionsPage = () => {
                       {section.allWaiting
                         ? "Waiting for topic. Approve, marks, and delete unlock after a student submits."
                         : section.listCanApprove && !section.listCanMark
-                          ? "Review topic requests: approve or reject the selected students."
+                          ? "Request for approval: approve or reject the selected students."
                           : section.listCanMark && !section.listCanApprove
                             ? "Approved work can take marks. Type in the table or give the same marks to selected students."
                             : "Only actions that match the selected students are shown."}
@@ -1393,9 +1445,9 @@ const SubmissionsPage = () => {
     >
         {!courseSections.length && !loading && (
           <Box sx={{ py: 5, textAlign: "center" }}>
-            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No assessments in this filter</Typography>
+            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No students match these filters</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Switch to All, or pick another status to see matching assessments.
+              Change course, assessment, or student status, or reset to All.
             </Typography>
           </Box>
         )}
@@ -1407,12 +1459,13 @@ const SubmissionsPage = () => {
               tableAllChecked,
               tableSomeChecked,
               showSelect,
+              showAssessmentCol,
               showFileCol,
               showMarksCol,
               showActionCol,
             } = section;
             const tableColSpan =
-              (showSelect ? 1 : 0) + 2 + (showFileCol ? 1 : 0) + (showMarksCol ? 1 : 0) + (showActionCol ? 1 : 0);
+              (showSelect ? 1 : 0) + 2 + (showAssessmentCol ? 1 : 0) + (showFileCol ? 1 : 0) + (showMarksCol ? 1 : 0) + (showActionCol ? 1 : 0);
             return (
             <Box key={courseTitle}>
                       <TableContainer sx={{ overflowX: "auto" }}>
@@ -1439,6 +1492,7 @@ const SubmissionsPage = () => {
                               </TableCell>
                             ) : null}
                             <TableCell>Student / Group</TableCell>
+                            {showAssessmentCol ? <TableCell>Assessment</TableCell> : null}
                             <TableCell>Status</TableCell>
                             {showFileCol ? <TableCell>File</TableCell> : null}
                             {showMarksCol ? <TableCell>Marks</TableCell> : null}
@@ -1488,7 +1542,7 @@ const SubmissionsPage = () => {
                                   ? { label: "Rejected", color: "error" }
                                   : item.approval_status === "approved"
                                     ? { label: item.file ? "Submitted" : "Approved", color: item.file ? "info" : "success" }
-                                    : { label: "Needs approval", color: "warning" };
+                                    : { label: "Request for approval", color: "warning" };
 
                             return (
                               <Fragment key={item.id}>
@@ -1530,6 +1584,13 @@ const SubmissionsPage = () => {
                                       </Button>
                                     )}
                                   </TableCell>
+                                  {showAssessmentCol ? (
+                                    <TableCell>
+                                      <Typography variant="body2" sx={{ fontWeight: 600, color: "#35507c" }}>
+                                        {item.coursework_title || courseworkById[String(item.coursework)]?.title || "—"}
+                                      </Typography>
+                                    </TableCell>
+                                  ) : null}
                                   <TableCell>
                                     <Chip size="small" color={simpleStatus.color} label={simpleStatus.label} />
                                   </TableCell>
