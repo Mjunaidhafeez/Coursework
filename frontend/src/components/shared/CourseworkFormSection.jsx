@@ -1,4 +1,4 @@
-import { Box, Button, FormControlLabel, MenuItem, Paper, Stack, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Button, Checkbox, FormControlLabel, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 
 import { humanizeCourseworkType, normalizeCourseworkType } from "../../utils/courseworkOptions";
 
@@ -8,9 +8,9 @@ const fieldSx = {
   "& .MuiFormHelperText-root": { mx: 0.2, mt: 0.15, minHeight: 0 },
 };
 
-const ruleSwitchSx = {
-  "& .MuiSwitch-switchBase.Mui-checked": { color: "#1d4cb4" },
-  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": { bgcolor: "#90b4f0", opacity: 1 },
+const ruleCheckboxSx = {
+  py: 0,
+  "&.Mui-checked": { color: "#1d4cb4" },
 };
 
 const CourseworkFormSection = ({
@@ -198,9 +198,9 @@ const CourseworkFormSection = ({
           <FormControlLabel
             sx={{ mr: 1.2 }}
             control={
-              <Switch
+              <Checkbox
                 size="small"
-                sx={toggleSx || ruleSwitchSx}
+                sx={ruleCheckboxSx}
                 checked={Boolean(form.lock_at_due_time)}
                 onChange={(e) => setForm((p) => ({ ...p, lock_at_due_time: e.target.checked }))}
               />
@@ -210,9 +210,9 @@ const CourseworkFormSection = ({
           <FormControlLabel
             sx={{ mr: 1.2 }}
             control={
-              <Switch
+              <Checkbox
                 size="small"
-                sx={toggleSx || ruleSwitchSx}
+                sx={ruleCheckboxSx}
                 checked={Boolean(form.approval_required)}
                 onChange={(e) => setForm((p) => ({ ...p, approval_required: e.target.checked }))}
               />
@@ -222,9 +222,9 @@ const CourseworkFormSection = ({
           <FormControlLabel
             sx={{ mr: 1.2 }}
             control={
-              <Switch
+              <Checkbox
                 size="small"
-                sx={toggleSx || ruleSwitchSx}
+                sx={ruleCheckboxSx}
                 checked={Boolean(form.topic_duplication_allowed)}
                 onChange={(e) => setForm((p) => ({ ...p, topic_duplication_allowed: e.target.checked }))}
               />
@@ -234,9 +234,9 @@ const CourseworkFormSection = ({
           <FormControlLabel
             sx={{ mr: 1.2 }}
             control={
-              <Switch
+              <Checkbox
                 size="small"
-                sx={toggleSx || ruleSwitchSx}
+                sx={ruleCheckboxSx}
                 checked={Boolean(form.auto_approve_all_students)}
                 onChange={(e) => setForm((p) => ({ ...p, auto_approve_all_students: e.target.checked }))}
               />
