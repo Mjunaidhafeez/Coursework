@@ -3,7 +3,6 @@ import {
   Button,
   Checkbox,
   Chip,
-  Collapse,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -13,6 +12,7 @@ import {
   IconButton,
   InputLabel,
   ListItemText,
+  Menu,
   MenuItem,
   Select,
   Stack,
@@ -26,9 +26,10 @@ import {
   Typography,
 } from "@mui/material";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
 import CompactTabs from "../../components/shared/CompactTabs";
@@ -78,10 +79,31 @@ const STUDENT_STATUS_OPTIONS = [
   { value: "waiting", label: "Waiting" },
   { value: "pending", label: "Request for approval" },
   { value: "approved", label: "Approved" },
-  { value: "file_submitted", label: "Files submitted" },
+  { value: "file_submitted", label: "File sent" },
   { value: "marked", label: "Marked" },
   { value: "rejected", label: "Rejected" },
 ];
+
+const STATUS_CHIP = {
+  waiting: { label: "Waiting", color: "warning" },
+  pending: { label: "Request for approval", color: "warning" },
+  approved: { label: "Approved", color: "success" },
+  file_submitted: { label: "File sent", color: "info" },
+  marked: { label: "Marked", color: "success" },
+  rejected: { label: "Rejected", color: "error" },
+};
+
+const getRowMemberCount = (item, groupsById = {}) => {
+  if (!item || item.is_topic_not_submitted) return 0;
+  return (
+    (item.requested_member_details || []).length ||
+    (item.requested_member_ids || []).length ||
+    (item.requested_member_names || []).length ||
+    (item.group_member_rows || []).length ||
+    (groupsById[String(item.group)]?.members || []).filter((member) => member.accepted !== false).length ||
+    0
+  );
+};
 
 const hasSentApprovalRequest = (row) => {
   if (!row || row.is_topic_not_submitted) return false;
@@ -232,6 +254,8 @@ const SubmissionsPage = () => {
   const [selectedAssessmentIds, setSelectedAssessmentIds] = useState([]);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState([]);
   const [selectedCourseworkByCourse, setSelectedCourseworkByCourse] = useState({});
+  const [actionMenu, setActionMenu] = useState({ anchor: null, item: null, idx: 0 });
+  const [bulkActionByCourse, setBulkActionByCourse] = useState({});
   const [courseworksMeta, setCourseworksMeta] = useState([]);
   const [courses, setCourses] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
@@ -346,6 +370,14 @@ const SubmissionsPage = () => {
       setGroupsById(groupMap);
       const enrollmentsRes = await api.get(`${ENDPOINTS.enrollments}?page_size=2000`);
       setEnrollments(enrollmentsRes.data.results || []);
+      const autoApproveIds = (cwRes.data.results || [])
+        .filter((item) => item.auto_approve_all_students)
+        .map((item) => item.id);
+      if (autoApproveIds.length) {
+        await Promise.all(
+          autoApproveIds.map((id) => api.post(`${ENDPOINTS.courseworks}${id}/sync_auto_approve/`).catch(() => null))
+        );
+      }
       await Promise.all([loadFeedbackMap(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
     };
     loadMeta();
@@ -392,54 +424,113 @@ const SubmissionsPage = () => {
       ? "single"
       : (isGroupRow || isCollaborativeRequestRow ? "group" : "single");
   };
-  const canApproveSubmission = (submission) =>
-    !submission?.is_topic_not_submitted && !submission?.is_marked && submission?.approval_status !== "approved";
-  const canRejectSubmission = (submission) =>
-    !submission?.is_topic_not_submitted &&
-    !submission?.is_marked &&
-    submission?.approval_status !== "approved" &&
-    submission?.approval_status !== "rejected";
-  const canBulkMarkSubmission = (submission) =>
-    !submission?.is_topic_not_submitted &&
-    String(submission?.approval_status || "").toLowerCase() === "approved" &&
-    Boolean(getPrimarySubmissionId(submission));
+  const canApproveSubmission = (submission) => ["waiting", "pending", "rejected"].includes(getStudentStatus(submission));
+  const canRejectSubmission = (submission) => getStudentStatus(submission) !== "rejected";
+  const canBulkMarkSubmission = (submission) => Boolean(submission);
+  const canUnmarkSubmission = (submission) => getStudentStatus(submission) === "marked";
+  const canSetWaiting = (submission) => getStudentStatus(submission) !== "waiting";
   const canBulkDeleteSubmission = (submission) => isAdminApprovalsView && hasPersistedSubmission(submission);
-  const canShowRowDelete = (submission) =>
-    hasPersistedSubmission(submission) && (
-      isAdminApprovalsView ||
-      !["approved", "file_submitted", "marked"].includes(selectedStatusFilters[0])
-    );
+  const canShowRowDelete = (submission) => isAdminApprovalsView && hasPersistedSubmission(submission);
 
-  const approve = async (submission) => {
-    const submissionId = getPrimarySubmissionId(submission);
-    if (!submissionId || submission?.is_topic_not_submitted) {
-      notify("No submission request exists for this row yet.", "warning");
-      return;
+  const toWorkflowItem = (item, action, extra = {}) => {
+    const persisted = hasPersistedSubmission(item);
+    const payload = persisted
+      ? { id: getPrimarySubmissionId(item), scope: resolveActionScope(item), action }
+      : { coursework: item.coursework, student: item.student, action };
+    return { ...payload, ...extra };
+  };
+
+  const applyWorkflow = async (items, action, options = {}) => {
+    const list = (Array.isArray(items) ? items : [items]).filter(Boolean);
+    if (!list.length) {
+      notify(options.emptyMessage || "No students selected for this action", "warning");
+      return false;
     }
-    const scope = resolveActionScope(submission);
     try {
-      await api.post(`${ENDPOINTS.submissions}${submissionId}/approve/`, null, { params: { scope } });
-      notify(scope === "group" ? "Group submissions approved" : "Submission approved");
-      await Promise.all([loadData(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
-    } catch {
-      notify("Approve failed", "error");
+      const payload = {
+        items: list.map((item) => toWorkflowItem(item, action, options.extraFor?.(item) || {})),
+      };
+      const { data } = await api.post(`${ENDPOINTS.submissions}set_workflow/`, payload);
+      const updated = Number(data?.updated_count || 0);
+      const failed = Number(data?.error_count || 0);
+      if (options.shouldNotify !== false) {
+        notify(
+          failed
+            ? `${updated} updated, ${failed} failed`
+            : (options.successMessage || `${updated} student(s) updated`),
+          failed ? "warning" : "success"
+        );
+      }
+      if (options.clearSelection !== false) setSelectedSubmissionIds({});
+      if (options.shouldReload !== false) {
+        await Promise.all([loadData(), loadFeedbackMap(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
+      }
+      return { updated, failed, submissions: data?.submissions || [] };
+    } catch (err) {
+      if (options.shouldNotify !== false) {
+        notify(err?.response?.data?.detail || options.failMessage || "Action failed", "error");
+      }
+      return false;
     }
   };
 
-  const reject = async (submission) => {
-    const submissionId = getPrimarySubmissionId(submission);
-    if (!submissionId || submission?.is_topic_not_submitted) {
-      notify("No submission request exists for this row yet.", "warning");
-      return;
+  const approve = async (submission) =>
+    applyWorkflow([submission], "approve", {
+      emptyMessage: "This student cannot be approved right now.",
+      successMessage: "Student approved",
+      failMessage: "Approve failed",
+    });
+
+  const reject = async (submission) =>
+    applyWorkflow([submission], "reject", {
+      emptyMessage: "This student cannot be rejected right now.",
+      successMessage: "Student rejected",
+      failMessage: "Reject failed",
+    });
+
+  const setWaiting = async (submission) =>
+    applyWorkflow([submission], "waiting", {
+      emptyMessage: "This student is already waiting.",
+      successMessage: "Student moved to waiting",
+      failMessage: "Could not set waiting",
+    });
+
+  const unmark = async (submission) =>
+    applyWorkflow([submission], "unmark", {
+      emptyMessage: "This student is not marked.",
+      successMessage: "Marks removed",
+      failMessage: "Unmark failed",
+    });
+
+  const getRowActions = (item) => {
+    const status = getStudentStatus(item);
+    const actions = [];
+    if (["waiting", "pending", "rejected"].includes(status)) {
+      actions.push({ key: "approve", label: "Approve" });
     }
-    const scope = resolveActionScope(submission);
-    try {
-      await api.post(`${ENDPOINTS.submissions}${submissionId}/reject/`, null, { params: { scope } });
-      notify(scope === "group" ? "Group submissions rejected" : "Submission rejected");
-      await Promise.all([loadData(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
-    } catch {
-      notify("Reject failed", "error");
+    if (status !== "marked") {
+      actions.push({ key: "mark", label: "Mark" });
     }
+    if (status === "marked") {
+      actions.push({ key: "unmark", label: "Unmark" });
+    }
+    if (status !== "waiting") {
+      actions.push({ key: "waiting", label: "Set waiting" });
+    }
+    if (status !== "rejected") {
+      actions.push({ key: "reject", label: "Reject" });
+    }
+    return actions;
+  };
+
+  const clampMarksInput = (value, maxMarks) => {
+    const normalized = normalizeMarksValue(value);
+    if (normalized === "") return "";
+    const numeric = Number(normalized);
+    if (!Number.isFinite(numeric)) return "";
+    if (numeric < 0) return "0";
+    if (maxMarks && numeric > Number(maxMarks)) return String(Math.trunc(Number(maxMarks)));
+    return String(Math.trunc(numeric));
   };
 
   const toggleSelectSubmission = (submission, idx = 0) => {
@@ -556,13 +647,24 @@ const SubmissionsPage = () => {
   };
 
   const saveFeedback = async (submission, scopeOverride, options = {}) => {
-    const submissionId = getPrimarySubmissionId(submission);
+    let working = submission;
+    let submissionId = getPrimarySubmissionId(submission);
     const targetStudentId = options?.targetStudentId || null;
     const shouldNotify = options?.shouldNotify !== false;
     const shouldReload = options?.shouldReload !== false;
-    if (submission?.is_topic_not_submitted || !submissionId) {
-      if (shouldNotify) notify("Student has not created a submission request yet", "warning");
-      return false;
+    if (!hasPersistedSubmission(working) || working?.is_topic_not_submitted) {
+      const created = await applyWorkflow([working], "approve", {
+        shouldNotify: false,
+        shouldReload: false,
+        clearSelection: false,
+      });
+      const createdSubmission = created?.submissions?.[0];
+      if (!createdSubmission?.id) {
+        if (shouldNotify) notify("Could not create a submission to save marks", "error");
+        return false;
+      }
+      working = { ...working, ...createdSubmission, is_topic_not_submitted: false };
+      submissionId = createdSubmission.id;
     }
     const draft = options?.draft || getFeedbackDraft(submission, options?.draftKey);
     if (draft.marks === "" || draft.marks === null || draft.marks === undefined) {
@@ -574,7 +676,7 @@ const SubmissionsPage = () => {
       if (shouldNotify) notify("Marks must be numeric", "error");
       return false;
     }
-    const maxMarks = courseworkById[String(submission.coursework)]?.max_marks;
+    const maxMarks = courseworkById[String(working.coursework || submission.coursework)]?.max_marks;
     if (Number(maxMarks) && numericMarks > Number(maxMarks)) {
       if (shouldNotify) notify(`Marks cannot exceed ${maxMarks}`, "error");
       return false;
@@ -610,7 +712,7 @@ const SubmissionsPage = () => {
         const canReuseExisting =
           !targetStudentId ||
           marksScope === "group" ||
-          String(submission?.student || "") === String(targetStudentId);
+          String(working?.student || submission?.student || "") === String(targetStudentId);
         const existing = canReuseExisting ? feedbackBySubmission[String(targetId)] : null;
         if (existing?.id) {
           await api.patch(`${ENDPOINTS.feedback}${existing.id}/`, payload, { params: requestParams });
@@ -619,7 +721,7 @@ const SubmissionsPage = () => {
         }
       }
       if (shouldNotify) {
-        if (submission.group && marksScope === "group") {
+        if (working.group && marksScope === "group") {
           notify("Group marks & feedback saved for all members");
         } else {
           notify("Marks & feedback saved");
@@ -640,9 +742,10 @@ const SubmissionsPage = () => {
   };
   const handleMarksDraftChange = (submission, value, draftKeyOverride) => {
     const submissionId = getPrimarySubmissionId(submission);
-    if (!submissionId && !draftKeyOverride) return;
-    const normalized = normalizeMarksValue(value);
-    updateFeedbackDraft(String(draftKeyOverride ?? submissionId), { marks: normalized });
+    const draftKey = String(draftKeyOverride ?? submissionId ?? submission?.id ?? "");
+    if (!draftKey) return;
+    const maxMarks = courseworkById[String(submission?.coursework)]?.max_marks;
+    updateFeedbackDraft(draftKey, { marks: clampMarksInput(value, maxMarks) });
   };
 
   const getRowDraftKey = (item, idx) =>
@@ -650,15 +753,56 @@ const SubmissionsPage = () => {
       ? String(item.id || `row-${item.coursework}-${item.student || idx}`)
       : String(getPrimarySubmissionId(item) || item.id || idx);
 
+  const markRows = async (rows, options = {}) => {
+    const list = (rows || []).filter(Boolean);
+    const payloadItems = [];
+    list.forEach((item, idx) => {
+      const draftKey = getRowDraftKey(item, idx);
+      const draft = getFeedbackDraft(item, draftKey);
+      const marks = options.useBulkField && bulkMarks !== "" ? bulkMarks : draft.marks;
+      if (marks === "" || marks == null) return;
+      payloadItems.push(
+        toWorkflowItem(item, "mark", {
+          marks: Number(marks),
+          feedback: draft.feedback || bulkFeedback || "",
+        })
+      );
+    });
+    if (!payloadItems.length) {
+      notify(options.emptyMessage || "Enter marks first, then mark the student(s).", "warning");
+      return false;
+    }
+    try {
+      const { data } = await api.post(`${ENDPOINTS.submissions}set_workflow/`, { items: payloadItems });
+      const updated = Number(data?.updated_count || 0);
+      const failed = Number(data?.error_count || 0);
+      notify(
+        failed ? `${updated} marked, ${failed} failed` : `Marks saved for ${updated} student(s)`,
+        failed ? "warning" : "success"
+      );
+      setSelectedSubmissionIds({});
+      await Promise.all([loadData(), loadFeedbackMap(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
+      return true;
+    } catch (err) {
+      notify(err?.response?.data?.detail || "Could not save marks", "error");
+      return false;
+    }
+  };
+
+  const handleRowAction = async (item, action) => {
+    setActionMenu({ anchor: null, item: null, idx: 0 });
+    if (action === "approve") return approve(item);
+    if (action === "reject") return reject(item);
+    if (action === "waiting") return setWaiting(item);
+    if (action === "unmark") return unmark(item);
+    if (action === "mark") return markRows([item]);
+    return null;
+  };
+
   const saveAllDraftMarks = async (items) => {
-    const markable = items.filter(
-      (item) =>
-        !item.is_topic_not_submitted &&
-        String(item.approval_status || "").toLowerCase() === "approved" &&
-        Boolean(getPrimarySubmissionId(item))
-    );
+    const markable = items.filter(Boolean);
     if (!markable.length) {
-      notify("Approve the topic first, then enter marks.", "warning");
+      notify("No students available to save marks.", "warning");
       return;
     }
     setSavingAllMarks(true);
@@ -711,6 +855,7 @@ const SubmissionsPage = () => {
   const allPendingNoRequestEntries = useMemo(() => {
     const entries = [];
     courseworksMeta.forEach((coursework) => {
+      if (coursework.auto_approve_all_students) return;
       const deadline = coursework.deadline ? new Date(coursework.deadline).getTime() : NaN;
       if (Number.isFinite(deadline) && deadline < Date.now()) return;
       const courseEnrollments = enrollments.filter((enrollment) => String(enrollment.course) === String(coursework.course));
@@ -927,75 +1072,53 @@ const SubmissionsPage = () => {
     [displayRows]
   );
 
-  const bulkApproveSelected = async (rowList) => {
-    if (bulkApproveLockRef.current) return;
-    const targets = (rowList || selectedApproveRows).filter(canApproveSubmission);
-    if (!targets.length) {
-      notify("Select students who still need topic approval", "warning");
-      return;
+  const bulkApproveSelected = async (rowList) =>
+    applyWorkflow((rowList || []).filter(canApproveSubmission), "approve", {
+      emptyMessage: "Select students who can be approved",
+      successMessage: "Selected students approved",
+      failMessage: "Bulk approve failed",
+    });
+  const bulkRejectSelected = async (rowList) =>
+    applyWorkflow((rowList || []).filter(canRejectSubmission), "reject", {
+      emptyMessage: "Select students who can be rejected",
+      successMessage: "Selected students rejected",
+      failMessage: "Bulk reject failed",
+    });
+  const handleBulkAction = async (section, value) => {
+    setBulkActionByCourse((prev) => ({ ...prev, [section.courseTitle]: "" }));
+    if (!value) return;
+    if (value === "approve-selected") return bulkApproveSelected(section.selectedApprove);
+    if (value === "approve-all") return bulkApproveSelected(section.allApprove);
+    if (value === "reject-selected") return bulkRejectSelected(section.selectedReject);
+    if (value === "reject-all") return bulkRejectSelected(section.allReject);
+    if (value === "mark-selected") return markRows(section.selectedItems, { useBulkField: true });
+    if (value === "mark-all") return markRows(section.items, { useBulkField: true });
+    if (value === "waiting-selected") {
+      return applyWorkflow(section.selectedWaiting, "waiting", {
+        emptyMessage: "Select students who are not already waiting",
+        successMessage: "Selected students moved to waiting",
+      });
     }
-    bulkApproveLockRef.current = true;
-    try {
-      const payload = {
-        items: targets.map((item) => ({
-          id: getPrimarySubmissionId(item),
-          scope: resolveActionScope(item),
-        })),
-      };
-      const { data } = await api.post(`${ENDPOINTS.submissions}bulk_approve/`, payload);
-      const approved = Number(data?.updated_count || 0);
-      const failed = Number(data?.error_count || 0);
-      notify(
-        failed ? `${approved} approved, ${failed} failed` : `${approved} submission(s) approved`,
-        failed ? "warning" : "success"
-      );
-      setSelectedSubmissionIds({});
-      await Promise.all([loadData(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
-    } catch {
-      notify("Bulk approve failed", "error");
-    } finally {
-      bulkApproveLockRef.current = false;
+    if (value === "waiting-all") {
+      return applyWorkflow(section.allWaitingRows, "waiting", {
+        emptyMessage: "No students to move to waiting",
+        successMessage: "Students moved to waiting",
+      });
     }
-  };
-  const bulkRejectSelected = async (rowList) => {
-    if (bulkRejectLockRef.current) return;
-    const targets = (rowList || []).filter(canRejectSubmission);
-    if (!targets.length) {
-      notify("Select students whose topic still needs a decision", "warning");
-      return;
+    if (value === "unmark-selected") {
+      return applyWorkflow(section.selectedUnmark, "unmark", {
+        emptyMessage: "Select marked students to unmark",
+        successMessage: "Selected students unmarked",
+      });
     }
-    bulkRejectLockRef.current = true;
-    setBulkRejecting(true);
-    try {
-      let updated = 0;
-      let failed = 0;
-      await Promise.all(targets.map(async (item) => {
-        const submissionId = getPrimarySubmissionId(item);
-        if (!submissionId) {
-          failed += 1;
-          return;
-        }
-        try {
-          await api.post(`${ENDPOINTS.submissions}${submissionId}/reject/`, null, {
-            params: { scope: resolveActionScope(item) },
-          });
-          updated += 1;
-        } catch {
-          failed += 1;
-        }
-      }));
-      notify(
-        failed ? `${updated} rejected, ${failed} failed` : `${updated} topic request(s) rejected`,
-        failed ? "warning" : "success"
-      );
-      setSelectedSubmissionIds({});
-      await Promise.all([loadData(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
-    } catch {
-      notify("Bulk reject failed", "error");
-    } finally {
-      setBulkRejecting(false);
-      bulkRejectLockRef.current = false;
+    if (value === "unmark-all") {
+      return applyWorkflow(section.allUnmark, "unmark", {
+        emptyMessage: "No marked students in this list",
+        successMessage: "Students unmarked",
+      });
     }
+    if (value === "save-typed") return saveAllDraftMarks(section.items);
+    return null;
   };
   const bulkSaveSelectedMarks = async (rowList) => {
     if (bulkSaveLockRef.current) return;
@@ -1253,11 +1376,6 @@ const SubmissionsPage = () => {
     const items = (courseworkGroup[selectedTitle] || []).slice().sort(compareByRollNo);
     const selectedItems = items.filter((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
     const tableAllChecked = items.length > 0 && items.every((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
-    const listCanApprove = items.some(canApproveSubmission);
-    const listCanReject = items.some(canRejectSubmission);
-    const listCanMark = items.some(canBulkMarkSubmission);
-    const listCanDelete = items.some(canBulkDeleteSubmission);
-    const allWaiting = items.length > 0 && items.every((item) => item.is_topic_not_submitted);
     return {
       courseTitle,
       courseworkGroup,
@@ -1268,18 +1386,14 @@ const SubmissionsPage = () => {
       selectedApprove: selectedItems.filter(canApproveSubmission),
       selectedReject: selectedItems.filter(canRejectSubmission),
       selectedMark: selectedItems.filter(canBulkMarkSubmission),
-      selectedDelete: selectedItems.filter(canBulkDeleteSubmission),
+      selectedWaiting: selectedItems.filter(canSetWaiting),
+      selectedUnmark: selectedItems.filter(canUnmarkSubmission),
+      allApprove: items.filter(canApproveSubmission),
+      allReject: items.filter(canRejectSubmission),
+      allWaitingRows: items.filter(canSetWaiting),
+      allUnmark: items.filter(canUnmarkSubmission),
       tableAllChecked,
       tableSomeChecked: selectedItems.length > 0 && !tableAllChecked,
-      listCanApprove,
-      listCanReject,
-      listCanMark,
-      listCanDelete,
-      allWaiting,
-      showSelect: listCanApprove || listCanReject || listCanMark || listCanDelete,
-      showFileCol: items.some((item) => !item.is_topic_not_submitted),
-      showMarksCol: items.some((item) => canBulkMarkSubmission(item) || item.is_marked),
-      showActionCol: items.some((item) => canApproveSubmission(item) || canRejectSubmission(item) || canShowRowDelete(item)),
     };
   });
 
@@ -1362,9 +1476,8 @@ const SubmissionsPage = () => {
                 sx={{
                   p: 1.1,
                   borderRadius: 1.5,
-                  bgcolor: section.allWaiting ? "#f8fafc" : "#f3f7ff",
-                  border: "1px solid",
-                  borderColor: section.allWaiting ? "#e2e8f0" : "#dbeafe",
+                  bgcolor: "#f3f7ff",
+                  border: "1px solid #dbeafe",
                 }}
               >
                 <Stack
@@ -1375,93 +1488,68 @@ const SubmissionsPage = () => {
                 >
                   <Box sx={{ minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 800, color: "#16356f" }}>
-                      {section.showSelect
-                        ? `${section.selectedItems.length} selected of ${section.items.length} students`
-                        : `${section.items.length} student${section.items.length === 1 ? "" : "s"}`}
+                      {`${section.selectedItems.length} selected of ${section.items.length} students`}
                     </Typography>
                     <Typography variant="caption" sx={{ color: "#5b6f91", display: "block", mt: 0.2 }}>
-                      {section.allWaiting
-                        ? "Waiting for topic. Approve, marks, and delete unlock after a student submits."
-                        : section.listCanApprove && !section.listCanMark
-                          ? "Request for approval: approve or reject the selected students."
-                          : section.listCanMark && !section.listCanApprove
-                            ? "Approved work can take marks. Type in the table or give the same marks to selected students."
-                            : "Only actions that match the selected students are shown."}
+                      Use the action menu on each row, or apply a bulk action to selected or all students. Typed marks can also be saved from this list.
                     </Typography>
                   </Box>
-                  {section.showSelect ? (
-                    <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center" justifyContent="flex-end">
-                      {section.listCanMark ? (
-                        <>
-                          <TextField
-                            size="small"
-                            type="number"
-                            label="Marks"
-                            value={bulkMarks}
-                            onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
-                            inputProps={{ min: 0, step: 1 }}
-                            sx={{ width: 88 }}
-                          />
-                          <Button
-                            size="small"
-                            variant="contained"
-                            disabled={bulkSavingMarks || !section.selectedMark.length}
-                            onClick={() => bulkSaveSelectedMarks(section.selectedMark)}
-                          >
-                            {bulkSavingMarks ? "Saving..." : `Give to selected${section.selectedMark.length ? ` (${section.selectedMark.length})` : ""}`}
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            disabled={bulkSavingMarks || !section.items.filter(canBulkMarkSubmission).length}
-                            onClick={() => applyBulkMarksToAssessment(section.items)}
-                          >
-                            {`Give to all approved (${section.items.filter(canBulkMarkSubmission).length})`}
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="text"
-                            disabled={savingAllMarks || !section.items.filter(canBulkMarkSubmission).length}
-                            onClick={() => saveAllDraftMarks(section.items)}
-                          >
-                            {savingAllMarks ? "Saving..." : "Save typed marks"}
-                          </Button>
-                        </>
-                      ) : null}
-                      {section.listCanApprove ? (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="success"
-                          disabled={!section.selectedApprove.length}
-                          onClick={() => bulkApproveSelected(section.selectedApprove)}
-                        >
-                          {`Approve${section.selectedApprove.length ? ` (${section.selectedApprove.length})` : ""}`}
-                        </Button>
-                      ) : null}
-                      {section.listCanReject ? (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          disabled={!section.selectedReject.length || bulkRejecting}
-                          onClick={() => bulkRejectSelected(section.selectedReject)}
-                        >
-                          {bulkRejecting ? "Rejecting..." : `Reject${section.selectedReject.length ? ` (${section.selectedReject.length})` : ""}`}
-                        </Button>
-                      ) : null}
-                      {section.listCanDelete ? (
-                        <Button
-                          size="small"
-                          color="error"
-                          variant="outlined"
-                          disabled={!section.selectedDelete.length || bulkDeleting}
-                          onClick={() => bulkDeleteSelected(section.selectedDelete)}
-                        >
-                          {bulkDeleting ? "Deleting..." : `Delete${section.selectedDelete.length ? ` (${section.selectedDelete.length})` : ""}`}
-                        </Button>
-                      ) : null}
-                    </Stack>
-                  ) : null}
+                  <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center" justifyContent="flex-end">
+                    <TextField
+                      size="small"
+                      type="number"
+                      label="Bulk marks"
+                      value={bulkMarks}
+                      onChange={(e) => {
+                        const maxMarks = courseworkById[String(section.items[0]?.coursework)]?.max_marks;
+                        setBulkMarks(clampMarksInput(e.target.value, maxMarks));
+                      }}
+                      inputProps={{ min: 0, step: 1 }}
+                      sx={{ width: 110 }}
+                    />
+                    <FormControl size="small" sx={{ minWidth: 250 }}>
+                      <InputLabel>Bulk action</InputLabel>
+                      <Select
+                        value={bulkActionByCourse[section.courseTitle] || ""}
+                        label="Bulk action"
+                        onChange={(e) => handleBulkAction(section, e.target.value)}
+                      >
+                        <MenuItem value="approve-selected" disabled={!section.selectedApprove.length}>
+                          {`Approve selected (${section.selectedApprove.length})`}
+                        </MenuItem>
+                        <MenuItem value="approve-all" disabled={!section.allApprove.length}>
+                          {`Approve all (${section.allApprove.length})`}
+                        </MenuItem>
+                        <MenuItem value="reject-selected" disabled={!section.selectedReject.length}>
+                          {`Reject selected (${section.selectedReject.length})`}
+                        </MenuItem>
+                        <MenuItem value="reject-all" disabled={!section.allReject.length}>
+                          {`Reject all (${section.allReject.length})`}
+                        </MenuItem>
+                        <MenuItem value="mark-selected" disabled={!section.selectedItems.length}>
+                          {`Mark selected (${section.selectedItems.length})`}
+                        </MenuItem>
+                        <MenuItem value="mark-all" disabled={!section.items.length}>
+                          {`Mark all (${section.items.length})`}
+                        </MenuItem>
+                        <MenuItem value="waiting-selected" disabled={!section.selectedWaiting.length}>
+                          {`Waiting selected (${section.selectedWaiting.length})`}
+                        </MenuItem>
+                        <MenuItem value="waiting-all" disabled={!section.allWaitingRows.length}>
+                          {`Waiting all (${section.allWaitingRows.length})`}
+                        </MenuItem>
+                        <MenuItem value="unmark-selected" disabled={!section.selectedUnmark.length}>
+                          {`Unmark selected (${section.selectedUnmark.length})`}
+                        </MenuItem>
+                        <MenuItem value="unmark-all" disabled={!section.allUnmark.length}>
+                          {`Unmark all (${section.allUnmark.length})`}
+                        </MenuItem>
+                        <MenuItem value="save-typed" disabled={!section.items.length || savingAllMarks}>
+                          {savingAllMarks ? "Saving typed marks..." : "Save typed marks"}
+                        </MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Stack>
                 </Stack>
               </Box>
             </Box>
@@ -1489,13 +1577,7 @@ const SubmissionsPage = () => {
               items,
               tableAllChecked,
               tableSomeChecked,
-              showSelect,
-              showFileCol,
-              showMarksCol,
-              showActionCol,
             } = section;
-            const tableColSpan =
-              (showSelect ? 1 : 0) + 2 + (showFileCol ? 1 : 0) + (showMarksCol ? 1 : 0) + (showActionCol ? 1 : 0);
             return (
             <Box key={courseTitle}>
                       <TableContainer sx={{ overflowX: "auto" }}>
@@ -1503,7 +1585,7 @@ const SubmissionsPage = () => {
                         size="small"
                         stickyHeader
                         sx={{
-                          minWidth: showActionCol || showMarksCol ? 720 : 520,
+                          minWidth: 920,
                           "& th": { py: 0.9, fontWeight: 700, color: "#35507c", bgcolor: "#f7faff" },
                           "& td": { py: 1, verticalAlign: "middle" },
                           "& tbody tr:nth-of-type(even)": { bgcolor: "#fbfdff" },
@@ -1511,230 +1593,124 @@ const SubmissionsPage = () => {
                       >
                         <TableHead>
                           <TableRow>
-                            {showSelect ? (
-                              <TableCell padding="checkbox">
-                                <Checkbox
-                                  size="small"
-                                  checked={tableAllChecked}
-                                  indeterminate={tableSomeChecked}
-                                  onChange={() => toggleSelectAllItems(items)}
-                                />
-                              </TableCell>
-                            ) : null}
-                            <TableCell>Student / Group</TableCell>
+                            <TableCell padding="checkbox">
+                              <Checkbox
+                                size="small"
+                                checked={tableAllChecked}
+                                indeterminate={tableSomeChecked}
+                                onChange={() => toggleSelectAllItems(items)}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ width: 56 }}>Sr #</TableCell>
+                            <TableCell>Name</TableCell>
+                            <TableCell>Roll no</TableCell>
                             <TableCell>Status</TableCell>
-                            {showFileCol ? <TableCell>File</TableCell> : null}
-                            {showMarksCol ? <TableCell>Marks</TableCell> : null}
-                            {showActionCol ? <TableCell align="right">Action</TableCell> : null}
+                            <TableCell>Marks</TableCell>
+                            <TableCell>File</TableCell>
+                            <TableCell align="right">Action</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
                           {items.map((item, idx) => {
                             const primarySubmissionId = getPrimarySubmissionId(item);
-                            const isGroupRow = Boolean(item.group) && !item.force_individual_row;
-                            const groupMembers = (groupsById[String(item.group)]?.members || []).filter((member) => member.accepted !== false);
-                            const groupMemberRows = item.group_member_rows || [];
-                            const canViewMembers =
-                              !item.is_topic_not_submitted &&
-                              (
-                                Boolean(item.group) ||
-                                (item.requested_member_ids || []).length > 0 ||
-                                (item.requested_member_details || []).length > 0 ||
-                                (item.requested_member_names || []).length > 0
-                              );
-                            const memberHintCount =
-                              (item.requested_member_details || []).length ||
-                              (item.requested_member_ids || []).length ||
-                              (item.requested_member_names || []).length ||
-                              groupMembers.length ||
-                              groupMemberRows.length;
-                            const canShowMarkingControls =
-                              !item.is_topic_not_submitted &&
-                              String(item.approval_status || "").toLowerCase() === "approved";
-                            const canShowDeleteAction = canShowRowDelete(item);
-                            const rowDraftKey =
-                              item.force_individual_row && item.synthetic_member_row
-                                ? String(item.id || `row-${item.coursework}-${item.student || idx}`)
-                                : String(primarySubmissionId || item.id || idx);
-                            const groupOpen = !!openGroupRows[String(primarySubmissionId)];
+                            const memberHintCount = getRowMemberCount(item, groupsById);
+                            const canViewMembers = memberHintCount > 0;
+                            const rowDraftKey = getRowDraftKey(item, idx);
                             const senderName = item.student_name || item.submitted_by_name || item.student || "-";
-                            const studentLabel = item.force_individual_row
-                              ? senderName
-                              : (item.group_name || senderName);
+                            const studentLabel = senderName;
                             const maxMarks = courseworkById[String(item.coursework)]?.max_marks;
-                            const givenMarks = feedbackBySubmission[String(primarySubmissionId)]?.marks ?? item.obtained_marks ?? "-";
-                            const simpleStatus = item.is_topic_not_submitted
-                              ? { label: "Waiting", color: "warning" }
-                              : item.is_marked
-                                ? { label: "Marked", color: "success" }
-                                : item.approval_status === "rejected"
-                                  ? { label: "Rejected", color: "error" }
-                                  : item.approval_status === "approved"
-                                    ? { label: item.file ? "Submitted" : "Approved", color: item.file ? "info" : "success" }
-                                    : { label: "Request for approval", color: "warning" };
+                            const studentStatus = getStudentStatus(item);
+                            const statusChip = STATUS_CHIP[studentStatus] || STATUS_CHIP.waiting;
+                            const rowActions = getRowActions(item);
 
                             return (
-                              <Fragment key={item.id}>
-                                <TableRow>
-                                  {showSelect ? (
-                                    <TableCell padding="checkbox">
-                                      <Checkbox
-                                        size="small"
-                                        checked={!!selectedSubmissionIds[getRowSelectKey(item, idx)]}
-                                        onChange={() => toggleSelectSubmission(item, idx)}
-                                      />
-                                    </TableCell>
-                                  ) : null}
-                                  <TableCell>
-                                    <Typography
-                                      sx={{
-                                        fontWeight: 700,
-                                        lineHeight: 1.3,
-                                        cursor: canViewMembers ? "pointer" : "default",
-                                        color: canViewMembers ? "#1d4fbf" : "inherit",
-                                      }}
-                                      onClick={canViewMembers ? () => openSubmissionMembers(item) : undefined}
-                                    >
+                              <TableRow key={item.id}>
+                                <TableCell padding="checkbox">
+                                  <Checkbox
+                                    size="small"
+                                    checked={!!selectedSubmissionIds[getRowSelectKey(item, idx)]}
+                                    onChange={() => toggleSelectSubmission(item, idx)}
+                                  />
+                                </TableCell>
+                                <TableCell>{idx + 1}</TableCell>
+                                <TableCell>
+                                  <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
+                                    <Typography sx={{ fontWeight: 700, lineHeight: 1.3 }}>
                                       {studentLabel}
                                     </Typography>
-                                    <Typography variant="caption" color="text.secondary" display="block">
-                                      {item.topic ? item.topic : "No topic"}
-                                      {canViewMembers ? ` · Sent by ${senderName}` : ""}
-                                      {item.student_roll_no ? ` · ${item.student_roll_no}` : ""}
-                                      {item.submitted_at ? ` · ${formatDate(item.submitted_at)}` : ""}
-                                    </Typography>
-                                    {canViewMembers && (
-                                      <Button
+                                    {canViewMembers ? (
+                                      <Chip
                                         size="small"
-                                        sx={{ px: 0, minWidth: 0, mt: 0.2 }}
+                                        label={`Members (${memberHintCount})`}
                                         onClick={() => openSubmissionMembers(item)}
-                                      >
-                                        {memberHintCount ? `View members (${memberHintCount})` : "View members"}
-                                      </Button>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Chip size="small" color={simpleStatus.color} label={simpleStatus.label} />
-                                  </TableCell>
-                                  {showFileCol ? (
-                                  <TableCell>
-                                    {item.file ? (
-                                      <Stack direction="row" spacing={0.3}>
-                                        <IconButton size="small" onClick={() => openFilePreview(item)}>
-                                          <VisibilityOutlinedIcon fontSize="small" />
-                                        </IconButton>
-                                        <IconButton size="small" onClick={() => downloadFile(item)}>
-                                          <DownloadRoundedIcon fontSize="small" />
-                                        </IconButton>
-                                      </Stack>
-                                    ) : (
-                                      <Typography variant="caption" color="text.secondary">—</Typography>
-                                    )}
-                                  </TableCell>
-                                  ) : null}
-                                  {showMarksCol ? (
-                                  <TableCell>
-                                    {canShowMarkingControls ? (
-                                      <TextField
-                                        size="small"
-                                        type="number"
-                                        placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
-                                        value={getFeedbackDraft(item, rowDraftKey).marks}
-                                        onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
-                                        inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
-                                        sx={{ width: 88 }}
+                                        sx={{
+                                          bgcolor: "#facc15",
+                                          color: "#713f12",
+                                          fontWeight: 700,
+                                          cursor: "pointer",
+                                          "&:hover": { bgcolor: "#eab308" },
+                                        }}
                                       />
-                                    ) : (
-                                      <Typography variant="body2" color="text.secondary">
-                                        {item.is_marked ? formatMarks(givenMarks) : "—"}
-                                      </Typography>
-                                    )}
-                                  </TableCell>
+                                    ) : null}
+                                  </Stack>
+                                  {item.topic ? (
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                      {item.topic}
+                                    </Typography>
                                   ) : null}
-                                  {showActionCol ? (
-                                  <TableCell align="right">
-                                    <Stack direction="row" spacing={0.6} justifyContent="flex-end">
-                                      {canApproveSubmission(item) ? (
-                                        <Button size="small" color="success" variant="contained" onClick={() => approve(item)}>
-                                          Approve
-                                        </Button>
-                                      ) : null}
-                                      {canRejectSubmission(item) ? (
-                                        <Button size="small" color="inherit" onClick={() => reject(item)}>
-                                          Reject
-                                        </Button>
-                                      ) : null}
-                                      {canShowDeleteAction && primarySubmissionId ? (
-                                        <Button size="small" color="error" onClick={() => remove(primarySubmissionId)}>
-                                          Delete
-                                        </Button>
-                                      ) : null}
+                                </TableCell>
+                                <TableCell>{item.student_roll_no || "-"}</TableCell>
+                                <TableCell>
+                                  <Chip size="small" color={statusChip.color} label={statusChip.label} />
+                                </TableCell>
+                                <TableCell>
+                                  <TextField
+                                    size="small"
+                                    type="number"
+                                    placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
+                                    value={getFeedbackDraft(item, rowDraftKey).marks}
+                                    onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
+                                    inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
+                                    sx={{ width: 96 }}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {item.file ? (
+                                    <Stack direction="row" spacing={0.3}>
+                                      <IconButton size="small" onClick={() => openFilePreview(item)} title="View file">
+                                        <VisibilityOutlinedIcon fontSize="small" />
+                                      </IconButton>
+                                      <IconButton size="small" onClick={() => downloadFile(item)} title="Download file">
+                                        <DownloadRoundedIcon fontSize="small" />
+                                      </IconButton>
                                     </Stack>
-                                  </TableCell>
-                                  ) : null}
-                                </TableRow>
-
-                                {isGroupRow && (
-                                  <TableRow>
-                                    <TableCell sx={{ p: 0 }} colSpan={tableColSpan}>
-                                      <Collapse in={groupOpen} timeout="auto" unmountOnExit>
-                                        <Box sx={{ m: 1, p: 1, border: "1px solid #e6eefc", borderRadius: 1.2, bgcolor: "#f8fbff" }}>
-                                          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.8 }}>
-                                            Group members
-                                          </Typography>
-                                          <Table size="small">
-                                            <TableHead>
-                                              <TableRow>
-                                                <TableCell>Name</TableCell>
-                                                <TableCell>Roll No</TableCell>
-                                                {canShowMarkingControls && <TableCell>Marks</TableCell>}
-                                              </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                              {(groupMembers.length ? groupMembers : groupMemberRows)
-                                                .slice()
-                                                .sort(compareByRollNo)
-                                                .map((member, memberIdx) => {
-                                                const memberStudentId = String(member.student || member.id || "");
-                                                const memberSubmission =
-                                                  groupMemberRows.find((row) => String(row.student || "") === memberStudentId) ||
-                                                  groupMemberRows[memberIdx] ||
-                                                  item;
-                                                const memberSubmissionId = getPrimarySubmissionId(memberSubmission);
-                                                const memberName =
-                                                  member.student_name ||
-                                                  member.student_display ||
-                                                  member.student_username ||
-                                                  memberSubmission?.student_name ||
-                                                  "-";
-                                                const memberRollNo = member.student_roll_no || memberSubmission?.student_roll_no || "-";
-
-                                                return (
-                                                  <TableRow key={`${primarySubmissionId}-member-${memberStudentId || memberIdx}`}>
-                                                    <TableCell>{memberName}</TableCell>
-                                                    <TableCell>{memberRollNo}</TableCell>
-                                                    {canShowMarkingControls && (
-                                                      <TableCell sx={{ minWidth: 110 }}>
-                                                        <TextField
-                                                          size="small"
-                                                          type="number"
-                                                          value={getFeedbackDraft(memberSubmission).marks}
-                                                          onChange={(e) => handleMarksDraftChange(memberSubmission, e.target.value)}
-                                                          inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
-                                                        />
-                                                      </TableCell>
-                                                    )}
-                                                  </TableRow>
-                                                );
-                                              })}
-                                            </TableBody>
-                                          </Table>
-                                        </Box>
-                                      </Collapse>
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                              </Fragment>
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">No file</Typography>
+                                  )}
+                                </TableCell>
+                                <TableCell align="right">
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => setActionMenu({ anchor: e.currentTarget, item, idx })}
+                                  >
+                                    <MoreVertIcon fontSize="small" />
+                                  </IconButton>
+                                  <Menu
+                                    anchorEl={actionMenu.anchor}
+                                    open={Boolean(actionMenu.anchor) && actionMenu.item?.id === item.id}
+                                    onClose={() => setActionMenu({ anchor: null, item: null, idx: 0 })}
+                                  >
+                                    {rowActions.map((action) => (
+                                      <MenuItem
+                                        key={action.key}
+                                        onClick={() => handleRowAction(item, action.key)}
+                                      >
+                                        {action.label}
+                                      </MenuItem>
+                                    ))}
+                                  </Menu>
+                                </TableCell>
+                              </TableRow>
                             );
                           })}
                         </TableBody>

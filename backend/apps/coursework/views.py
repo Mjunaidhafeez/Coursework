@@ -50,26 +50,57 @@ class CourseworkViewSet(AuditLogMixin, viewsets.ModelViewSet):
             return queryset.filter(course__enrollments__student=user).distinct()
         return queryset
 
+    def _ensure_auto_approved_roster(self, coursework):
+        if not coursework.auto_approve_all_students:
+            return {"created": 0, "updated": 0}
+        enrolled_student_ids = list(
+            Enrollment.objects.filter(course_id=coursework.course_id).values_list("student_id", flat=True).distinct()
+        )
+        existing = {
+            submission.student_id: submission
+            for submission in Submission.objects.filter(coursework=coursework, student_id__in=enrolled_student_ids)
+        }
+        now = timezone.now()
+        to_create = []
+        to_approve_ids = []
+        for student_id in enrolled_student_ids:
+            submission = existing.get(student_id)
+            if not submission:
+                to_create.append(
+                    Submission(
+                        coursework=coursework,
+                        student_id=student_id,
+                        topic=coursework.title or "",
+                        submitted_at=now,
+                        approval_status=Submission.ApprovalStatus.APPROVED,
+                    )
+                )
+            elif submission.approval_status != Submission.ApprovalStatus.APPROVED:
+                to_approve_ids.append(submission.id)
+        if to_create:
+            Submission.objects.bulk_create(to_create)
+        if to_approve_ids:
+            Submission.objects.filter(id__in=to_approve_ids).update(approval_status=Submission.ApprovalStatus.APPROVED)
+        return {"created": len(to_create), "updated": len(to_approve_ids)}
+
     def perform_create(self, serializer):
         obj = serializer.save()
-        if obj.auto_approve_all_students:
-            enrolled_student_ids = list(
-                Enrollment.objects.filter(course_id=obj.course_id).values_list("student_id", flat=True).distinct()
-            )
-            now = timezone.now()
-            submissions_to_create = [
-                Submission(
-                    coursework=obj,
-                    student_id=student_id,
-                    topic=obj.title or "",
-                    submitted_at=now,
-                    approval_status=Submission.ApprovalStatus.APPROVED,
-                )
-                for student_id in enrolled_student_ids
-            ]
-            if submissions_to_create:
-                Submission.objects.bulk_create(submissions_to_create)
+        self._ensure_auto_approved_roster(obj)
         self.create_audit_log(self.request, "coursework_created", obj, {"coursework_type": obj.coursework_type})
+
+    def perform_update(self, serializer):
+        obj = serializer.save()
+        self._ensure_auto_approved_roster(obj)
+
+    @action(detail=True, methods=["post"])
+    def sync_auto_approve(self, request, pk=None):
+        coursework = self.get_object()
+        if request.user.role not in [User.Role.TEACHER, User.Role.SUPER_ADMIN]:
+            raise PermissionDenied("Only teacher/admin can sync auto-approve.")
+        if request.user.role == User.Role.TEACHER and not coursework.course.teachers.filter(id=request.user.id).exists():
+            raise PermissionDenied("You can only sync auto-approve for your courses.")
+        result = self._ensure_auto_approved_roster(coursework)
+        return Response(result, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         coursework = self.get_object()
@@ -287,6 +318,150 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
         deleted_count = target_qs.count()
         target_qs.delete()
         return Response({"deleted_count": deleted_count}, status=status.HTTP_200_OK)
+
+    def _ensure_moderation_user(self, user):
+        if user.role not in [User.Role.TEACHER, User.Role.SUPER_ADMIN]:
+            raise PermissionDenied("Only teacher/admin can manage submissions.")
+
+    def _teacher_can_manage_course(self, user, course_id):
+        if user.role == User.Role.SUPER_ADMIN:
+            return True
+        return user.teaching_courses.filter(id=course_id).exists()
+
+    def _get_or_create_student_submission(self, coursework, student_id):
+        existing = (
+            Submission.objects.filter(coursework=coursework, student_id=student_id)
+            .order_by("-submitted_at", "-id")
+            .first()
+        )
+        if existing:
+            return existing
+        enrolled = Enrollment.objects.filter(course_id=coursework.course_id, student_id=student_id).exists()
+        if not enrolled:
+            return None
+        return Submission.objects.create(
+            coursework=coursework,
+            student_id=student_id,
+            topic=coursework.title or "",
+            submitted_at=timezone.now(),
+            approval_status=Submission.ApprovalStatus.PENDING,
+        )
+
+    def _clamp_marks(self, submission, raw_marks):
+        try:
+            marks_value = Decimal(str(raw_marks))
+        except (InvalidOperation, TypeError):
+            return None
+        if marks_value < 0:
+            marks_value = Decimal("0")
+        max_marks = submission.coursework.max_marks
+        if max_marks is not None and marks_value > max_marks:
+            marks_value = max_marks
+        return marks_value
+
+    def _apply_marks(self, submission, raw_marks, feedback, teacher):
+        marks_value = self._clamp_marks(submission, raw_marks)
+        if marks_value is None:
+            return False
+        FeedbackGrade.objects.update_or_create(
+            submission=submission,
+            defaults={
+                "teacher": teacher,
+                "feedback": feedback or "",
+                "marks": marks_value,
+            },
+        )
+        return True
+
+    def _apply_workflow_action(self, submission, action):
+        action = str(action or "").strip().lower()
+        if action in ["approve", "mark"]:
+            submission.approval_status = Submission.ApprovalStatus.APPROVED
+            submission.save(update_fields=["approval_status"])
+        elif action == "reject":
+            FeedbackGrade.objects.filter(submission=submission).delete()
+            submission.approval_status = Submission.ApprovalStatus.REJECTED
+            submission.save(update_fields=["approval_status"])
+        elif action == "waiting":
+            FeedbackGrade.objects.filter(submission=submission).delete()
+            submission.approval_status = Submission.ApprovalStatus.PENDING
+            submission.topic = ""
+            submission.save(update_fields=["approval_status", "topic"])
+        elif action == "unmark":
+            FeedbackGrade.objects.filter(submission=submission).delete()
+        else:
+            return False
+        return True
+
+    @action(detail=False, methods=["post"])
+    def set_workflow(self, request):
+        items = request.data.get("items") or []
+        if not isinstance(items, list) or not items:
+            return Response({"detail": "items list is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        self._ensure_moderation_user(user)
+        updated_count = 0
+        errors = []
+        submissions = []
+
+        for index, item in enumerate(items):
+            action_name = str(item.get("action") or "").strip().lower()
+            if action_name not in ["approve", "reject", "waiting", "unmark", "mark"]:
+                errors.append({"index": index, "detail": "Invalid action."})
+                continue
+
+            submission = None
+            submission_id = item.get("id")
+            if submission_id and not str(submission_id).startswith("missing-"):
+                submission = Submission.objects.select_related("coursework__course").filter(id=submission_id).first()
+
+            if not submission:
+                coursework_id = item.get("coursework")
+                student_id = item.get("student")
+                coursework = Coursework.objects.select_related("course").filter(id=coursework_id).first()
+                if not coursework or not student_id:
+                    errors.append({"index": index, "detail": "Submission or coursework/student is required."})
+                    continue
+                if not self._teacher_can_manage_course(user, coursework.course_id):
+                    errors.append({"index": index, "detail": "Not allowed for this course."})
+                    continue
+                submission = self._get_or_create_student_submission(coursework, student_id)
+                if not submission:
+                    errors.append({"index": index, "detail": "Student is not enrolled in this course."})
+                    continue
+            else:
+                if not self._teacher_can_manage_course(user, submission.coursework.course_id):
+                    errors.append({"index": index, "detail": "Not allowed for this course."})
+                    continue
+
+            scope = str(item.get("scope") or "single").strip().lower()
+            targets = self._get_scope_submissions(submission, scope) if scope == "group" else Submission.objects.filter(id=submission.id)
+            if action_name == "waiting":
+                target_ids = list(targets.values_list("id", flat=True))
+                FeedbackGrade.objects.filter(submission_id__in=target_ids).delete()
+                Submission.objects.filter(id__in=target_ids).delete()
+                updated_count += len(target_ids)
+                continue
+            raw_marks = item.get("marks", None)
+            feedback_text = item.get("feedback", "") or ""
+            for target in targets:
+                if self._apply_workflow_action(target, action_name):
+                    updated_count += 1
+                if action_name in ["approve", "mark"] and raw_marks not in [None, ""]:
+                    self._apply_marks(target, raw_marks, feedback_text, user)
+            submission.refresh_from_db()
+            submissions.append(self.get_serializer(submission).data)
+
+        return Response(
+            {
+                "updated_count": updated_count,
+                "error_count": len(errors),
+                "errors": errors,
+                "submissions": submissions,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def _can_student_edit_submission(self, user, submission):
         if submission.student_id == user.id:
