@@ -56,6 +56,20 @@ const compareByRollNo = (a, b) => {
   });
 };
 
+const getAssessmentDeadlineScore = (title, courseworkGroup, courseworkById) => {
+  const row = courseworkGroup?.[title]?.[0];
+  const cw = courseworkById?.[String(row?.coursework)];
+  const deadline = cw?.deadline ? new Date(cw.deadline).getTime() : NaN;
+  if (!Number.isFinite(deadline)) return Number.MAX_SAFE_INTEGER;
+  const now = Date.now();
+  return deadline >= now ? deadline : deadline + 1e15;
+};
+
+const sortAssessmentTitlesByComing = (titles, courseworkGroup, courseworkById) =>
+  [...titles].sort(
+    (a, b) => getAssessmentDeadlineScore(a, courseworkGroup, courseworkById) - getAssessmentDeadlineScore(b, courseworkGroup, courseworkById)
+  );
+
 const SubmissionsPage = () => {
   const { user } = useAuth();
   const { notify, isGlobalLoading } = useUi();
@@ -89,6 +103,7 @@ const SubmissionsPage = () => {
   const bulkDeleteLockRef = useRef(false);
   const resultsSectionRef = useRef(null);
   const hasMountedRef = useRef(false);
+  const didPickLandingTabRef = useRef(false);
   const [workflowCounts, setWorkflowCounts] = useState({
     request_pending: 0,
     ready_for_upload: 0,
@@ -96,6 +111,7 @@ const SubmissionsPage = () => {
     marked: 0,
     request_rejected: 0,
   });
+  const [metaReady, setMetaReady] = useState(false);
 
   const queryFn = async ({ search, page, pageSize }) => {
     const params = new URLSearchParams();
@@ -177,6 +193,7 @@ const SubmissionsPage = () => {
       const enrollmentsRes = await api.get(`${ENDPOINTS.enrollments}?page_size=2000`);
       setEnrollments(enrollmentsRes.data.results || []);
       await Promise.all([loadFeedbackMap(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
+      setMetaReady(true);
     };
     loadMeta();
   }, [statusFilter]);
@@ -513,12 +530,11 @@ const SubmissionsPage = () => {
     }
   };
 
-  const pendingNoRequestEntries = useMemo(() => {
-    const shouldShow = workflowFilter === "" || workflowFilter === "request_pending" || workflowFilter === "topic_not_submitted";
-    if (!shouldShow) return [];
-
+  const allPendingNoRequestEntries = useMemo(() => {
     const entries = [];
     courseworksMeta.forEach((coursework) => {
+      const deadline = coursework.deadline ? new Date(coursework.deadline).getTime() : NaN;
+      if (Number.isFinite(deadline) && deadline < Date.now()) return;
       const courseEnrollments = enrollments.filter((enrollment) => String(enrollment.course) === String(coursework.course));
       if (!courseEnrollments.length) return;
       const submittedStudentIds = new Set();
@@ -560,7 +576,18 @@ const SubmissionsPage = () => {
         sensitivity: "base",
       })
     );
-  }, [workflowFilter, courseworksMeta, enrollments, submissionIndexRows, groupsById, courses]);
+  }, [courseworksMeta, enrollments, submissionIndexRows, groupsById, courses]);
+
+  const pendingNoRequestEntries = useMemo(() => {
+    const shouldShow = workflowFilter === "" || workflowFilter === "request_pending" || workflowFilter === "topic_not_submitted";
+    if (!shouldShow) return [];
+    return allPendingNoRequestEntries;
+  }, [workflowFilter, allPendingNoRequestEntries]);
+
+  const waitingAssessmentCount = useMemo(
+    () => new Set(allPendingNoRequestEntries.map((entry) => String(entry.courseworkId))).size,
+    [allPendingNoRequestEntries]
+  );
 
   const displayRows = useMemo(() => {
     if (workflowFilter === "topic_not_submitted") {
@@ -656,14 +683,37 @@ const SubmissionsPage = () => {
       Object.entries(groupedByCourseAndCoursework).forEach(([courseTitle, courseworkGroup]) => {
         const titles = Object.keys(courseworkGroup);
         if (!titles.length) return;
+        const comingTitle = sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
         if (!next[courseTitle] || !courseworkGroup[next[courseTitle]]) {
-          next[courseTitle] = titles[0];
+          next[courseTitle] = comingTitle;
           changed = true;
         }
       });
       return changed ? next : prev;
     });
-  }, [groupedByCourseAndCoursework]);
+  }, [groupedByCourseAndCoursework, courseworkById]);
+
+  useEffect(() => {
+    if (didPickLandingTabRef.current) return;
+    const topics = workflowCounts.request_pending || 0;
+    const waiting = waitingAssessmentCount;
+    const approved = workflowCounts.ready_for_upload || 0;
+    const files = workflowCounts.file_submitted || 0;
+    const marked = workflowCounts.marked || 0;
+    if (!metaReady) return;
+    didPickLandingTabRef.current = true;
+    if (topics > 0) {
+      setWorkflowFilter("request_pending");
+      return;
+    }
+    if (waiting > 0) {
+      setWorkflowFilter("topic_not_submitted");
+      return;
+    }
+    if (approved > 0) setWorkflowFilter("ready_for_upload");
+    else if (files > 0) setWorkflowFilter("file_submitted");
+    else if (marked > 0) setWorkflowFilter("marked");
+  }, [metaReady, workflowCounts, waitingAssessmentCount]);
 
   const courseNameById = useMemo(() => {
     const map = {};
@@ -820,6 +870,51 @@ const SubmissionsPage = () => {
         failedCount ? "warning" : "success"
       );
       await Promise.all([loadData(), loadWorkflowCounts()]);
+    } catch {
+      notify("Bulk marks save failed", "error");
+    } finally {
+      setBulkSavingMarks(false);
+      bulkSaveLockRef.current = false;
+    }
+  };
+  const applyBulkMarksToAssessment = async (items) => {
+    if (bulkSaveLockRef.current) return;
+    const targets = (items || []).filter(canBulkMarkSubmission);
+    if (!targets.length) {
+      notify("Approve the topic first, then enter marks.", "warning");
+      return;
+    }
+    const normalizedBulkMarks = normalizeMarksValue(bulkMarks);
+    if (!normalizedBulkMarks) {
+      notify("Enter marks to apply to all students", "error");
+      return;
+    }
+    bulkSaveLockRef.current = true;
+    setBulkSavingMarks(true);
+    try {
+      const payload = {
+        items: targets.map((row) => ({
+          submission: getPrimarySubmissionId(row),
+          scope: resolveRowSaveScope(row),
+          target_student_id: row.force_individual_row ? row.student : null,
+          marks: Number(normalizedBulkMarks),
+          feedback: bulkFeedback || "",
+        })),
+      };
+      const { data } = await api.post(`${ENDPOINTS.feedback}bulk_upsert/`, payload);
+      const successCount = Number(data?.updated_count || 0);
+      const failedCount = Number(data?.error_count || 0);
+      if (!successCount) {
+        notify("No rows were saved", "warning");
+        return;
+      }
+      notify(
+        failedCount
+          ? `Bulk marks saved for ${successCount}, failed ${failedCount}`
+          : `Marks applied to ${successCount} student(s)`,
+        failedCount ? "warning" : "success"
+      );
+      await Promise.all([loadFeedbackMap(), loadData(), loadWorkflowCounts()]);
     } catch {
       notify("Bulk marks save failed", "error");
     } finally {
@@ -990,14 +1085,14 @@ const SubmissionsPage = () => {
     <Stack spacing={1}>
     <ListingPage
       title={isAdminApprovalsView ? "Assessment Approvals" : "Assessment Approvals"}
-      subtitle="Work one step at a time: approve the topic, wait for the file, then enter marks and Save."
+      subtitle="Approve the topic, wait for the file, then enter marks and Save."
       tabs={(
         <CompactTabs
           value={workflowFilter || "all"}
           onChange={(next) => setWorkflowFilter(next === "all" ? "" : next)}
           tabs={[
             { value: "request_pending", label: `Topics (${workflowCounts.request_pending || 0})` },
-            { value: "topic_not_submitted", label: `Waiting (${pendingNoRequestEntries.length})` },
+            { value: "topic_not_submitted", label: `Waiting (${waitingAssessmentCount})` },
             { value: "ready_for_upload", label: `Approved (${workflowCounts.ready_for_upload || 0})` },
             { value: "file_submitted", label: `Files (${workflowCounts.file_submitted || 0})` },
             { value: "marked", label: `Marked (${workflowCounts.marked || 0})` },
@@ -1033,6 +1128,22 @@ const SubmissionsPage = () => {
               {selectedCount} selected
             </Typography>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }}>
+              {selectedMarkRows.length > 0 && (
+                <>
+                  <TextField
+                    size="small"
+                    type="number"
+                    label="Bulk marks"
+                    value={bulkMarks}
+                    onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
+                    inputProps={{ min: 0, step: 1 }}
+                    sx={{ width: 110 }}
+                  />
+                  <Button size="small" variant="contained" disabled={bulkSavingMarks} onClick={bulkSaveSelectedMarks}>
+                    {bulkSavingMarks ? "Saving..." : "Apply to selected"}
+                  </Button>
+                </>
+              )}
               <Button size="small" variant="contained" color="success" disabled={!selectedApproveRows.length} onClick={bulkApproveSelected}>
                 Approve
               </Button>
@@ -1054,7 +1165,7 @@ const SubmissionsPage = () => {
         )}
         <Stack spacing={2} ref={resultsSectionRef}>
           {Object.entries(groupedByCourseAndCoursework).map(([courseTitle, courseworkGroup]) => {
-            const assessmentTitles = Object.keys(courseworkGroup);
+            const assessmentTitles = sortAssessmentTitlesByComing(Object.keys(courseworkGroup), courseworkGroup, courseworkById);
             const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
             const items = courseworkGroup[selectedTitle] || [];
             const canSaveMarks = items.some(
@@ -1069,9 +1180,23 @@ const SubmissionsPage = () => {
                   {courseTitle}
                 </Typography>
                 {canSaveMarks && (
-                  <Button size="small" variant="contained" disabled={savingAllMarks} onClick={() => saveAllDraftMarks(items)}>
-                    {savingAllMarks ? "Saving..." : "Save marks"}
-                  </Button>
+                  <Stack direction="row" spacing={0.8} alignItems="center" useFlexGap flexWrap="wrap">
+                    <TextField
+                      size="small"
+                      type="number"
+                      label="Bulk marks"
+                      value={bulkMarks}
+                      onChange={(e) => setBulkMarks(normalizeMarksValue(e.target.value))}
+                      inputProps={{ min: 0, step: 1 }}
+                      sx={{ width: 110 }}
+                    />
+                    <Button size="small" variant="outlined" disabled={bulkSavingMarks} onClick={() => applyBulkMarksToAssessment(items)}>
+                      {bulkSavingMarks ? "Saving..." : "Apply to all"}
+                    </Button>
+                    <Button size="small" variant="contained" disabled={savingAllMarks} onClick={() => saveAllDraftMarks(items)}>
+                      {savingAllMarks ? "Saving..." : "Save marks"}
+                    </Button>
+                  </Stack>
                 )}
               </Stack>
               {assessmentTitles.length > 1 ? (

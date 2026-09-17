@@ -187,7 +187,7 @@ const TeacherCourseworkPage = () => {
   return (
     <ListingPage
       title="Assessment Management"
-      subtitle="Create assignments, projects, presentations, quizzes, exams, or certifications for your subjects. Students can submit individually, in a group, or either — you decide."
+      subtitle="Assignment, project, presentation, quiz, exam, or certification — individual, group, or both."
       actions={(
         <Button size="small" variant="outlined" onClick={() => navigate("/teacher/submissions")}>
           Approvals
