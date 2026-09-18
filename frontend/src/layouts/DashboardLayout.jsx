@@ -86,19 +86,18 @@ const DashboardLayout = () => {
     const fetchUnreadNotifications = async () => {
       try {
         const [recentRes, unreadRes, messageRes] = await Promise.all([
-          api.get(`${ENDPOINTS.notifications}?page_size=8`, { skipGlobalLoader: true }),
+          api.get(`${ENDPOINTS.notifications}?is_read=false&page_size=8`, { skipGlobalLoader: true }),
           api.get(`${ENDPOINTS.notifications}?is_read=false&page_size=1`, { skipGlobalLoader: true }),
           api.get(ENDPOINTS.conversationUnread, { skipGlobalLoader: true }),
         ]);
         if (!isActive) return;
 
         const recent = recentRes.data.results || [];
-        const unread = recent.filter((item) => !item.is_read);
         setNotifications(recent);
-        setUnreadCount(unreadRes.data.count || unread.length);
+        setUnreadCount(unreadRes.data.count || recent.length);
         setMessageUnread(messageRes.data.unread_count || 0);
 
-        unread
+        recent
           .slice()
           .reverse()
           .forEach((item) => {
@@ -127,16 +126,32 @@ const DashboardLayout = () => {
 
   const closeNotifications = () => {
     setAnchorEl(null);
+    if (notifications.length) {
+      markAllRead({ silent: true });
+    }
   };
 
-  const markAllRead = async () => {
+  const markAllRead = async ({ silent = false } = {}) => {
     try {
       await api.post(`${ENDPOINTS.notifications}mark_all_read/`);
       setUnreadCount(0);
-      setNotifications((prev) => prev.map((item) => ({ ...item, is_read: true })));
-      notify("All notifications marked as read");
+      setNotifications([]);
+      if (!silent) notify("Notifications cleared");
     } catch {
-      notify("Failed to mark notifications as read", "error");
+      if (!silent) notify("Failed to clear notifications", "error");
+    }
+  };
+
+  const markOneRead = async (id) => {
+    try {
+      await api.post(`${ENDPOINTS.notifications}${id}/mark_read/`);
+      setNotifications((prev) => {
+        const next = prev.filter((item) => item.id !== id);
+        setUnreadCount(next.length);
+        return next;
+      });
+    } catch {
+      notify("Failed to clear notification", "error");
     }
   };
 
@@ -296,16 +311,21 @@ const DashboardLayout = () => {
                 >
                   <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1, pt: 0.5, pb: 1 }}>
                     <Typography sx={{ fontWeight: 700 }}>Notifications</Typography>
-                    <Button size="small" onClick={markAllRead}>Mark all read</Button>
+                    <Button size="small" onClick={() => markAllRead()}>Mark all read</Button>
                   </Stack>
                   {notifications.length ? (
                     <List dense disablePadding>
                       {notifications.map((item) => (
-                        <ListItem key={item.id} sx={{ alignItems: "flex-start", py: 0.9, px: 1 }}>
+                        <ListItem
+                          key={item.id}
+                          button
+                          onClick={() => markOneRead(item.id)}
+                          sx={{ alignItems: "flex-start", py: 0.9, px: 1, cursor: "pointer" }}
+                        >
                           <ListItemText
                             primary={item.title}
                             secondary={item.body || ""}
-                            primaryTypographyProps={{ fontWeight: item.is_read ? 500 : 700 }}
+                            primaryTypographyProps={{ fontWeight: 700 }}
                             secondaryTypographyProps={{ sx: { color: "text.secondary", mt: 0.3 } }}
                           />
                         </ListItem>
