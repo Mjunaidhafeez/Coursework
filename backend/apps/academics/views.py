@@ -1,10 +1,7 @@
-import mimetypes
 from urllib.parse import quote
 
 from django.conf import settings
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
-from django.http import FileResponse
-from django.shortcuts import redirect
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -12,7 +9,7 @@ from rest_framework.response import Response
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
-from apps.common.uploads import delete_stored_file, public_file_url, store_upload, validate_upload
+from apps.common.uploads import delete_stored_file, file_response_for_instance, public_file_url, store_upload, validate_upload
 from apps.common.whatsapp import notify_event
 
 from .models import Course, CourseStudyFile, Enrollment, Semester
@@ -125,18 +122,13 @@ class CourseViewSet(viewsets.ModelViewSet):
         study_file = self._study_file_or_404(course, file_id)
         if not study_file:
             return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-        if study_file.file_url and not study_file.file:
-            return redirect(study_file.file_url)
-        if not study_file.file:
+        try:
+            response = file_response_for_instance(study_file, as_attachment=as_attachment)
+        except ValidationError as exc:
+            detail = exc.detail[0] if isinstance(exc.detail, (list, tuple)) else exc.detail
+            return Response({"detail": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
+        if not response:
             return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-        filename = self._study_file_name(study_file)
-        content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        handle = study_file.file.open("rb")
-        response = FileResponse(handle, as_attachment=as_attachment, filename=filename, content_type=content_type)
-        if as_attachment:
-            response["Content-Disposition"] = f'attachment; filename="{filename}"'
-        else:
-            response["Content-Disposition"] = f'inline; filename="{filename}"'
         return response
 
     @action(detail=True, methods=["get"], url_path="study-files/(?P<file_id>[^/.]+)/view")
@@ -157,7 +149,7 @@ class CourseViewSet(viewsets.ModelViewSet):
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
         token = STUDY_FILE_SIGNER.sign(f"{course.id}:{study_file.id}")
         base = (getattr(settings, "PORTAL_PUBLIC_URL", "") or request.build_absolute_uri("/")).rstrip("/")
-        public_url = study_file.file_url or f"{base}/api/academics/study-files/public/?token={quote(token, safe='')}"
+        public_url = f"{base}/api/academics/study-files/public/?token={quote(token, safe='')}"
         viewer_url = (
             f"https://view.officeapps.live.com/op/embed.aspx?src={quote(public_url, safe='')}"
             if ext in OFFICE_PREVIEW_EXT
@@ -238,14 +230,15 @@ def public_study_file(request):
     study_file = CourseStudyFile.objects.filter(course_id=course_id, id=file_id).first()
     if not study_file:
         return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-    if study_file.file_url and not study_file.file:
-        return redirect(study_file.file_url)
-    if not study_file.file:
+    try:
+        response = file_response_for_instance(
+            study_file,
+            as_attachment=False,
+            extra_headers={"Access-Control-Allow-Origin": "*"},
+        )
+    except ValidationError as exc:
+        detail = exc.detail[0] if isinstance(exc.detail, (list, tuple)) else exc.detail
+        return Response({"detail": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
+    if not response:
         return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-    filename = study_file.original_name or study_file.file.name.split("/")[-1]
-    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    handle = study_file.file.open("rb")
-    response = FileResponse(handle, as_attachment=False, filename=filename, content_type=content_type)
-    response["Content-Disposition"] = f'inline; filename="{filename}"'
-    response["Access-Control-Allow-Origin"] = "*"
     return response

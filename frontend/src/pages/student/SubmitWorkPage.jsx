@@ -35,7 +35,7 @@ import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage } from "../../utils/apiErrors";
 import { COURSEWORK_TYPE_OPTIONS, SUBMISSION_TYPE_OPTIONS } from "../../utils/courseworkOptions";
 import { formatDate, formatMarks } from "../../utils/format";
-import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
+import { openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { shallowEqualObjects } from "../../utils/object";
 import { resolveSubmissionMembers } from "../../utils/submissionMembers";
 import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
@@ -1159,7 +1159,6 @@ const SubmitWorkPage = () => {
                                         </Typography>
                                         {getSubmissionFiles(submission).length ? (
                                           getSubmissionFiles(submission).map((fileItem) => {
-                                            const fileUrl = toAbsoluteMediaUrl(fileItem.file || fileItem.file_url);
                                             const deleteKey = `${submission.id}-${fileItem.id}`;
                                             return (
                                               <Stack
@@ -1183,8 +1182,7 @@ const SubmitWorkPage = () => {
                                                 </Button>
                                                 <Button
                                                   size="small"
-                                                  onClick={() => fileUrl && window.open(fileUrl, "_blank", "noopener,noreferrer")}
-                                                  disabled={!fileUrl}
+                                                  onClick={() => openSubmissionFilePreview(submission, notify, fileItem)}
                                                 >
                                                   Preview
                                                 </Button>

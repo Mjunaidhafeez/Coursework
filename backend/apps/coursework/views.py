@@ -12,7 +12,7 @@ from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.academics.models import Enrollment
 from apps.common.mixins import AuditLogMixin
 from apps.common.models import Notification
-from apps.common.uploads import delete_stored_file, store_upload, validate_upload
+from apps.common.uploads import delete_stored_file, file_response_for_instance, store_upload, validate_upload
 from apps.common.whatsapp import notify_event
 from apps.groups.models import GroupMember
 
@@ -496,6 +496,30 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             return
         raise PermissionDenied("You do not have permission to manage files.")
 
+    def _ensure_file_access(self, user, submission):
+        if user.role == User.Role.SUPER_ADMIN:
+            return
+        if user.role == User.Role.TEACHER and self._teacher_can_manage_course(user, submission.coursework.course_id):
+            return
+        if user.role == User.Role.STUDENT and self._can_student_edit_submission(user, submission):
+            return
+        raise PermissionDenied("You do not have permission to view this file.")
+
+    def _serve_submission_file(self, request, file_id, as_attachment):
+        submission = self.get_object()
+        self._ensure_file_access(request.user, submission)
+        target = submission.submission_files.filter(id=file_id).first()
+        if not target:
+            return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            response = file_response_for_instance(target, as_attachment=as_attachment)
+        except ValidationError as exc:
+            detail = exc.detail[0] if isinstance(exc.detail, (list, tuple)) else exc.detail
+            return Response({"detail": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
+        if not response:
+            return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response
+
     def _sync_primary_file_from_uploaded_files(self, submission):
         latest = submission.submission_files.order_by("-uploaded_at", "-created_at").first()
         if latest:
@@ -571,6 +595,14 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=True, methods=["get"], url_path="files/(?P<file_id>[^/.]+)/view")
+    def view_uploaded_file(self, request, pk=None, file_id=None):
+        return self._serve_submission_file(request, file_id, as_attachment=False)
+
+    @action(detail=True, methods=["get"], url_path="files/(?P<file_id>[^/.]+)/download")
+    def download_uploaded_file(self, request, pk=None, file_id=None):
+        return self._serve_submission_file(request, file_id, as_attachment=True)
 
     @action(detail=True, methods=["post"])
     def rename_file(self, request, pk=None):
