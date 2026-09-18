@@ -217,7 +217,7 @@ const MessagesPage = () => {
         </Button>
       )}
     >
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ minHeight: 520, height: "100%" }}>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ minHeight: { xs: 280, md: 520 }, height: "100%" }}>
         <Box sx={{ width: { xs: "100%", md: 300 }, border: "1px solid #dbeafe", borderRadius: 2, overflow: "hidden", bgcolor: "#fff" }}>
           <Box sx={{ px: 1.5, py: 1, bgcolor: "#102a5c", color: "#fff" }}>
             <Typography sx={{ fontWeight: 800, fontSize: 13 }}>Inbox</Typography>

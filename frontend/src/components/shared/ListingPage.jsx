@@ -21,9 +21,9 @@ const ListingPage = ({
     }}
   >
     <Stack
-      direction="row"
+      direction={{ xs: "column", sm: "row" }}
       spacing={1}
-      alignItems="flex-start"
+      alignItems={{ xs: "stretch", sm: "flex-start" }}
       justifyContent="space-between"
       sx={{ flexShrink: 0 }}
     >

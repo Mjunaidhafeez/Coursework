@@ -24,7 +24,7 @@ const getIcon = (label) => {
   return <AssessmentIcon fontSize="small" />;
 };
 
-const Sidebar = ({ role }) => {
+const Sidebar = ({ role, onNavigate }) => {
   const items = NAV_ITEMS[role] || [];
   const roleTitleMap = {
     super_admin: "Admin Dashboard",
@@ -35,7 +35,8 @@ const Sidebar = ({ role }) => {
   return (
     <Box
       sx={{
-        width: 230,
+        width: { xs: 250, md: 230 },
+        maxWidth: "100%",
         bgcolor: "rgba(10, 24, 62, 0.92)",
         background: "linear-gradient(180deg, rgba(10,24,62,0.94) 0%, rgba(17,43,104,0.9) 100%)",
         backdropFilter: "blur(6px)",
@@ -56,6 +57,7 @@ const Sidebar = ({ role }) => {
             key={item.path}
             component={NavLink}
             to={item.path}
+            onClick={onNavigate}
             sx={{
               borderRadius: 1,
               mb: 0.5,

@@ -1,4 +1,5 @@
 import ChatBubbleOutlineRoundedIcon from "@mui/icons-material/ChatBubbleOutlineRounded";
+import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import NotificationsNoneRoundedIcon from "@mui/icons-material/NotificationsNoneRounded";
 import { Suspense, useEffect, useRef, useState } from "react";
 import {
@@ -11,6 +12,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Drawer,
   IconButton,
   List,
   ListItem,
@@ -19,7 +21,9 @@ import {
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { Outlet, useNavigate } from "react-router-dom";
 
 import api from "../api/client";
@@ -35,6 +39,9 @@ const DashboardLayout = () => {
   const { user, logout, refreshMe } = useAuth();
   const { notify } = useUi();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const [navOpen, setNavOpen] = useState(false);
   const [messageUnread, setMessageUnread] = useState(0);
   const [anchorEl, setAnchorEl] = useState(null);
   const [notifications, setNotifications] = useState([]);
@@ -186,21 +193,32 @@ const DashboardLayout = () => {
   return (
     <Box
       sx={{
-        height: "100vh",
+        height: "100dvh",
         overflow: "hidden",
         background: "linear-gradient(130deg, #0f1c3f 0%, #1a2f69 45%, #2354c7 100%)",
       }}
     >
       <Box
         sx={{
-          width: "100vw",
+          width: "100%",
+          maxWidth: "100vw",
           height: "100%",
           display: "flex",
           overflow: "hidden",
           bgcolor: "rgba(243, 246, 252, 0.9)",
         }}
       >
-        <Sidebar role={user?.role} />
+        {isMobile ? (
+          <Drawer
+            open={navOpen}
+            onClose={() => setNavOpen(false)}
+            PaperProps={{ sx: { bgcolor: "transparent", boxShadow: "none" } }}
+          >
+            <Sidebar role={user?.role} onNavigate={() => setNavOpen(false)} />
+          </Drawer>
+        ) : (
+          <Sidebar role={user?.role} />
+        )}
         <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, height: "100%", display: "flex", flexDirection: "column" }}>
           <Box
             sx={{
@@ -214,13 +232,21 @@ const DashboardLayout = () => {
               backdropFilter: "blur(8px)",
             }}
           >
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2 }}>
-              <Box>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: { xs: 0.8, md: 2 }, minWidth: 0 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, minWidth: 0 }}>
+                {isMobile ? (
+                  <IconButton onClick={() => setNavOpen(true)} sx={{ color: "white", p: 0.5 }} title="Menu">
+                    <MenuRoundedIcon />
+                  </IconButton>
+                ) : null}
                 <Typography
                   sx={{
                     fontWeight: 900,
                     lineHeight: 1.1,
-                    fontSize: { xs: "1.05rem", md: "1.28rem" },
+                    fontSize: { xs: "0.92rem", md: "1.28rem" },
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: { xs: "nowrap", md: "normal" },
                     letterSpacing: "0.01em",
                     background: "linear-gradient(92deg, #ffffff 0%, #dbeafe 45%, #93c5fd 100%)",
                     WebkitBackgroundClip: "text",
@@ -237,8 +263,8 @@ const DashboardLayout = () => {
                   {currentHeader.title}
                 </Typography>
               </Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <Chip label={(user?.role || "").replace("_", " ")} size="small" sx={{ bgcolor: "white", color: "#1d4fbf" }} />
+              <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.4, md: 1.5 }, flexShrink: 0 }}>
+                <Chip label={(user?.role || "").replace("_", " ")} size="small" sx={{ display: { xs: "none", sm: "inline-flex" }, bgcolor: "white", color: "#1d4fbf" }} />
                 <IconButton
                   onClick={() => {
                     const path = {
@@ -266,7 +292,7 @@ const DashboardLayout = () => {
                   onClose={closeNotifications}
                   anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
                   transformOrigin={{ vertical: "top", horizontal: "right" }}
-                  PaperProps={{ sx: { width: 360, p: 1 } }}
+                  PaperProps={{ sx: { width: { xs: "min(360px, calc(100vw - 24px))", sm: 360 }, p: 1 } }}
                 >
                   <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1, pt: 0.5, pb: 1 }}>
                     <Typography sx={{ fontWeight: 700 }}>Notifications</Typography>
@@ -310,7 +336,7 @@ const DashboardLayout = () => {
                     <Typography sx={{ fontSize: "0.75rem", opacity: 0.82 }}>@{user?.username}</Typography>
                   </Box>
                 </Stack>
-                <Button variant="contained" color="inherit" onClick={logout} sx={{ color: "#1d4fbf", fontWeight: 700 }}>
+                <Button variant="contained" color="inherit" onClick={logout} sx={{ color: "#1d4fbf", fontWeight: 700, minWidth: { xs: 0, md: 64 }, px: { xs: 1, md: 2 }, fontSize: { xs: 12, md: 14 } }}>
                   Logout
                 </Button>
               </Box>

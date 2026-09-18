@@ -11,6 +11,7 @@ from apps.academics.models import Enrollment
 from apps.accounts.models import User
 from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.common.mailer import default_email_template, send_student_emails
+from apps.common.uploads import cloudinary_enabled, upload_to_cloudinary
 
 MAX_EMAIL_FILES = 5
 MAX_EMAIL_FILE_BYTES = 25 * 1024 * 1024
@@ -174,11 +175,17 @@ def _collect_email_attachments(files):
         if size <= 0:
             raise ValueError(f"{name} is empty.")
         if size > MAX_EMAIL_FILE_BYTES:
-            raise ValueError(f"{name} is larger than 8 MB.")
+            raise ValueError(f"{name} is larger than 25 MB.")
         total += size
         if total > MAX_EMAIL_TOTAL_BYTES:
-            raise ValueError("Attachments together must stay under 15 MB.")
+            raise ValueError("Attachments together must stay under 25 MB.")
+        if hasattr(upload, "seek"):
+            upload.seek(0)
         content = upload.read()
+        if cloudinary_enabled():
+            if hasattr(upload, "seek"):
+                upload.seek(0)
+            upload_to_cloudinary(upload, folder="mba-portal/email-attachments")
         content_type = getattr(upload, "content_type", "") or "application/octet-stream"
         attachments.append((name, content, content_type))
     return attachments
