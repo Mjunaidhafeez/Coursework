@@ -317,7 +317,7 @@ const WhatsAppPage = () => {
         filters={(
           <>
             {!isTeacher ? (
-              <FormControl size="small" sx={{ minWidth: 140 }}>
+              <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 140 } }}>
                 <InputLabel>Audience</InputLabel>
                 <Select label="Audience" value={audience} onChange={(e) => setAudience(e.target.value)}>
                   <MenuItem value="students">Students</MenuItem>
@@ -326,7 +326,7 @@ const WhatsAppPage = () => {
                 </Select>
               </FormControl>
             ) : null}
-            <FormControl size="small" sx={{ minWidth: 160 }}>
+            <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 160 } }}>
               <InputLabel>Course</InputLabel>
               <Select label="Course" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
                 <MenuItem value="">All courses</MenuItem>
@@ -335,7 +335,7 @@ const WhatsAppPage = () => {
                 ))}
               </Select>
             </FormControl>
-            <FormControl size="small" sx={{ minWidth: 140 }}>
+            <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 140 } }}>
               <InputLabel>Semester</InputLabel>
               <Select label="Semester" value={semesterId} onChange={(e) => setSemesterId(e.target.value)}>
                 <MenuItem value="">All semesters</MenuItem>

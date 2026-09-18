@@ -287,7 +287,7 @@ const EmailStudentsPage = () => {
           }}
           filters={(
             <>
-              <FormControl size="small" sx={{ minWidth: 180 }}>
+              <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 180 } }}>
                 <InputLabel>Send to</InputLabel>
                 <Select label="Send to" value={audience} onChange={(e) => setAudience(e.target.value)}>
                   <MenuItem value="students">Students</MenuItem>
@@ -295,7 +295,7 @@ const EmailStudentsPage = () => {
                   <MenuItem value="both">Students & teachers</MenuItem>
                 </Select>
               </FormControl>
-              <FormControl size="small" sx={{ minWidth: 200 }}>
+              <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 200 } }}>
                 <InputLabel>Course / subject</InputLabel>
                 <Select label="Course / subject" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
                   <MenuItem value="">All courses</MenuItem>
@@ -306,7 +306,7 @@ const EmailStudentsPage = () => {
                   ))}
                 </Select>
               </FormControl>
-              <FormControl size="small" sx={{ minWidth: 140 }} disabled={audience === "teachers"}>
+              <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 140 } }} disabled={audience === "teachers"}>
                 <InputLabel>Semester</InputLabel>
                 <Select label="Semester" value={semesterId} onChange={(e) => setSemesterId(e.target.value)}>
                   <MenuItem value="">All semesters</MenuItem>
@@ -378,7 +378,7 @@ const EmailStudentsPage = () => {
               size="small"
               fullWidth
               multiline
-              minRows={8}
+              minRows={{ xs: 4, md: 8 }}
               label="Message"
               placeholder="Write the notice, deadline reminder, or announcement..."
               value={message}

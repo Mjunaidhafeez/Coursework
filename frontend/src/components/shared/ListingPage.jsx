@@ -15,9 +15,9 @@ const ListingPage = ({
     spacing={0.9}
     sx={{
       flex: 1,
-      height: "100%",
+      height: { xs: "auto", md: "100%" },
       minHeight: 0,
-      overflow: "hidden",
+      overflow: { xs: "visible", md: "hidden" },
     }}
   >
     <Stack
@@ -32,7 +32,7 @@ const ListingPage = ({
           {title}
         </Typography>
         {subtitle ? (
-          <Typography variant="body2" sx={{ color: "#4b5d7a", mt: 0.35, maxWidth: 720 }}>
+          <Typography variant="body2" sx={{ color: "#4b5d7a", mt: 0.35, maxWidth: 720, display: { xs: "none", md: "block" } }}>
             {subtitle}
           </Typography>
         ) : null}
@@ -48,18 +48,18 @@ const ListingPage = ({
       </Box>
     ) : null}
     {tabs ? <Box sx={{ flexShrink: 0 }}>{tabs}</Box> : null}
-    {filters ? <Box sx={{ flexShrink: 0 }}>{filters}</Box> : null}
+    {filters ? <Box sx={{ flexShrink: 0, overflowX: "auto" }}>{filters}</Box> : null}
     <Paper
       variant="outlined"
       sx={{
-        p: 1,
+        p: { xs: 0.8, md: 1 },
         borderColor: "#dbeafe",
         bgcolor: "#fff",
-        flex: 1,
-        minHeight: 0,
+        flex: { xs: "none", md: 1 },
+        minHeight: { xs: "auto", md: 0 },
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",
+        overflow: { xs: "visible", md: "hidden" },
       }}
     >
       {toolbar ? (

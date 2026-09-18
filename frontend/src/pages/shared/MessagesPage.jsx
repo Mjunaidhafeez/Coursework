@@ -217,12 +217,12 @@ const MessagesPage = () => {
         </Button>
       )}
     >
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ minHeight: { xs: 280, md: 520 }, height: "100%" }}>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ minHeight: { xs: "auto", md: 520 }, height: { xs: "auto", md: "100%" } }}>
         <Box sx={{ width: { xs: "100%", md: 300 }, border: "1px solid #dbeafe", borderRadius: 2, overflow: "hidden", bgcolor: "#fff" }}>
           <Box sx={{ px: 1.5, py: 1, bgcolor: "#102a5c", color: "#fff" }}>
             <Typography sx={{ fontWeight: 800, fontSize: 13 }}>Inbox</Typography>
           </Box>
-          <Box sx={{ maxHeight: 560, overflow: "auto" }}>
+          <Box sx={{ maxHeight: { xs: 180, md: 560 }, overflow: "auto" }}>
             {conversations.map((item) => (
               <Box
                 key={item.id}
@@ -261,7 +261,7 @@ const MessagesPage = () => {
               <Typography sx={{ fontSize: 12, opacity: 0.8 }}>{active.member_count} people</Typography>
             ) : null}
           </Box>
-          <Box sx={{ flex: 1, p: 1.5, overflow: "auto", minHeight: 320, bgcolor: "#f8fbff" }}>
+          <Box sx={{ flex: 1, p: 1.5, overflow: "auto", minHeight: { xs: 180, md: 320 }, bgcolor: "#f8fbff" }}>
             {messages.map((item) => {
               const mine = item.sender?.id === user?.id;
               return (
@@ -305,7 +305,7 @@ const MessagesPage = () => {
       </Stack>
       {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
-      <Dialog open={composeOpen} onClose={() => setComposeOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={composeOpen} onClose={() => setComposeOpen(false)} fullWidth maxWidth="sm" fullScreen={false} scroll="paper" sx={{ "& .MuiDialog-paper": { m: { xs: 1, sm: 2 }, width: { xs: "calc(100% - 16px)", sm: "auto" } } }}>
         <DialogTitle>New message</DialogTitle>
         <DialogContent>
           <Stack spacing={1.2} sx={{ mt: 0.5 }}>
