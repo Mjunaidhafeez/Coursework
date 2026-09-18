@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from apps.accounts.models import User
 from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.academics.models import Course, Enrollment
-from apps.common.models import Notification
+from apps.common.notify import push_notifications
 from apps.coursework.models import Coursework
 
 from .models import GroupMember, StudentGroup
@@ -189,10 +189,10 @@ class StudentGroupViewSet(viewsets.ModelViewSet):
         target_label = (
             group.coursework.title if group.coursework else (group.course.title if group.course else "all courses")
         )
-        Notification.objects.create(
-            user=group.creator,
-            title=f"Group approved: {group.name}",
-            body=f"Your group request for {target_label} was approved by admin.",
+        push_notifications(
+            [group.creator],
+            f"Group approved: {group.name}",
+            f"Your group request for {target_label} was approved by admin.",
         )
         return Response(self.get_serializer(group).data, status=status.HTTP_200_OK)
 
@@ -206,10 +206,10 @@ class StudentGroupViewSet(viewsets.ModelViewSet):
         target_label = (
             group.coursework.title if group.coursework else (group.course.title if group.course else "all courses")
         )
-        Notification.objects.create(
-            user=group.creator,
-            title=f"Group rejected: {group.name}",
-            body=f"Your group request for {target_label} was rejected by admin. Please update and resubmit.",
+        push_notifications(
+            [group.creator],
+            f"Group rejected: {group.name}",
+            f"Your group request for {target_label} was rejected by admin. Please update and resubmit.",
         )
         return Response(self.get_serializer(group).data, status=status.HTTP_200_OK)
 
@@ -240,10 +240,10 @@ class GroupMemberViewSet(viewsets.ModelViewSet):
         member.invitation_status = GroupMember.InvitationStatus.ACCEPTED
         member.accepted = True
         member.save(update_fields=["invitation_status", "accepted", "updated_at"])
-        Notification.objects.create(
-            user=member.group.creator,
-            title=f"Invitation accepted: {member.group.name}",
-            body=f"{member.student.username} accepted the invitation for group '{member.group.name}'.",
+        push_notifications(
+            [member.group.creator],
+            f"Invitation accepted: {member.group.name}",
+            f"{member.student.get_full_name().strip() or member.student.username} accepted the invitation for group '{member.group.name}'.",
         )
         return Response(self.get_serializer(member).data, status=status.HTTP_200_OK)
 
@@ -255,9 +255,9 @@ class GroupMemberViewSet(viewsets.ModelViewSet):
         member.invitation_status = GroupMember.InvitationStatus.REJECTED
         member.accepted = False
         member.save(update_fields=["invitation_status", "accepted", "updated_at"])
-        Notification.objects.create(
-            user=member.group.creator,
-            title=f"Invitation rejected: {member.group.name}",
-            body=f"{member.student.username} rejected the invitation for group '{member.group.name}'.",
+        push_notifications(
+            [member.group.creator],
+            f"Invitation rejected: {member.group.name}",
+            f"{member.student.get_full_name().strip() or member.student.username} rejected the invitation for group '{member.group.name}'.",
         )
         return Response(self.get_serializer(member).data, status=status.HTTP_200_OK)

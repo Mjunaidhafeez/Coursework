@@ -12,7 +12,7 @@ def get_whatsapp_config():
     token = str(getattr(settings, "WHATSAPP_TOKEN", "") or "")
     phone_id = str(getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", "") or "")
     verify = str(getattr(settings, "WHATSAPP_VERIFY_TOKEN", "") or "mba-whatsapp")
-    enabled = bool(getattr(settings, "WHATSAPP_ENABLED", False) and token and phone_id)
+    env_enabled = bool(getattr(settings, "WHATSAPP_ENABLED", False))
     try:
         from apps.common.models import WhatsAppSettings
 
@@ -23,9 +23,10 @@ def get_whatsapp_config():
             phone_id = row.phone_number_id
         if row.verify_token:
             verify = row.verify_token
-        enabled = bool(row.enabled and token and phone_id)
+        portal_configured = bool(row.token or row.phone_number_id or row.enabled)
+        enabled = bool((row.enabled if portal_configured else env_enabled) and token and phone_id)
     except Exception:
-        pass
+        enabled = bool(env_enabled and token and phone_id)
     return {
         "enabled": enabled,
         "token": token,

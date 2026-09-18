@@ -11,6 +11,7 @@ router.register("conversations", ConversationViewSet, basename="conversations")
 
 urlpatterns = [
     path("whatsapp/webhook/", whatsapp_webhook, name="whatsapp-webhook"),
+    path("whatsapp/webhook", whatsapp_webhook, name="whatsapp-webhook-noslash"),
     path("whatsapp/settings/", whatsapp_settings, name="whatsapp-settings"),
     path("whatsapp/send/", send_whatsapp_messages, name="whatsapp-send"),
     path("", include(router.urls)),

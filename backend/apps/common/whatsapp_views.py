@@ -1,4 +1,5 @@
 from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
@@ -6,7 +7,7 @@ from rest_framework.response import Response
 
 from apps.accounts.email_views import _emailable_recipients, _parse_audience, _parse_recipient_ids
 from apps.accounts.models import User
-from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
+from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.common.messaging import add_members, find_direct_conversation, post_message
 from apps.common.models import ChatMessage, Conversation, WhatsAppSettings
 from apps.common.uploads import normalize_phone
@@ -52,6 +53,7 @@ def _serialize_settings(request):
     }
 
 
+@csrf_exempt
 @api_view(["GET", "POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -71,12 +73,15 @@ def whatsapp_webhook(request):
         for change in entry.get("changes") or []:
             value = change.get("value") or {}
             for item in value.get("messages") or []:
-                if item.get("type") != "text":
-                    continue
                 sender = user_for_whatsapp_phone(item.get("from"))
                 if not sender:
                     continue
-                body = ((item.get("text") or {}).get("body") or "").strip()
+                msg_type = str(item.get("type") or "text")
+                if msg_type == "text":
+                    body = ((item.get("text") or {}).get("body") or "").strip()
+                else:
+                    payload_item = item.get(msg_type) or {}
+                    body = str(payload_item.get("caption") or "").strip() or f"[WhatsApp {msg_type}]"
                 if not body:
                     continue
                 conversation = _inbound_conversation(sender)
@@ -91,9 +96,11 @@ def whatsapp_webhook(request):
 
 
 @api_view(["GET", "PATCH"])
-@permission_classes([IsSuperAdmin])
+@permission_classes([IsTeacherOrAdmin])
 def whatsapp_settings(request):
     if request.method == "PATCH":
+        if request.user.role != User.Role.SUPER_ADMIN:
+            return Response({"detail": "Only admin can change WhatsApp settings."}, status=status.HTTP_403_FORBIDDEN)
         row = WhatsAppSettings.load()
         if "enabled" in request.data:
             row.enabled = str(request.data.get("enabled")).lower() in {"1", "true", "yes", "on"}
@@ -153,14 +160,21 @@ def send_whatsapp_messages(request):
     sent = 0
     skipped = []
     failed = []
-    sender_name = request.user.get_full_name().strip() or request.user.username
-    body = f"{sender_name}: {message}"
     for person in recipients:
         phone = normalize_phone(person.phone)
         if not phone:
             skipped.append({"id": person.id, "name": person.get_full_name() or person.username, "detail": "No phone"})
             continue
-        ok, error = send_whatsapp(phone, body)
+        conversation = find_direct_conversation(request.user, person)
+        if not conversation:
+            conversation = Conversation.objects.create(kind=Conversation.Kind.DIRECT, created_by=request.user)
+            add_members(conversation, [request.user, person])
+        try:
+            post_message(conversation, request.user, message, skip_whatsapp=True)
+        except Exception as exc:
+            failed.append({"id": person.id, "name": person.get_full_name() or person.username, "detail": str(exc)})
+            continue
+        ok, error = send_whatsapp(phone, f"{request.user.get_full_name().strip() or request.user.username}: {message}")
         if ok:
             sent += 1
         else:

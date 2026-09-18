@@ -56,8 +56,16 @@ const WhatsAppPage = () => {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
+  const copyText = async (value, label) => {
+    try {
+      await navigator.clipboard.writeText(value || "");
+      notify(`${label} copied`);
+    } catch {
+      notify("Could not copy. Select and copy manually.", "warning");
+    }
+  };
+
   const loadSettings = async () => {
-    if (!isAdmin) return;
     const { data } = await api.get(ENDPOINTS.whatsappSettings);
     setSettings(data);
     setForm({
@@ -193,16 +201,24 @@ const WhatsAppPage = () => {
 
   return (
     <ListingPage title="WhatsApp">
+      <Alert severity={settings?.enabled ? "success" : "warning"} sx={{ mb: 2 }}>
+        {settings?.enabled
+          ? "WhatsApp is connected. Portal notifications and messages go to WhatsApp. Replies appear on Messages."
+          : "WhatsApp is off until Admin saves Phone number ID, Access token, and turns Enable on."}
+      </Alert>
+
       {isAdmin ? (
         <Box sx={{ mb: 2, p: 1.5, border: "1px solid #dbeafe", borderRadius: 2, bgcolor: "#fff" }}>
-          <Typography sx={{ fontWeight: 800, mb: 0.5 }}>WhatsApp API settings</Typography>
+          <Typography sx={{ fontWeight: 800, mb: 0.5 }}>WhatsApp API configuration</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.2 }}>
-            Meta for Developers → WhatsApp → API Setup se Phone number ID aur Permanent token copy karein. Webhook URL neeche Meta mein paste karein.
+            1. Open Meta for Developers → your app → WhatsApp → API Setup. Copy Phone number ID and a permanent access token.
+            2. WhatsApp → Configuration → Webhook. Paste the webhook URL below, use the same Verify token, and subscribe to the messages field.
+            3. Put student and teacher phones on their profiles with country code, for example 923001234567.
+            4. Turn Enable on, Save, then send a test. The first reply from that phone must come after they message your WhatsApp business number, or after you send them a message. Replies open on the Messages page.
           </Typography>
           {settings?.webhook_url ? (
             <Alert severity={settings.enabled ? "success" : "info"} sx={{ mb: 1.2 }}>
-              Webhook: {settings.webhook_url}
-              {settings.token_set ? ` · Token saved ${settings.token_hint}` : " · Token not saved yet"}
+              {settings.token_set ? `Token saved ${settings.token_hint}` : "Token not saved yet"}
             </Alert>
           ) : null}
           <Stack spacing={1.1}>
@@ -215,6 +231,7 @@ const WhatsAppPage = () => {
               label="Phone number ID"
               value={form.phone_number_id}
               onChange={(e) => setForm((prev) => ({ ...prev, phone_number_id: e.target.value }))}
+              helperText="From Meta WhatsApp API Setup"
             />
             <TextField
               size="small"
@@ -222,22 +239,38 @@ const WhatsAppPage = () => {
               type="password"
               value={form.token}
               onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))}
-              helperText="Leave blank to keep the saved token."
+              helperText="Permanent token. Leave blank to keep the saved token."
             />
             <TextField
               size="small"
               label="Webhook verify token"
               value={form.verify_token}
               onChange={(e) => setForm((prev) => ({ ...prev, verify_token: e.target.value }))}
+              helperText="Use this exact value in Meta webhook verification."
             />
-            <Button variant="contained" disabled={saving} onClick={saveSettings} sx={{ alignSelf: "flex-start" }}>
-              {saving ? "Saving..." : "Save WhatsApp settings"}
-            </Button>
+            <TextField
+              size="small"
+              label="Webhook URL"
+              value={settings?.webhook_url || ""}
+              InputProps={{ readOnly: true }}
+              helperText="Paste this exact URL in Meta. Keep the trailing slash."
+            />
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              <Button variant="contained" disabled={saving} onClick={saveSettings}>
+                {saving ? "Saving..." : "Save WhatsApp settings"}
+              </Button>
+              <Button variant="outlined" onClick={() => copyText(settings?.webhook_url, "Webhook URL")}>
+                Copy webhook URL
+              </Button>
+              <Button variant="outlined" onClick={() => copyText(form.verify_token, "Verify token")}>
+                Copy verify token
+              </Button>
+            </Stack>
           </Stack>
         </Box>
       ) : (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Admin WhatsApp API connect karega. Students/teachers ke profile mein phone number country code ke sath hona chahiye, jaise 923001234567.
+          Admin connects WhatsApp once. Teachers can then message selected or all students. Students and teachers need a phone with country code on their profile.
         </Alert>
       )}
 

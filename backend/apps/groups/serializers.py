@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.academics.models import Enrollment
-from apps.common.models import Notification
+from apps.common.notify import push_notifications
 
 from .models import GroupMember, StudentGroup
 
@@ -200,23 +200,18 @@ class StudentGroupSerializer(serializers.ModelSerializer):
             GroupMember.objects.get_or_create(group=group, student_id=student_id, defaults=defaults)
 
             if not is_creator and not auto_accept:
-                Notification.objects.create(
-                    user_id=student_id,
-                    title=f"Group invitation: {group.name}",
-                    body=f"You were invited to join group '{group.name}' for {target_label}.",
+                push_notifications(
+                    [student_id],
+                    f"Group invitation: {group.name}",
+                    f"You were invited to join group '{group.name}' for {target_label}.",
                 )
 
         if request.user.role == User.Role.STUDENT:
-            admin_ids = User.objects.filter(role=User.Role.SUPER_ADMIN).values_list("id", flat=True)
-            Notification.objects.bulk_create(
-                [
-                    Notification(
-                        user_id=admin_id,
-                        title="New group request submitted",
-                        body=f"{request.user.username} requested group '{group.name}' for {target_label}.",
-                    )
-                    for admin_id in admin_ids
-                ]
+            admins = User.objects.filter(role=User.Role.SUPER_ADMIN, is_active=True)
+            push_notifications(
+                admins,
+                "New group request submitted",
+                f"{request.user.get_full_name().strip() or request.user.username} requested group '{group.name}' for {target_label}.",
             )
         return group
 
@@ -248,10 +243,10 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                     ),
                 )
                 if not is_creator:
-                    Notification.objects.create(
-                        user_id=student_id,
-                        title=f"Group invitation: {instance.name}",
-                        body=f"You were invited to join group '{instance.name}' for {target_label}.",
+                    push_notifications(
+                        [student_id],
+                        f"Group invitation: {instance.name}",
+                        f"You were invited to join group '{instance.name}' for {target_label}.",
                     )
             instance.members.exclude(student_id__in=desired_ids).delete()
 

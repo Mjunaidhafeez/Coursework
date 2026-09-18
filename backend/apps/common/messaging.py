@@ -117,7 +117,7 @@ def notify_members(conversation, sender, body):
     )
 
 
-def post_message(conversation, sender, body, source=ChatMessage.Source.PORTAL):
+def post_message(conversation, sender, body, source=ChatMessage.Source.PORTAL, skip_whatsapp=False):
     text = str(body or "").strip()
     if not text:
         raise ValueError("Message is required.")
@@ -136,7 +136,7 @@ def post_message(conversation, sender, body, source=ChatMessage.Source.PORTAL):
     conversation.save(update_fields=["last_message_at", "updated_at"])
     ConversationMember.objects.filter(conversation=conversation, user=sender).update(last_read_at=now)
     notify_members(conversation, sender, text)
-    if message.source != ChatMessage.Source.WHATSAPP:
+    if message.source != ChatMessage.Source.WHATSAPP and not skip_whatsapp:
         portal = getattr(settings, "PORTAL_PUBLIC_URL", "")
         others = User.objects.filter(conversation_memberships__conversation=conversation).exclude(id=sender.id)
         notify_users_whatsapp(

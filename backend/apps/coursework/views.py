@@ -11,7 +11,7 @@ from apps.accounts.models import User
 from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.academics.models import Enrollment
 from apps.common.mixins import AuditLogMixin
-from apps.common.models import Notification
+from apps.common.notify import push_notifications
 from apps.common.uploads import delete_stored_file, file_response_for_instance, store_upload, validate_upload
 from apps.common.whatsapp import notify_event
 from apps.groups.models import GroupMember
@@ -172,16 +172,12 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         submission = serializer.save()
         self.create_audit_log(self.request, "submission_created", submission, {"status": submission.status})
-        teacher_ids = submission.coursework.course.teachers.values_list("id", flat=True)
-        notifications = [
-            Notification(
-                user_id=teacher_id,
-                title=f"New submission for {submission.coursework.title}",
-                body=f"Submission #{submission.id} requires review.",
-            )
-            for teacher_id in teacher_ids
-        ]
-        Notification.objects.bulk_create(notifications)
+        teachers = list(submission.coursework.course.teachers.filter(is_active=True))
+        push_notifications(
+            teachers,
+            f"New submission for {submission.coursework.title}",
+            f"{submission.student.get_full_name().strip() if submission.student else 'A student'} submitted a request.",
+        )
 
     def _get_scope_submissions(self, submission, scope):
         if scope == "group" and submission.group_id:
@@ -894,19 +890,12 @@ class FeedbackGradeViewSet(AuditLogMixin, viewsets.ModelViewSet):
         self.create_audit_log(self.request, "feedback_created", feedback, {"marks": str(feedback.marks)})
 
         targets = self._scope_targets(feedback.submission)
-        notifications = []
-        for submission in targets:
-            if not submission.student_id:
-                continue
-            notifications.append(
-                Notification(
-                    user_id=submission.student_id,
-                    title=f"Grade published: {submission.coursework.title}",
-                    body=f"You received {feedback.marks}/{submission.coursework.max_marks}.",
-                )
-            )
-        if notifications:
-            Notification.objects.bulk_create(notifications)
+        students = [item.student for item in targets if item.student_id]
+        push_notifications(
+            students,
+            f"Grade published: {feedback.submission.coursework.title}",
+            f"You received {feedback.marks}/{feedback.submission.coursework.max_marks}.",
+        )
 
     def perform_update(self, serializer):
         feedback = serializer.save()
@@ -988,6 +977,12 @@ class FeedbackGradeViewSet(AuditLogMixin, viewsets.ModelViewSet):
                             "marks": feedback_obj.marks,
                         },
                     )
+            students = [item.student for item in targets if item.student_id]
+            push_notifications(
+                students,
+                f"Grade published: {target_submission.coursework.title}",
+                f"You received {marks_value}/{target_submission.coursework.max_marks}.",
+            )
             updated_count += 1
 
         return Response(
