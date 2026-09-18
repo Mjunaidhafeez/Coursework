@@ -7,30 +7,10 @@ import apps.coursework.models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("coursework", "0009_coursework_auto_approve_and_type_free_text"),
+        ("coursework", "0007_submissionfile_cloud_title"),
     ]
 
     operations = [
-        migrations.AddField(
-            model_name="submissionfile",
-            name="title",
-            field=models.CharField(blank=True, max_length=200),
-        ),
-        migrations.AddField(
-            model_name="submissionfile",
-            name="file_url",
-            field=models.URLField(blank=True, max_length=500),
-        ),
-        migrations.AddField(
-            model_name="submissionfile",
-            name="storage_key",
-            field=models.CharField(blank=True, max_length=255),
-        ),
-        migrations.AddField(
-            model_name="submissionfile",
-            name="original_name",
-            field=models.CharField(blank=True, max_length=255),
-        ),
         migrations.AlterField(
             model_name="submissionfile",
             name="file",
