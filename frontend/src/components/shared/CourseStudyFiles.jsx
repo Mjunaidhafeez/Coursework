@@ -18,6 +18,7 @@ import {
 } from "@mui/material";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import { renderAsync } from "docx-preview";
 import { useEffect, useRef, useState } from "react";
 
 import api from "../../api/client";
@@ -25,7 +26,9 @@ import { ENDPOINTS } from "../../api/endpoints";
 import { useUi } from "../../context/UiContext";
 import { confirmDelete } from "../../utils/confirm";
 
-const PREVIEWABLE_EXT = ["pdf", "png", "jpg", "jpeg"];
+const IMAGE_EXT = ["png", "jpg", "jpeg"];
+const WORD_EXT = ["docx"];
+const OFFICE_EXT = ["doc", "ppt", "pptx", "xls", "xlsx"];
 
 const fileExtension = (file) =>
   String(file?.file_name || file?.title || file?.file || "")
@@ -34,7 +37,10 @@ const fileExtension = (file) =>
     .pop()
     .toLowerCase();
 
-const isPreviewable = (file) => PREVIEWABLE_EXT.includes(fileExtension(file));
+const displayFileName = (file) => {
+  const raw = String(file?.file_name || file?.title || "Study file");
+  return raw.split("/").pop() || raw;
+};
 
 const fetchStudyFileBlob = async (courseId, fileId, mode) => {
   const { data } = await api.get(`${ENDPOINTS.courses}${courseId}/study-files/${fileId}/${mode}/`, {
@@ -46,9 +52,11 @@ const fetchStudyFileBlob = async (courseId, fileId, mode) => {
 export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClose, onChanged }) => {
   const { notify } = useUi();
   const fileInputRef = useRef(null);
+  const wordHostRef = useRef(null);
   const [title, setTitle] = useState("");
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [preview, setPreview] = useState(null);
   const files = course?.study_files || [];
 
@@ -56,22 +64,52 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
     if (preview?.url) URL.revokeObjectURL(preview.url);
   }, [preview]);
 
+  useEffect(() => {
+    if (preview?.kind !== "word" || !preview.blob || !wordHostRef.current) return;
+    wordHostRef.current.innerHTML = "";
+    renderAsync(preview.blob, wordHostRef.current, undefined, { inWrapper: true, breakPages: true }).catch(() => {
+      notify("Could not preview this Word file. Use Download.", "warning");
+    });
+  }, [preview, notify]);
+
   const openStudyFile = async (item) => {
     if (!course?.id || !item?.id) return;
-    if (!isPreviewable(item)) {
-      notify("This file type cannot be previewed. Use Download.", "info");
-      return;
-    }
+    const ext = fileExtension(item);
+    setOpening(true);
     try {
-      const blob = await fetchStudyFileBlob(course.id, item.id, "view");
       if (preview?.url) URL.revokeObjectURL(preview.url);
-      setPreview({
-        url: URL.createObjectURL(blob),
-        title: item.title || item.file_name || "Study file",
-        kind: fileExtension(item) === "pdf" ? "pdf" : "image",
-      });
+      if (IMAGE_EXT.includes(ext) || ext === "pdf") {
+        const blob = await fetchStudyFileBlob(course.id, item.id, "view");
+        setPreview({
+          url: URL.createObjectURL(blob),
+          title: item.title || displayFileName(item),
+          kind: ext === "pdf" ? "pdf" : "image",
+        });
+        return;
+      }
+      if (WORD_EXT.includes(ext)) {
+        const blob = await fetchStudyFileBlob(course.id, item.id, "view");
+        setPreview({
+          blob,
+          title: item.title || displayFileName(item),
+          kind: "word",
+        });
+        return;
+      }
+      if (OFFICE_EXT.includes(ext)) {
+        const { data } = await api.get(`${ENDPOINTS.courses}${course.id}/study-files/${item.id}/preview-link/`);
+        setPreview({
+          url: data.viewer_url,
+          title: item.title || displayFileName(item),
+          kind: "office",
+        });
+        return;
+      }
+      notify("This file type cannot be previewed. Use Download.", "info");
     } catch {
       notify("Could not open file preview", "error");
+    } finally {
+      setOpening(false);
     }
   };
 
@@ -82,7 +120,7 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = item.file_name || item.title || "study-file";
+      anchor.download = displayFileName(item);
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -136,13 +174,13 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{course ? `${course.code} study files` : "Study files"}</DialogTitle>
+      <DialogTitle>{course ? `Study files for ${course.code}` : "Study files"}</DialogTitle>
       <DialogContent dividers>
         {canManage ? (
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} sx={{ mb: 1.5 }}>
             <TextField
               size="small"
-              label="File name"
+              label="Display name"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               sx={{ minWidth: 180, flex: 1 }}
@@ -153,7 +191,7 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
                 ref={fileInputRef}
                 hidden
                 type="file"
-                accept=".pdf,.docx,.zip,.pptx,.xlsx,.xls,.png,.jpg,.jpeg"
+                accept=".pdf,.doc,.docx,.zip,.ppt,.pptx,.xlsx,.xls,.png,.jpg,.jpeg"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
               />
             </Button>
@@ -174,11 +212,11 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
             <TableBody>
               {files.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell sx={{ fontWeight: 700 }}>{item.title || item.file_name || "Study file"}</TableCell>
-                  <TableCell>{item.file_name || "—"}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>{item.title || displayFileName(item)}</TableCell>
+                  <TableCell>{displayFileName(item)}</TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={0.4} justifyContent="flex-end">
-                      <IconButton size="small" title="View" onClick={() => openStudyFile(item)}>
+                      <IconButton size="small" title="View" disabled={opening} onClick={() => openStudyFile(item)}>
                         <VisibilityOutlinedIcon fontSize="small" />
                       </IconButton>
                       <IconButton size="small" title="Download" onClick={() => downloadStudyFile(item)}>
@@ -211,14 +249,23 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
         fullWidth
       >
         <DialogTitle>{preview?.title || "File preview"}</DialogTitle>
-        <DialogContent dividers sx={{ minHeight: "70vh", p: 0, bgcolor: "#0f172a" }}>
+        <DialogContent dividers sx={{ minHeight: "70vh", p: 0, bgcolor: preview?.kind === "word" ? "#fff" : "#0f172a" }}>
           {preview?.kind === "image" ? (
             <Box sx={{ p: 2, textAlign: "center" }}>
               <Box component="img" src={preview.url} alt={preview.title} sx={{ maxWidth: "100%", maxHeight: "72vh" }} />
             </Box>
-          ) : (
-            <Box component="iframe" title={preview?.title || "preview"} src={preview?.url} sx={{ width: "100%", height: "72vh", border: 0, bgcolor: "#fff" }} />
-          )}
+          ) : null}
+          {preview?.kind === "word" ? (
+            <Box ref={wordHostRef} sx={{ p: 2, bgcolor: "#fff", minHeight: "70vh", overflow: "auto" }} />
+          ) : null}
+          {preview?.kind === "pdf" || preview?.kind === "office" ? (
+            <Box
+              component="iframe"
+              title={preview?.title || "preview"}
+              src={preview?.url}
+              sx={{ width: "100%", height: "72vh", border: 0, bgcolor: "#fff" }}
+            />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPreview(null)}>Close preview</Button>

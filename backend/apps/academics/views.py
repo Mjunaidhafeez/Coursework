@@ -1,8 +1,11 @@
 import mimetypes
+from urllib.parse import quote
 
+from django.conf import settings
+from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.http import FileResponse
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 
 from apps.accounts.models import User
@@ -10,6 +13,10 @@ from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
 
 from .models import Course, CourseStudyFile, Enrollment, Semester
 from .serializers import CourseSerializer, CourseStudyFileSerializer, EnrollmentSerializer, SemesterSerializer
+
+STUDY_FILE_SIGNER = TimestampSigner(salt="mba-course-study-file")
+STUDY_FILE_TOKEN_MAX_AGE = 2 * 60 * 60
+OFFICE_PREVIEW_EXT = {"doc", "docx", "ppt", "pptx", "xls", "xlsx"}
 
 
 class SemesterViewSet(viewsets.ModelViewSet):
@@ -106,6 +113,31 @@ class CourseViewSet(viewsets.ModelViewSet):
     def download_study_file(self, request, pk=None, file_id=None):
         return self._serve_study_file(self.get_object(), file_id, as_attachment=True)
 
+    @action(detail=True, methods=["get"], url_path="study-files/(?P<file_id>[^/.]+)/preview-link")
+    def study_file_preview_link(self, request, pk=None, file_id=None):
+        course = self.get_object()
+        study_file = self._study_file_or_404(course, file_id)
+        if not study_file or not study_file.file:
+            return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+        filename = study_file.file.name.split("/")[-1]
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        token = STUDY_FILE_SIGNER.sign(f"{course.id}:{study_file.id}")
+        base = (getattr(settings, "PORTAL_PUBLIC_URL", "") or request.build_absolute_uri("/")).rstrip("/")
+        public_url = f"{base}/api/academics/study-files/public/?token={quote(token, safe='')}"
+        viewer_url = (
+            f"https://view.officeapps.live.com/op/embed.aspx?src={quote(public_url, safe='')}"
+            if ext in OFFICE_PREVIEW_EXT
+            else public_url
+        )
+        return Response(
+            {
+                "public_url": public_url,
+                "viewer_url": viewer_url,
+                "kind": "office" if ext in OFFICE_PREVIEW_EXT else "file",
+                "file_name": filename,
+            }
+        )
+
     def _enroll_semester_students(self, course):
         student_ids = User.objects.filter(
             role=User.Role.STUDENT,
@@ -153,3 +185,29 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         if self.action in ["create", "update", "partial_update", "destroy", "list", "retrieve"]:
             return [IsTeacherOrAdmin()]
         return [permissions.IsAuthenticated()]
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([permissions.AllowAny])
+def public_study_file(request):
+    token = str(request.query_params.get("token") or "").strip()
+    if not token:
+        return Response({"detail": "Preview token is required."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        value = STUDY_FILE_SIGNER.unsign(token, max_age=STUDY_FILE_TOKEN_MAX_AGE)
+        course_id, file_id = str(value).split(":", 1)
+    except SignatureExpired:
+        return Response({"detail": "This preview link has expired. Open the file again."}, status=status.HTTP_400_BAD_REQUEST)
+    except (BadSignature, ValueError):
+        return Response({"detail": "Invalid preview link."}, status=status.HTTP_404_NOT_FOUND)
+    study_file = CourseStudyFile.objects.filter(course_id=course_id, id=file_id).first()
+    if not study_file or not study_file.file:
+        return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+    filename = study_file.file.name.split("/")[-1]
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    handle = study_file.file.open("rb")
+    response = FileResponse(handle, as_attachment=False, filename=filename, content_type=content_type)
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    response["Access-Control-Allow-Origin"] = "*"
+    return response

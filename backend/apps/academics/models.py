@@ -37,7 +37,7 @@ class CourseStudyFile(TimeStampedModel):
     title = models.CharField(max_length=200)
     file = models.FileField(
         upload_to=course_study_file_path,
-        validators=[FileExtensionValidator(allowed_extensions=["pdf", "docx", "zip", "pptx", "xlsx", "xls", "png", "jpg", "jpeg"])],
+        validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx", "zip", "ppt", "pptx", "xlsx", "xls", "png", "jpg", "jpeg"])],
     )
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
