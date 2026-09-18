@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.common.uploads import normalize_phone
+
 from .models import StudentProfile, TeacherProfile, User
 
 
@@ -26,6 +28,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             "id": self.user.id,
             "username": self.user.username,
             "email": self.user.email,
+            "phone": self.user.phone,
+            "mailing_address": getattr(getattr(self.user, "student_profile", None), "mailing_address", "") or "",
             "first_name": self.user.first_name,
             "last_name": self.user.last_name,
             "full_name": self.user.get_full_name().strip() or self.user.username,
@@ -46,7 +50,7 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StudentProfile
-        fields = ["id", "student_id", "semester", "semester_number"]
+        fields = ["id", "student_id", "semester", "semester_number", "mailing_address"]
         extra_kwargs = {
             # Handled in parent serializer to support update-on-self without false duplicate error.
             "student_id": {"validators": []},
@@ -58,6 +62,7 @@ class UserSerializer(serializers.ModelSerializer):
     student_profile = StudentProfileSerializer(required=False)
     full_name = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
+    mailing_address = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -68,6 +73,8 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "full_name",
             "email",
+            "phone",
+            "mailing_address",
             "role",
             "avatar",
             "teacher_profile",
@@ -85,13 +92,29 @@ class UserSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.avatar.url)
         return obj.avatar.url
 
+    def get_mailing_address(self, obj):
+        return getattr(getattr(obj, "student_profile", None), "mailing_address", "") or ""
+
 
 class SelfProfileUpdateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
+    mailing_address = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "avatar", "password"]
+        fields = ["first_name", "last_name", "email", "phone", "avatar", "password", "mailing_address"]
+
+    def validate_email(self, value):
+        email = (value or "").strip().lower()
+        if not email:
+            raise serializers.ValidationError("Email is required.")
+        qs = User.objects.filter(email__iexact=email).exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This email is already in use.")
+        return email
+
+    def validate_phone(self, value):
+        return normalize_phone(value)
 
     def validate(self, attrs):
         request = self.context["request"]
@@ -101,12 +124,18 @@ class SelfProfileUpdateSerializer(serializers.ModelSerializer):
         return attrs
 
     def update(self, instance, validated_data):
+        mailing_address = validated_data.pop("mailing_address", None)
         password = validated_data.pop("password", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
             instance.set_password(password)
         instance.save()
+        if mailing_address is not None and instance.role == User.Role.STUDENT:
+            profile = getattr(instance, "student_profile", None)
+            if profile:
+                profile.mailing_address = mailing_address
+                profile.save(update_fields=["mailing_address"])
         return instance
 
 
@@ -123,6 +152,7 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "email",
+            "phone",
             "role",
             "password",
             "teacher_profile",
@@ -133,6 +163,8 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
         if self.instance and "username" in attrs and attrs["username"] != self.instance.username:
             raise serializers.ValidationError({"username": "Username cannot be changed."})
         role = attrs.get("role", getattr(self.instance, "role", User.Role.STUDENT))
+        if "phone" in attrs:
+            attrs["phone"] = normalize_phone(attrs.get("phone"))
         email = attrs.get("email", getattr(self.instance, "email", "")).strip().lower()
         teacher_profile_data = attrs.get("teacher_profile", None)
         student_profile_data = attrs.get("student_profile", None)

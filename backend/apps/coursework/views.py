@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from django.db.models import Q
 from django.utils import timezone
@@ -12,6 +12,8 @@ from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.academics.models import Enrollment
 from apps.common.mixins import AuditLogMixin
 from apps.common.models import Notification
+from apps.common.uploads import delete_stored_file, store_upload, validate_upload
+from apps.common.whatsapp import notify_event
 from apps.groups.models import GroupMember
 
 from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
@@ -448,6 +450,11 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             for target in targets:
                 if self._apply_workflow_action(target, action_name):
                     updated_count += 1
+                    if target.student_id:
+                        notify_event(
+                            [target.student],
+                            f"Your request for {target.coursework.title} is now {action_name.replace('_', ' ')}.",
+                        )
                 if action_name in ["approve", "mark"] and raw_marks not in [None, ""]:
                     self._apply_marks(target, raw_marks, feedback_text, user)
             submission.refresh_from_db()
@@ -492,7 +499,8 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
     def _sync_primary_file_from_uploaded_files(self, submission):
         latest = submission.submission_files.order_by("-uploaded_at", "-created_at").first()
         if latest:
-            submission.file = latest.file.name
+            if latest.file:
+                submission.file = latest.file.name
             submission.submitted_at = latest.uploaded_at
             if latest.uploaded_by_id:
                 submission.student_id = latest.uploaded_by_id
@@ -513,16 +521,26 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
         created = []
         for file_obj in files:
-            created.append(
-                SubmissionFile.objects.create(
-                    submission=submission,
-                    file=file_obj,
-                    uploaded_by=request.user,
-                    uploaded_at=timezone.now(),
-                )
+            try:
+                validate_upload(file_obj)
+            except ValidationError as exc:
+                detail = exc.detail[0] if isinstance(exc.detail, (list, tuple)) else exc.detail
+                return Response({"detail": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
+            row = SubmissionFile(
+                submission=submission,
+                uploaded_by=request.user,
+                uploaded_at=timezone.now(),
             )
+            store_upload(row, file_obj, folder=f"mba-portal/submissions/{submission.id}")
+            row.save()
+            created.append(row)
         self._sync_primary_file_from_uploaded_files(submission)
         submission.refresh_from_db()
+        teachers = submission.coursework.course.teachers.filter(is_active=True)
+        notify_event(
+            list(teachers),
+            f"{request.user.get_full_name().strip() or request.user.username} submitted {len(created)} file(s) for {submission.coursework.course.code} — {submission.coursework.title}.",
+        )
         return Response(
             {
                 "submission": self.get_serializer(submission).data,
@@ -543,8 +561,7 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
         if not target:
             return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if target.file:
-            target.file.delete(save=False)
+        delete_stored_file(target)
         target.delete()
         self._sync_primary_file_from_uploaded_files(submission)
         submission.refresh_from_db()
@@ -554,6 +571,24 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=True, methods=["post"])
+    def rename_file(self, request, pk=None):
+        submission = self.get_object()
+        self._ensure_upload_permission(request.user, submission)
+        file_id = request.data.get("file_id")
+        title = str(request.data.get("title") or "").strip()
+        if not file_id:
+            return Response({"detail": "file_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not title:
+            return Response({"detail": "File name is required."}, status=status.HTTP_400_BAD_REQUEST)
+        target = submission.submission_files.filter(id=file_id).first()
+        if not target:
+            return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
+        target.title = title[:200]
+        target.save(update_fields=["title"])
+        submission.refresh_from_db()
+        return Response({"submission": self.get_serializer(submission).data}, status=status.HTTP_200_OK)
 
     def perform_update(self, serializer):
         submission = self.get_object()

@@ -38,6 +38,7 @@ import { confirmDelete } from "../../utils/confirm";
 const emptyForm = {
   username: "",
   email: "",
+  phone: "",
   first_name: "",
   last_name: "",
   role: "student",
@@ -45,6 +46,7 @@ const emptyForm = {
   department: "",
   student_id: "",
   semester: "",
+  mailing_address: "",
 };
 
 const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
@@ -204,13 +206,20 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       const payload = {
         username: form.username,
         email: form.email,
+        phone: form.phone,
         first_name: form.first_name,
         last_name: form.last_name,
         role: form.role,
       };
       if (form.password) payload.password = form.password;
       if (form.role === "teacher") payload.teacher_profile = { department: form.department };
-      if (form.role === "student") payload.student_profile = { student_id: form.student_id, semester: form.semester || null };
+      if (form.role === "student") {
+        payload.student_profile = {
+          student_id: form.student_id,
+          semester: form.semester || null,
+          mailing_address: form.mailing_address || "",
+        };
+      }
 
       if (editingId) {
         setUsers((prev) => prev.map((u) => (u.id === editingId ? { ...u, ...payload } : u)));
@@ -250,6 +259,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     setForm({
       username: user.username || "",
       email: user.email || "",
+      phone: user.phone || "",
       first_name: user.first_name || "",
       last_name: user.last_name || "",
       role: user.role || "student",
@@ -257,6 +267,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       department: user.teacher_profile?.department || "",
       student_id: user.student_profile?.student_id || "",
       semester: user.student_profile?.semester || "",
+      mailing_address: user.mailing_address || user.student_profile?.mailing_address || "",
     });
     setFormErrors({});
   };
@@ -358,6 +369,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
         >
           <TextField required size="small" label="Username" value={form.username} disabled={Boolean(editingId)} error={showValidation && Boolean(formErrors.username)} helperText={editingId ? "Locked" : (showValidation ? formErrors.username || "" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, username: e.target.value }))} />
           <TextField required size="small" label="Email" type="email" value={form.email} error={showValidation && Boolean(formErrors.email)} helperText={showValidation ? formErrors.email || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, email: e.target.value }))} />
+          <TextField size="small" label="Phone / WhatsApp" value={form.phone} helperText="Optional" sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, phone: e.target.value }))} />
           <TextField required={!editingId} size="small" label={editingId ? "Password (optional)" : "Password"} type="password" value={form.password} error={showValidation && Boolean(formErrors.password)} helperText={showValidation ? formErrors.password || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, password: e.target.value }))} />
           <TextField required size="small" label="First Name" value={form.first_name} error={showValidation && Boolean(formErrors.first_name)} helperText={showValidation ? formErrors.first_name || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, first_name: e.target.value }))} />
           <TextField required size="small" label="Last Name" value={form.last_name} error={showValidation && Boolean(formErrors.last_name)} helperText={showValidation ? formErrors.last_name || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, last_name: e.target.value }))} />
@@ -375,6 +387,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
               <TextField required select size="small" label="Semester" value={form.semester} error={showValidation && Boolean(formErrors.semester)} helperText={showValidation ? formErrors.semester || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, semester: e.target.value }))}>
                 {semesters.map((semester) => <MenuItem key={semester.id} value={semester.id}>{semester.number}</MenuItem>)}
               </TextField>
+              <TextField size="small" label="Mailing address" value={form.mailing_address} helperText="Optional" sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, mailing_address: e.target.value }))} />
             </>
           )}
         </CompactAddForm>

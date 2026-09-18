@@ -72,9 +72,14 @@ class ConversationMember(TimeStampedModel):
 
 
 class ChatMessage(TimeStampedModel):
+    class Source(models.TextChoices):
+        PORTAL = "portal", "Portal"
+        WHATSAPP = "whatsapp", "WhatsApp"
+
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_messages")
     body = models.TextField()
+    source = models.CharField(max_length=20, choices=Source.choices, default=Source.PORTAL)
 
     class Meta:
         ordering = ["created_at"]

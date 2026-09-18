@@ -44,9 +44,13 @@ const DashboardLayout = () => {
   const [profileForm, setProfileForm] = useState({
     first_name: "",
     last_name: "",
+    email: "",
+    phone: "",
+    mailing_address: "",
     password: "",
     avatar: null,
   });
+  const isStudent = user?.role === ROLES.STUDENT;
   const shownToastIdsRef = useRef(new Set());
   const headerConfig = {
     [ROLES.SUPER_ADMIN]: {
@@ -134,6 +138,9 @@ const DashboardLayout = () => {
     setProfileForm({
       first_name: user?.first_name || "",
       last_name: user?.last_name || "",
+      email: user?.email || "",
+      phone: user?.phone || "",
+      mailing_address: user?.mailing_address || user?.student_profile?.mailing_address || "",
       password: "",
       avatar: null,
     });
@@ -146,7 +153,15 @@ const DashboardLayout = () => {
   };
 
   const saveProfile = async () => {
+    const email = (profileForm.email || "").trim();
+    if (!email) {
+      notify("Email is required", "error");
+      return;
+    }
     const payload = new FormData();
+    payload.append("email", email);
+    payload.append("phone", profileForm.phone || "");
+    if (isStudent) payload.append("mailing_address", profileForm.mailing_address || "");
     if (canEditNamePassword) {
       payload.append("first_name", profileForm.first_name || "");
       payload.append("last_name", profileForm.last_name || "");
@@ -154,10 +169,6 @@ const DashboardLayout = () => {
     }
     if (profileForm.avatar) {
       payload.append("avatar", profileForm.avatar);
-    }
-    if (!payload.has("avatar") && !payload.has("first_name") && !payload.has("last_name") && !payload.has("password")) {
-      notify("No profile changes to save", "warning");
-      return;
     }
 
     setProfileSaving(true);
@@ -350,6 +361,32 @@ const DashboardLayout = () => {
               </Button>
             </Stack>
             <TextField size="small" label="Username" value={user?.username || ""} disabled />
+            <TextField
+              size="small"
+              required
+              type="email"
+              label="Email"
+              value={profileForm.email}
+              onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
+            />
+            <TextField
+              size="small"
+              label="Phone / WhatsApp"
+              value={profileForm.phone}
+              onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+              helperText="Optional. Used for WhatsApp portal updates."
+            />
+            {isStudent ? (
+              <TextField
+                size="small"
+                label="Mailing address"
+                value={profileForm.mailing_address}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, mailing_address: e.target.value }))}
+                multiline
+                minRows={2}
+                helperText="Optional."
+              />
+            ) : null}
             <TextField
               size="small"
               label="First Name"

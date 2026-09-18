@@ -6,6 +6,10 @@ import {
   Checkbox,
   Chip,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   IconButton,
   InputLabel,
@@ -35,6 +39,7 @@ import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 import { shallowEqualObjects } from "../../utils/object";
 import { resolveSubmissionMembers } from "../../utils/submissionMembers";
 import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
+import { oversizedFileNames } from "../../utils/uploadLimits";
 
 const SubmitWorkPage = () => {
   const { user } = useAuth();
@@ -59,6 +64,8 @@ const SubmitWorkPage = () => {
   const [rowFiles, setRowFiles] = useState({});
   const [rowUploading, setRowUploading] = useState({});
   const [rowFileDeleting, setRowFileDeleting] = useState({});
+  const [renamingFile, setRenamingFile] = useState(null);
+  const [renameTitle, setRenameTitle] = useState("");
   const [membersBySubmission, setMembersBySubmission] = useState({});
   const [membersLoadingBySubmission, setMembersLoadingBySubmission] = useState({});
   const [message, setMessage] = useState("");
@@ -335,6 +342,11 @@ const SubmitWorkPage = () => {
       notify("This row cannot be uploaded in current state", "error");
       return false;
     }
+    const tooBig = oversizedFileNames(files);
+    if (tooBig.length) {
+      notify(`${tooBig.join(", ")} is larger than 25 MB`, "error");
+      return false;
+    }
     const payload = new FormData();
     files.forEach((fileItem) => payload.append("files", fileItem));
 
@@ -353,6 +365,26 @@ const SubmitWorkPage = () => {
       return false;
     } finally {
       setRowUploading((prev) => ({ ...prev, [submission.id]: false }));
+    }
+  };
+
+  const renameSubmissionFile = async () => {
+    if (!renamingFile?.submission?.id || !renamingFile?.fileItem?.id) return;
+    const nextTitle = renameTitle.trim();
+    if (!nextTitle) {
+      notify("File name is required", "error");
+      return;
+    }
+    try {
+      await api.post(`${ENDPOINTS.submissions}${renamingFile.submission.id}/rename_file/`, {
+        file_id: renamingFile.fileItem.id,
+        title: nextTitle,
+      });
+      notify("File name updated");
+      setRenamingFile(null);
+      await loadData();
+    } catch (err) {
+      notify(extractApiErrorMessage(err), "error");
     }
   };
 
@@ -564,6 +596,7 @@ const SubmitWorkPage = () => {
   };
 
   return (
+    <>
     <ListingPage
       title="Submit Work"
       tabs={(
@@ -1085,6 +1118,12 @@ const SubmitWorkPage = () => {
                                               inputProps={{ accept: ".pdf,.docx,.zip,.pptx", multiple: true }}
                                               onChange={(e) => {
                                                 const files = Array.from(e.target.files || []);
+                                                const tooBig = oversizedFileNames(files);
+                                                if (tooBig.length) {
+                                                  notify(`${tooBig.join(", ")} is larger than 25 MB`, "error");
+                                                  e.target.value = "";
+                                                  return;
+                                                }
                                                 setRowFiles((prev) => ({ ...prev, [submission.id]: files }));
                                               }}
                                             />
@@ -1099,6 +1138,7 @@ const SubmitWorkPage = () => {
                                             {!!rowFiles[submission.id]?.length && (
                                               <Chip size="small" variant="outlined" label={`Selected: ${rowFiles[submission.id].length}`} />
                                             )}
+                                            <Typography variant="caption" color="text.secondary">Max 25 MB each, multiple files allowed</Typography>
                                           </Fragment>
                                         ) : (
                                           <Chip
@@ -1119,7 +1159,7 @@ const SubmitWorkPage = () => {
                                         </Typography>
                                         {getSubmissionFiles(submission).length ? (
                                           getSubmissionFiles(submission).map((fileItem) => {
-                                            const fileUrl = toAbsoluteMediaUrl(fileItem.file);
+                                            const fileUrl = toAbsoluteMediaUrl(fileItem.file || fileItem.file_url);
                                             const deleteKey = `${submission.id}-${fileItem.id}`;
                                             return (
                                               <Stack
@@ -1131,6 +1171,16 @@ const SubmitWorkPage = () => {
                                                 <Typography variant="caption" sx={{ flex: 1 }}>
                                                   {fileItem.file_name || `File #${fileItem.id}`}
                                                 </Typography>
+                                                <Button
+                                                  size="small"
+                                                  disabled={!canUpload || fileItem.is_legacy}
+                                                  onClick={() => {
+                                                    setRenamingFile({ submission, fileItem });
+                                                    setRenameTitle(fileItem.title || fileItem.file_name || "");
+                                                  }}
+                                                >
+                                                  Rename
+                                                </Button>
                                                 <Button
                                                   size="small"
                                                   onClick={() => fileUrl && window.open(fileUrl, "_blank", "noopener,noreferrer")}
@@ -1176,6 +1226,25 @@ const SubmitWorkPage = () => {
           })()}
         </Box>
     </ListingPage>
+    <Dialog open={Boolean(renamingFile)} onClose={() => setRenamingFile(null)} maxWidth="xs" fullWidth>
+      <DialogTitle>Edit file name</DialogTitle>
+      <DialogContent>
+        <TextField
+          autoFocus
+          fullWidth
+          size="small"
+          label="File name"
+          value={renameTitle}
+          onChange={(e) => setRenameTitle(e.target.value)}
+          sx={{ mt: 1 }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setRenamingFile(null)}>Cancel</Button>
+        <Button variant="contained" onClick={renameSubmissionFile}>Save</Button>
+      </DialogActions>
+    </Dialog>
+    </>
   );
 };
 

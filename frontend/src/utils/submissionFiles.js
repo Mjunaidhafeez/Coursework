@@ -1,7 +1,16 @@
 import { toAbsoluteMediaUrl } from "./mediaUrl";
 
+export const primarySubmissionFileUrl = (submission) => {
+  const files = submission?.submitted_files || [];
+  const latest = files[files.length - 1];
+  return toAbsoluteMediaUrl(latest?.file || latest?.file_url || submission?.file);
+};
+
+export const hasSubmissionFile = (submission) =>
+  Boolean(primarySubmissionFileUrl(submission) || (submission?.submitted_files || []).length || submission?.file);
+
 export const openSubmissionFilePreview = (submission, notify) => {
-  const fileUrl = toAbsoluteMediaUrl(submission?.file);
+  const fileUrl = primarySubmissionFileUrl(submission);
   if (!fileUrl) {
     notify?.("No file uploaded yet", "warning");
     return;
@@ -10,7 +19,7 @@ export const openSubmissionFilePreview = (submission, notify) => {
 };
 
 export const downloadSubmissionFile = (submission, notify) => {
-  const fileUrl = toAbsoluteMediaUrl(submission?.file);
+  const fileUrl = primarySubmissionFileUrl(submission);
   if (!fileUrl) {
     notify?.("No file uploaded yet", "warning");
     return;

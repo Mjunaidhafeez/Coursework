@@ -24,13 +24,13 @@ def me(request):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-    return Response(UserSerializer(request.user).data)
+    return Response(UserSerializer(request.user, context={"request": request}).data)
 
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-id")
     filterset_fields = ["role", "is_active"]
-    search_fields = ["username", "email", "first_name", "last_name"]
+    search_fields = ["username", "email", "phone", "first_name", "last_name"]
     ordering_fields = ["id", "username", "first_name", "last_name", "email", "role", "date_joined"]
 
     def get_permissions(self):

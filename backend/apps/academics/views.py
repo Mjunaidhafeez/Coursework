@@ -4,12 +4,16 @@ from urllib.parse import quote
 from django.conf import settings
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.http import FileResponse
+from django.shortcuts import redirect
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
+from apps.common.uploads import delete_stored_file, public_file_url, store_upload, validate_upload
+from apps.common.whatsapp import notify_event
 
 from .models import Course, CourseStudyFile, Enrollment, Semester
 from .serializers import CourseSerializer, CourseStudyFileSerializer, EnrollmentSerializer, SemesterSerializer
@@ -48,7 +52,7 @@ class CourseViewSet(viewsets.ModelViewSet):
     ordering_fields = ["code", "title", "created_at"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy", "upload_study_file", "delete_study_file"]:
+        if self.action in ["create", "update", "partial_update", "destroy", "upload_study_file", "delete_study_file", "rename_study_file"]:
             return [IsTeacherOrAdmin()]
         return [permissions.IsAuthenticated()]
 
@@ -66,14 +70,17 @@ class CourseViewSet(viewsets.ModelViewSet):
         upload = request.FILES.get("file")
         if not upload:
             return Response({"detail": "A study file is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_upload(upload)
+        except ValidationError as exc:
+            return Response({"detail": exc.detail if hasattr(exc, "detail") else str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         if not title:
             title = upload.name.rsplit(".", 1)[0]
-        study_file = CourseStudyFile.objects.create(
-            course=course,
-            title=title,
-            file=upload,
-            uploaded_by=request.user,
-        )
+        study_file = CourseStudyFile(course=course, title=title, uploaded_by=request.user)
+        store_upload(study_file, upload, folder=f"mba-portal/courses/{course.id}")
+        study_file.save()
+        students = User.objects.filter(enrollments__course=course, is_active=True).distinct()
+        notify_event(students, f"New study file in {course.code}: {study_file.title}")
         return Response(CourseStudyFileSerializer(study_file, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["delete"], url_path="study-files/(?P<file_id>[^/.]+)")
@@ -84,18 +91,45 @@ class CourseViewSet(viewsets.ModelViewSet):
         study_file = CourseStudyFile.objects.filter(course=course, id=file_id).first()
         if not study_file:
             return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-        study_file.file.delete(save=False)
+        delete_stored_file(study_file)
         study_file.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["patch"], url_path="study-files/(?P<file_id>[^/.]+)")
+    def rename_study_file(self, request, pk=None, file_id=None):
+        course = self.get_object()
+        if not self._can_manage_course_files(request.user, course):
+            return Response({"detail": "You can only rename files for your courses."}, status=status.HTTP_403_FORBIDDEN)
+        study_file = CourseStudyFile.objects.filter(course=course, id=file_id).first()
+        if not study_file:
+            return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+        title = str(request.data.get("title") or "").strip()
+        if not title:
+            return Response({"detail": "File name is required."}, status=status.HTTP_400_BAD_REQUEST)
+        study_file.title = title[:200]
+        study_file.save(update_fields=["title"])
+        return Response(CourseStudyFileSerializer(study_file, context={"request": request}).data)
 
     def _study_file_or_404(self, course, file_id):
         return CourseStudyFile.objects.filter(course=course, id=file_id).first()
 
+    def _study_file_name(self, study_file):
+        if study_file.original_name:
+            return study_file.original_name
+        if study_file.file:
+            return study_file.file.name.split("/")[-1]
+        url = public_file_url(study_file)
+        return url.split("/")[-1] if url else (study_file.title or "file")
+
     def _serve_study_file(self, course, file_id, as_attachment):
         study_file = self._study_file_or_404(course, file_id)
-        if not study_file or not study_file.file:
+        if not study_file:
             return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-        filename = study_file.file.name.split("/")[-1]
+        if study_file.file_url and not study_file.file:
+            return redirect(study_file.file_url)
+        if not study_file.file:
+            return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+        filename = self._study_file_name(study_file)
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
         handle = study_file.file.open("rb")
         response = FileResponse(handle, as_attachment=as_attachment, filename=filename, content_type=content_type)
@@ -117,13 +151,13 @@ class CourseViewSet(viewsets.ModelViewSet):
     def study_file_preview_link(self, request, pk=None, file_id=None):
         course = self.get_object()
         study_file = self._study_file_or_404(course, file_id)
-        if not study_file or not study_file.file:
+        if not study_file or (not study_file.file and not study_file.file_url):
             return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-        filename = study_file.file.name.split("/")[-1]
+        filename = self._study_file_name(study_file)
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
         token = STUDY_FILE_SIGNER.sign(f"{course.id}:{study_file.id}")
         base = (getattr(settings, "PORTAL_PUBLIC_URL", "") or request.build_absolute_uri("/")).rstrip("/")
-        public_url = f"{base}/api/academics/study-files/public/?token={quote(token, safe='')}"
+        public_url = study_file.file_url or f"{base}/api/academics/study-files/public/?token={quote(token, safe='')}"
         viewer_url = (
             f"https://view.officeapps.live.com/op/embed.aspx?src={quote(public_url, safe='')}"
             if ext in OFFICE_PREVIEW_EXT
@@ -202,9 +236,13 @@ def public_study_file(request):
     except (BadSignature, ValueError):
         return Response({"detail": "Invalid preview link."}, status=status.HTTP_404_NOT_FOUND)
     study_file = CourseStudyFile.objects.filter(course_id=course_id, id=file_id).first()
-    if not study_file or not study_file.file:
+    if not study_file:
         return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-    filename = study_file.file.name.split("/")[-1]
+    if study_file.file_url and not study_file.file:
+        return redirect(study_file.file_url)
+    if not study_file.file:
+        return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+    filename = study_file.original_name or study_file.file.name.split("/")[-1]
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     handle = study_file.file.open("rb")
     response = FileResponse(handle, as_attachment=False, filename=filename, content_type=content_type)

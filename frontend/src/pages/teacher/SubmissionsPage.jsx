@@ -42,7 +42,7 @@ import usePaginatedQuery from "../../hooks/usePaginatedQuery";
 import { fetchFeedbackBySubmissionMap } from "../../utils/feedback";
 import { formatDate, formatMarks } from "../../utils/format";
 import { shallowEqualObjects } from "../../utils/object";
-import { downloadSubmissionFile, openSubmissionFilePreview } from "../../utils/submissionFiles";
+import { downloadSubmissionFile, hasSubmissionFile, openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { resolveSubmissionMembers } from "../../utils/submissionMembers";
 import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
 import { csvSafe, downloadTextFile, fileSafe } from "../../utils/export";
@@ -110,7 +110,7 @@ const isTopicOrFileSender = (item) => {
   if (!item || item.is_topic_not_submitted) return false;
   if (item.is_request_sender === true) return true;
   if (item.is_request_sender === false) return false;
-  const hasTopicOrFile = Boolean(String(item.topic || "").trim() || item.file);
+  const hasTopicOrFile = Boolean(String(item.topic || "").trim() || hasSubmissionFile(item));
   if (!hasTopicOrFile) return false;
   const requestedIds = (item.requested_member_ids || []).map(String);
   const studentId = String(item.student || "");
@@ -123,7 +123,7 @@ const canShowMembersButton = (item, groupsById = {}) =>
 
 const getDisplayedSubmittedAt = (item) => {
   if (!item || item.is_topic_not_submitted) return null;
-  if (item.file || item.last_file_updated_at) return item.last_file_updated_at || item.submitted_at;
+  if (hasSubmissionFile(item) || item.last_file_updated_at) return item.last_file_updated_at || item.submitted_at;
   if (String(item.topic || "").trim()) return item.submitted_at;
   return null;
 };
@@ -1767,7 +1767,7 @@ const SubmissionsPage = () => {
                                         />
                                       </TableCell>
                                       <TableCell>
-                                  {item.file ? (
+                                  {hasSubmissionFile(item) ? (
                                     <Stack direction="row" spacing={0.3}>
                                       <IconButton size="small" onClick={() => openFilePreview(item)} title="View file">
                                               <VisibilityOutlinedIcon fontSize="small" />

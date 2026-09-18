@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.common.uploads import public_file_url
+
 from .models import Course, CourseStudyFile, Enrollment, Semester
 
 
@@ -20,7 +22,9 @@ class CourseStudyFileSerializer(serializers.ModelSerializer):
             "course",
             "title",
             "file",
+            "file_url",
             "file_name",
+            "original_name",
             "uploaded_by",
             "uploaded_by_name",
             "created_at",
@@ -28,7 +32,12 @@ class CourseStudyFileSerializer(serializers.ModelSerializer):
         read_only_fields = ["course", "uploaded_by", "file_name", "uploaded_by_name", "created_at"]
 
     def get_file_name(self, obj):
-        return obj.file.name.split("/")[-1] if obj.file else ""
+        if obj.original_name:
+            return obj.original_name
+        if obj.file:
+            return obj.file.name.split("/")[-1]
+        url = public_file_url(obj, self.context.get("request"))
+        return url.split("/")[-1] if url else ""
 
     def get_uploaded_by_name(self, obj):
         user = getattr(obj, "uploaded_by", None)

@@ -1,9 +1,11 @@
+from django.conf import settings
 from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.academics.models import Enrollment
 from apps.accounts.models import User
 from apps.common.models import ChatMessage, Conversation, ConversationMember, Notification
+from apps.common.whatsapp import notify_users_whatsapp
 
 
 def _name(user):
@@ -115,7 +117,7 @@ def notify_members(conversation, sender, body):
     )
 
 
-def post_message(conversation, sender, body):
+def post_message(conversation, sender, body, source=ChatMessage.Source.PORTAL):
     text = str(body or "").strip()
     if not text:
         raise ValueError("Message is required.")
@@ -123,12 +125,24 @@ def post_message(conversation, sender, body):
         raise ValueError("Message is too long.")
     if not conversation.memberships.filter(user=sender).exists():
         raise PermissionError("You are not in this conversation.")
-    message = ChatMessage.objects.create(conversation=conversation, sender=sender, body=text)
+    message = ChatMessage.objects.create(
+        conversation=conversation,
+        sender=sender,
+        body=text,
+        source=source or ChatMessage.Source.PORTAL,
+    )
     now = timezone.now()
     conversation.last_message_at = now
     conversation.save(update_fields=["last_message_at", "updated_at"])
     ConversationMember.objects.filter(conversation=conversation, user=sender).update(last_read_at=now)
     notify_members(conversation, sender, text)
+    if message.source != ChatMessage.Source.WHATSAPP:
+        portal = getattr(settings, "PORTAL_PUBLIC_URL", "")
+        others = User.objects.filter(conversation_memberships__conversation=conversation).exclude(id=sender.id)
+        notify_users_whatsapp(
+            others,
+            f"{_name(sender)} ({_role_label(sender.role)}): {text}\n\nOpen portal: {portal}",
+        )
     return message
 
 
@@ -183,6 +197,7 @@ def serialize_message(message):
     return {
         "id": message.id,
         "body": message.body,
+        "source": message.source,
         "created_at": message.created_at,
         "sender": serialize_user(message.sender),
     }

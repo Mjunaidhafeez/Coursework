@@ -38,7 +38,12 @@ class CourseStudyFile(TimeStampedModel):
     file = models.FileField(
         upload_to=course_study_file_path,
         validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx", "zip", "ppt", "pptx", "xlsx", "xls", "png", "jpg", "jpeg"])],
+        null=True,
+        blank=True,
     )
+    file_url = models.URLField(max_length=500, blank=True)
+    storage_key = models.CharField(max_length=255, blank=True)
+    original_name = models.CharField(max_length=255, blank=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

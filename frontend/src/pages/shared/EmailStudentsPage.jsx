@@ -29,8 +29,8 @@ import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 
 const MAX_EMAIL_FILES = 5;
-const MAX_EMAIL_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_EMAIL_TOTAL_BYTES = 15 * 1024 * 1024;
+const MAX_EMAIL_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_EMAIL_TOTAL_BYTES = 25 * 1024 * 1024;
 const EMAIL_FILE_ACCEPT = ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.png,.jpg,.jpeg,.txt,.csv";
 const EMAIL_FILE_TYPES = new Set(EMAIL_FILE_ACCEPT.split(","));
 
@@ -190,7 +190,7 @@ const EmailStudentsPage = () => {
         continue;
       }
       if (file.size > MAX_EMAIL_FILE_BYTES) {
-        notify(`${file.name} is larger than 8 MB.`, "warning");
+        notify(`${file.name} is larger than 25 MB.`, "warning");
         continue;
       }
       if (next.length >= MAX_EMAIL_FILES) {
@@ -201,7 +201,7 @@ const EmailStudentsPage = () => {
     }
     const total = next.reduce((sum, file) => sum + file.size, 0);
     if (total > MAX_EMAIL_TOTAL_BYTES) {
-      notify("Attachments together must stay under 15 MB.", "warning");
+      notify("Attachments together must stay under 25 MB.", "warning");
     } else {
       setFiles(next);
     }
@@ -397,7 +397,7 @@ const EmailStudentsPage = () => {
                 />
               </Button>
               <Typography variant="caption" color="text.secondary">
-                Up to 5 files, 8 MB each, 15 MB total
+                Up to 5 files, 25 MB each, 25 MB total
               </Typography>
             </Stack>
             {files.length > 0 && (

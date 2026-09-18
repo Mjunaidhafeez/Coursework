@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.models import User
+from apps.common.uploads import public_file_url
 from apps.groups.models import GroupMember, StudentGroup
 
 from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
@@ -106,14 +107,29 @@ class CourseworkSerializer(serializers.ModelSerializer):
 
 class SubmissionFileSerializer(serializers.ModelSerializer):
     file_name = serializers.SerializerMethodField()
+    file = serializers.SerializerMethodField()
 
     class Meta:
         model = SubmissionFile
-        fields = ["id", "file", "file_name", "uploaded_by", "uploaded_at", "created_at"]
+        fields = ["id", "title", "file", "file_url", "file_name", "original_name", "uploaded_by", "uploaded_at", "created_at"]
         read_only_fields = fields
 
     def get_file_name(self, obj):
-        return obj.file.name.split("/")[-1] if obj.file else ""
+        if obj.title:
+            ext = ""
+            source = obj.original_name or (obj.file.name.split("/")[-1] if obj.file else "")
+            if "." in source:
+                ext = "." + source.rsplit(".", 1)[-1]
+            return f"{obj.title}{ext}" if ext and not obj.title.endswith(ext) else obj.title
+        if obj.original_name:
+            return obj.original_name
+        if obj.file:
+            return obj.file.name.split("/")[-1]
+        url = public_file_url(obj, self.context.get("request"))
+        return url.split("/")[-1] if url else ""
+
+    def get_file(self, obj):
+        return public_file_url(obj, self.context.get("request"))
 
 
 class SubmissionSerializer(serializers.ModelSerializer):
@@ -244,11 +260,17 @@ class SubmissionSerializer(serializers.ModelSerializer):
         return full_name or obj.student.username
 
     def get_last_file_updated_by_name(self, obj):
+        latest = obj.submission_files.order_by("-uploaded_at", "-created_at").first()
+        if latest and latest.uploaded_by:
+            return latest.uploaded_by.get_full_name().strip() or latest.uploaded_by.username
         if not obj.file:
             return "-"
         return self.get_submitted_by_name(obj)
 
     def get_last_file_updated_at(self, obj):
+        latest = obj.submission_files.order_by("-uploaded_at", "-created_at").first()
+        if latest:
+            return latest.uploaded_at
         if not obj.file:
             return None
         return obj.submitted_at

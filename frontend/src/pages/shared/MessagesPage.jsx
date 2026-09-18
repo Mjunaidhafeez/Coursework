@@ -269,6 +269,7 @@ const MessagesPage = () => {
                   <Box sx={{ maxWidth: "78%", bgcolor: mine ? "#102a5c" : "#fff", color: mine ? "#fff" : "#1e293b", border: mine ? 0 : "1px solid #dbeafe", borderRadius: 2, px: 1.2, py: 0.8 }}>
                     <Typography sx={{ fontSize: 11, opacity: 0.8, mb: 0.3 }}>
                       {item.sender?.name} · {item.sender?.role_label}
+                      {item.source === "whatsapp" ? " · WhatsApp" : ""}
                     </Typography>
                     <Typography sx={{ whiteSpace: "pre-wrap", fontSize: 14 }}>{item.body}</Typography>
                     <Typography sx={{ fontSize: 10, opacity: 0.7, mt: 0.4 }}>{formatWhen(item.created_at)}</Typography>

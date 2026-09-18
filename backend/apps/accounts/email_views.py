@@ -13,8 +13,8 @@ from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.common.mailer import default_email_template, send_student_emails
 
 MAX_EMAIL_FILES = 5
-MAX_EMAIL_FILE_BYTES = 8 * 1024 * 1024
-MAX_EMAIL_TOTAL_BYTES = 15 * 1024 * 1024
+MAX_EMAIL_FILE_BYTES = 25 * 1024 * 1024
+MAX_EMAIL_TOTAL_BYTES = 25 * 1024 * 1024
 ALLOWED_EMAIL_FILE_TYPES = {
     ".pdf",
     ".doc",

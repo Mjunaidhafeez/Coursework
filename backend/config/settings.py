@@ -212,6 +212,15 @@ EMAIL_TIMEOUT = config("EMAIL_TIMEOUT", default=20, cast=int)
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER or "noreply@localhost")
 PORTAL_PUBLIC_NAME = config("PORTAL_PUBLIC_NAME", default="MBA Coursework Portal")
 PORTAL_PUBLIC_URL = config("PORTAL_PUBLIC_URL", default="https://mba.pythonanywhere.com")
+DATA_UPLOAD_MAX_MEMORY_SIZE = 26 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 26 * 1024 * 1024
+CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default="")
+CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default="")
+CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default="")
+WHATSAPP_ENABLED = config("WHATSAPP_ENABLED", default=False, cast=bool)
+WHATSAPP_TOKEN = config("WHATSAPP_TOKEN", default="")
+WHATSAPP_PHONE_NUMBER_ID = config("WHATSAPP_PHONE_NUMBER_ID", default="")
+WHATSAPP_VERIFY_TOKEN = config("WHATSAPP_VERIFY_TOKEN", default="mba-whatsapp")
 if EMAIL_HOST:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 else:

@@ -87,10 +87,16 @@ def submission_file_upload_path(instance, filename):
 
 class SubmissionFile(TimeStampedModel):
     submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name="submission_files")
+    title = models.CharField(max_length=200, blank=True)
     file = models.FileField(
         upload_to=submission_file_upload_path,
         validators=[FileExtensionValidator(allowed_extensions=["pdf", "docx", "zip", "pptx"])],
+        null=True,
+        blank=True,
     )
+    file_url = models.URLField(max_length=500, blank=True)
+    storage_key = models.CharField(max_length=255, blank=True)
+    original_name = models.CharField(max_length=255, blank=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

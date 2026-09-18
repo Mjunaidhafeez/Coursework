@@ -17,6 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { renderAsync } from "docx-preview";
 import { useEffect, useRef, useState } from "react";
@@ -25,6 +26,7 @@ import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import { useUi } from "../../context/UiContext";
 import { confirmDelete } from "../../utils/confirm";
+import { oversizedFileNames } from "../../utils/uploadLimits";
 
 const IMAGE_EXT = ["png", "jpg", "jpeg"];
 const WORD_EXT = ["docx"];
@@ -56,6 +58,8 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
   const [title, setTitle] = useState("");
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [renaming, setRenaming] = useState(null);
+  const [renameTitle, setRenameTitle] = useState("");
   const [opening, setOpening] = useState(false);
   const [preview, setPreview] = useState(null);
   const files = course?.study_files || [];
@@ -142,6 +146,10 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
       notify("Choose a study file to upload", "warning");
       return;
     }
+    if (oversizedFileNames([file]).length) {
+      notify("File is larger than 25 MB", "error");
+      return;
+    }
     const payload = new FormData();
     payload.append("file", file);
     payload.append("title", title.trim() || file.name.replace(/\.[^.]+$/, ""));
@@ -157,6 +165,23 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
       notify(err?.response?.data?.detail || "Upload failed", "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const renameFile = async () => {
+    if (!course?.id || !renaming?.id) return;
+    const nextTitle = renameTitle.trim();
+    if (!nextTitle) {
+      notify("File name is required", "warning");
+      return;
+    }
+    try {
+      await api.patch(`${ENDPOINTS.courses}${course.id}/study-files/${renaming.id}/`, { title: nextTitle });
+      notify("File name updated");
+      setRenaming(null);
+      onChanged?.();
+    } catch (err) {
+      notify(err?.response?.data?.detail || "Rename failed", "error");
     }
   };
 
@@ -192,12 +217,22 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
                 hidden
                 type="file"
                 accept=".pdf,.doc,.docx,.zip,.ppt,.pptx,.xlsx,.xls,.png,.jpg,.jpeg"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  const next = e.target.files?.[0] || null;
+                  if (next && oversizedFileNames([next]).length) {
+                    notify("File is larger than 25 MB", "error");
+                    e.target.value = "";
+                    setFile(null);
+                    return;
+                  }
+                  setFile(next);
+                }}
               />
             </Button>
             <Button size="small" variant="contained" disabled={saving} onClick={upload}>
               {saving ? "Uploading..." : "Add file"}
             </Button>
+            <Typography variant="caption" color="text.secondary">Max 25 MB</Typography>
           </Stack>
         ) : null}
         {files.length ? (
@@ -223,9 +258,21 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
                         <DownloadRoundedIcon fontSize="small" />
                       </IconButton>
                       {canManage ? (
-                        <Button size="small" color="error" onClick={() => removeFile(item)}>
-                          Delete
-                        </Button>
+                        <>
+                          <IconButton
+                            size="small"
+                            title="Rename"
+                            onClick={() => {
+                              setRenaming(item);
+                              setRenameTitle(item.title || displayFileName(item));
+                            }}
+                          >
+                            <EditOutlinedIcon fontSize="small" />
+                          </IconButton>
+                          <Button size="small" color="error" onClick={() => removeFile(item)}>
+                            Delete
+                          </Button>
+                        </>
                       ) : null}
                     </Stack>
                   </TableCell>
@@ -242,6 +289,24 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+      <Dialog open={Boolean(renaming)} onClose={() => setRenaming(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Edit file name</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Display name"
+            value={renameTitle}
+            onChange={(e) => setRenameTitle(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenaming(null)}>Cancel</Button>
+          <Button variant="contained" onClick={renameFile}>Save</Button>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={Boolean(preview)}
         onClose={() => setPreview(null)}
