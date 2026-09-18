@@ -14,6 +14,10 @@ from apps.common.uploads import normalize_phone
 from apps.common.whatsapp import get_whatsapp_config, send_whatsapp, user_for_whatsapp_phone
 
 
+def _admins():
+    return list(User.objects.filter(role=User.Role.SUPER_ADMIN, is_active=True).order_by("id"))
+
+
 def _inbound_conversation(user):
     last = (
         ChatMessage.objects.filter(conversation__memberships__user=user)
@@ -24,15 +28,37 @@ def _inbound_conversation(user):
     )
     if last:
         return last.conversation
-    admin = User.objects.filter(role=User.Role.SUPER_ADMIN, is_active=True).order_by("id").first()
+    admins = _admins()
+    admin = next((person for person in admins if person.id != user.id), admins[0] if admins else None)
     if not admin:
         return None
+    if admin.id == user.id:
+        conversation = Conversation.objects.create(kind=Conversation.Kind.DIRECT, created_by=user, title="WhatsApp")
+        add_members(conversation, [user])
+        return conversation
     existing = find_direct_conversation(user, admin)
     if existing:
         return existing
     conversation = Conversation.objects.create(kind=Conversation.Kind.DIRECT, created_by=user, title="WhatsApp")
     add_members(conversation, [user, admin])
     return conversation
+
+
+def _unmatched_inbox(phone, body):
+    admins = _admins()
+    if not admins:
+        return False
+    title = f"WhatsApp {phone}"
+    conversation = Conversation.objects.filter(kind=Conversation.Kind.BROADCAST, title=title).first()
+    if not conversation:
+        conversation = Conversation.objects.create(
+            kind=Conversation.Kind.BROADCAST,
+            created_by=admins[0],
+            title=title,
+        )
+        add_members(conversation, admins)
+    post_message(conversation, admins[0], body, source=ChatMessage.Source.WHATSAPP, skip_whatsapp=True)
+    return True
 
 
 def _serialize_settings(request):
@@ -73,9 +99,7 @@ def whatsapp_webhook(request):
         for change in entry.get("changes") or []:
             value = change.get("value") or {}
             for item in value.get("messages") or []:
-                sender = user_for_whatsapp_phone(item.get("from"))
-                if not sender:
-                    continue
+                phone = normalize_phone(item.get("from"))
                 msg_type = str(item.get("type") or "text")
                 if msg_type == "text":
                     body = ((item.get("text") or {}).get("body") or "").strip()
@@ -84,11 +108,17 @@ def whatsapp_webhook(request):
                     body = str(payload_item.get("caption") or "").strip() or f"[WhatsApp {msg_type}]"
                 if not body:
                     continue
-                conversation = _inbound_conversation(sender)
-                if not conversation:
-                    continue
+                sender = user_for_whatsapp_phone(phone)
                 try:
-                    post_message(conversation, sender, body, source=ChatMessage.Source.WHATSAPP)
+                    if sender:
+                        conversation = _inbound_conversation(sender)
+                        if not conversation:
+                            continue
+                        post_message(conversation, sender, body, source=ChatMessage.Source.WHATSAPP)
+                    elif phone and _unmatched_inbox(phone, body):
+                        pass
+                    else:
+                        continue
                     stored += 1
                 except (ValueError, PermissionError):
                     continue
