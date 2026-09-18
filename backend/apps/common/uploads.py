@@ -1,10 +1,11 @@
+import base64
 import hashlib
 import json
 import mimetypes
 import time
 from io import BytesIO
-from urllib.error import HTTPError
-from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from django.conf import settings
@@ -152,20 +153,102 @@ def delete_from_cloudinary(public_id, resource_type=""):
             continue
 
 
-def download_from_cloudinary(public_id, resource_type="", file_format="", as_attachment=False):
-    parsed_type, parsed_id = parse_storage_key(public_id)
+def _fetch_url_bytes(url):
+    request = Request(url, method="GET")
+    with urlopen(request, timeout=60) as response:
+        content_type = response.headers.get_content_type() or "application/octet-stream"
+        data = response.read()
+    if not data:
+        raise URLError("empty file")
+    return data, content_type
+
+
+def _signed_delivery_url(public_id, resource_type, file_format="", transformation=""):
+    to_sign = f"{transformation}/{public_id}" if transformation else public_id
+    digest = hashlib.sha1(f"{to_sign}{settings.CLOUDINARY_API_SECRET}".encode("utf-8")).digest()
+    signature = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")[:8]
+    ext = f".{file_format}" if file_format else ""
+    trans = f"{transformation}/" if transformation else ""
+    return (
+        f"https://res.cloudinary.com/{settings.CLOUDINARY_CLOUD_NAME}/"
+        f"{resource_type}/upload/s--{signature}--/{trans}{public_id}{ext}"
+    )
+
+
+def _admin_resource(public_id, resource_type):
+    encoded = quote(public_id, safe="")
+    auth = base64.b64encode(
+        f"{settings.CLOUDINARY_API_KEY}:{settings.CLOUDINARY_API_SECRET}".encode("ascii")
+    ).decode("ascii")
+    request = Request(
+        f"https://api.cloudinary.com/v1_1/{settings.CLOUDINARY_CLOUD_NAME}/resources/{resource_type}/upload/{encoded}",
+        headers={"Authorization": f"Basic {auth}"},
+        method="GET",
+    )
+    with urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _blocked_file_error():
+    return ValidationError(
+        "Cloudinary is blocking PDF/ZIP links on the free plan. "
+        "Open Cloudinary Dashboard → Settings → Security → enable "
+        "'Allow delivery of PDF and ZIP files' → Save. Wait one minute, then try again."
+    )
+
+
+def download_from_cloudinary(public_id, resource_type="", file_format="", as_attachment=False, file_url=""):
+    parsed_type, parsed_id = parse_storage_key(public_id, file_url)
     public_id = parsed_id
-    types = [resource_type or parsed_type, "raw", "image"]
-    last_error = None
+    types = []
+    for item in (resource_type or parsed_type, "image", "raw"):
+        if item and item not in types:
+            types.append(item)
+    urls = []
+    if file_url:
+        urls.append(file_url)
+        if "/image/upload/" in file_url:
+            urls.append(file_url.replace("/image/upload/", "/raw/upload/"))
+        if as_attachment and "/upload/" in file_url and "/fl_attachment/" not in file_url:
+            urls.append(file_url.replace("/upload/", "/upload/fl_attachment/"))
     for item in types:
-        if not item:
+        if not public_id:
+            break
+        urls.append(_signed_delivery_url(public_id, item, file_format=file_format))
+        if file_format:
+            urls.append(
+                f"https://res.cloudinary.com/{settings.CLOUDINARY_CLOUD_NAME}/{item}/upload/{public_id}.{file_format}"
+            )
+        urls.append(f"https://res.cloudinary.com/{settings.CLOUDINARY_CLOUD_NAME}/{item}/upload/{public_id}")
+    saw_blocked = False
+    last_error = None
+    for url in urls:
+        try:
+            return _fetch_url_bytes(url)
+        except HTTPError as exc:
+            last_error = exc
+            if exc.code == 401:
+                saw_blocked = True
+            continue
+        except Exception as exc:
+            last_error = exc
+            continue
+    for item in types:
+        try:
+            resource = _admin_resource(public_id, item)
+            secure = resource.get("secure_url") or resource.get("url") or ""
+            if secure:
+                return _fetch_url_bytes(secure)
+        except HTTPError as exc:
+            last_error = exc
+            if exc.code == 401:
+                saw_blocked = True
+            continue
+        except Exception as exc:
+            last_error = exc
             continue
         timestamp = str(int(time.time()))
         params = {"public_id": public_id, "timestamp": timestamp}
-        if file_format:
-            params["format"] = file_format
-        if as_attachment:
-            params["attachment"] = "true"
         signature = _cloudinary_sign(params)
         body = urlencode({**params, "api_key": settings.CLOUDINARY_API_KEY, "signature": signature}).encode()
         request = Request(
@@ -175,13 +258,19 @@ def download_from_cloudinary(public_id, resource_type="", file_format="", as_att
         )
         try:
             with urlopen(request, timeout=60) as response:
-                return response.read(), response.headers.get_content_type() or "application/octet-stream"
+                data = response.read()
+                if data:
+                    return data, response.headers.get_content_type() or "application/octet-stream"
         except HTTPError as exc:
             last_error = exc
+            if exc.code == 401:
+                saw_blocked = True
             continue
         except Exception as exc:
             last_error = exc
             continue
+    if saw_blocked:
+        raise _blocked_file_error() from last_error
     raise ValidationError("Could not open the stored file.") from last_error
 
 
@@ -255,6 +344,7 @@ def file_response_for_instance(instance, as_attachment=False, extra_headers=None
             resource_type=resource_type,
             file_format=ext,
             as_attachment=as_attachment,
+            file_url=getattr(instance, "file_url", "") or "",
         )
         response = FileResponse(
             BytesIO(data),
