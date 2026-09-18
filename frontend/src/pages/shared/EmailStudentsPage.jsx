@@ -69,17 +69,21 @@ const roleLabel = (role) => {
   return "Portal user";
 };
 
+const recipientType = (item) => (item?.role === "teacher" ? "Teacher" : "Student");
+
 const EmailStudentsPage = () => {
   const { user } = useAuth();
   const { notify, isGlobalLoading } = useUi();
+  const isTeacher = user?.role === "teacher";
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
+  const [audience, setAudience] = useState(isTeacher ? "students" : "both");
   const [courseId, setCourseId] = useState("");
   const [semesterId, setSemesterId] = useState("");
   const [courses, setCourses] = useState([]);
   const [semesters, setSemesters] = useState([]);
-  const [students, setStudents] = useState([]);
+  const [recipients, setRecipients] = useState([]);
   const [selectedIds, setSelectedIds] = useState({});
   const [sender, setSender] = useState({
     name: user?.full_name || user?.username || "",
@@ -107,12 +111,14 @@ const EmailStudentsPage = () => {
   const loadRecipients = async ({ searchValue = search } = {}) => {
     const params = new URLSearchParams();
     if (searchValue) params.append("search", searchValue);
+    if (audience) params.append("audience", audience);
     if (courseId) params.append("course", String(courseId));
     if (semesterId) params.append("semester", String(semesterId));
     setLoading(true);
     try {
       const { data } = await api.get(`${ENDPOINTS.emailRecipients}?${params.toString()}`);
-      setStudents(data.results || []);
+      setRecipients(data.results || []);
+      setSelectedIds({});
       if (data.sender) setSender(data.sender);
       if (!templateLoadedRef.current) {
         const stored = readStoredTemplate();
@@ -133,7 +139,7 @@ const EmailStudentsPage = () => {
 
   useEffect(() => {
     loadRecipients();
-  }, [courseId, semesterId]);
+  }, [courseId, semesterId, audience]);
 
   useEffect(() => {
     if (!templateLoadedRef.current) return;
@@ -151,12 +157,14 @@ const EmailStudentsPage = () => {
     setFooter(nextFooter);
   };
 
-  const selectedStudents = useMemo(
-    () => students.filter((item) => selectedIds[item.id]),
-    [students, selectedIds]
+  const selectedRecipients = useMemo(
+    () => recipients.filter((item) => selectedIds[item.id]),
+    [recipients, selectedIds]
   );
-  const allChecked = students.length > 0 && students.every((item) => selectedIds[item.id]);
-  const someChecked = selectedStudents.length > 0 && !allChecked;
+  const allChecked = recipients.length > 0 && recipients.every((item) => selectedIds[item.id]);
+  const someChecked = selectedRecipients.length > 0 && !allChecked;
+  const studentCount = recipients.filter((item) => item.role !== "teacher").length;
+  const teacherCount = recipients.filter((item) => item.role === "teacher").length;
   const senderEmail = sender.email || user?.email || "";
   const canSend = Boolean(senderEmail && subject.trim() && message.trim() && !sending);
 
@@ -164,7 +172,7 @@ const EmailStudentsPage = () => {
     const nextOn = !allChecked;
     const next = {};
     if (nextOn) {
-      students.forEach((item) => {
+      recipients.forEach((item) => {
         next[item.id] = true;
       });
     }
@@ -213,6 +221,7 @@ const EmailStudentsPage = () => {
     payload.append("subject", subject.trim());
     payload.append("message", message.trim());
     payload.append("mode", mode);
+    payload.append("audience", audience);
     payload.append("header_top", headerTop.trim());
     payload.append("header_title", headerTitle.trim());
     payload.append("footer", footer.trim());
@@ -220,17 +229,17 @@ const EmailStudentsPage = () => {
     if (semesterId) payload.append("semester", semesterId);
     if (search) payload.append("search", search);
     if (mode === "selected") {
-      const studentIds = selectedStudents.map((item) => item.id);
-      if (!studentIds.length) {
-        notify("Select at least one student, or use Send to all.", "warning");
+      const recipientIds = selectedRecipients.map((item) => item.id);
+      if (!recipientIds.length) {
+        notify("Select at least one recipient, or use Send to all.", "warning");
         return;
       }
-      studentIds.forEach((id) => payload.append("student_ids", String(id)));
+      recipientIds.forEach((id) => payload.append("recipient_ids", String(id)));
     }
     files.forEach((file) => payload.append("files", file));
-    const count = mode === "all" ? students.length : selectedStudents.length;
+    const count = mode === "all" ? recipients.length : selectedRecipients.length;
     const fileNote = files.length ? ` with ${files.length} file(s)` : "";
-    if (!window.confirm(`Send this email from ${senderEmail} to ${count} student(s)${fileNote}?`)) {
+    if (!window.confirm(`Send this email from ${senderEmail} to ${count} recipient(s)${fileNote}?`)) {
       return;
     }
     setSending(true);
@@ -240,7 +249,7 @@ const EmailStudentsPage = () => {
       });
       notify(data.detail || `Sent ${data.sent_count} email(s)`);
       if (data.skipped_count) {
-        notify(`${data.skipped_count} student(s) skipped because they have no email.`, "warning");
+        notify(`${data.skipped_count} recipient(s) skipped because they have no email.`, "warning");
       }
       if (data.failed_count) {
         notify(data.detail || `${data.failed_count} email(s) failed. Check SMTP settings.`, "error");
@@ -255,12 +264,14 @@ const EmailStudentsPage = () => {
     }
   };
 
-  const previewName = selectedStudents[0]?.name || students[0]?.name || "Student Name";
+  const previewName = selectedRecipients[0]?.name || recipients[0]?.name || "Recipient Name";
 
   return (
     <ListingPage
-      title="Email Students"
-      subtitle="Compose once. The email is sent from your portal email address to selected or all students in this list."
+      title="Email"
+      subtitle={isTeacher
+        ? "Send to students or teachers of your courses. Filter by course and semester, then send to selected or all."
+        : "Send to students and teachers. Filter by subject/course and semester, then send to selected or all."}
       filters={(
         <SearchToolbar
           label="Search name, roll or email"
@@ -269,6 +280,7 @@ const EmailStudentsPage = () => {
           onSearch={() => loadRecipients({ searchValue: search })}
           onReset={() => {
             setSearch("");
+            setAudience(isTeacher ? "students" : "both");
             setCourseId("");
             setSemesterId("");
             loadRecipients({ searchValue: "" });
@@ -276,8 +288,16 @@ const EmailStudentsPage = () => {
           filters={(
             <>
               <FormControl size="small" sx={{ minWidth: 180 }}>
-                <InputLabel>Course</InputLabel>
-                <Select label="Course" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+                <InputLabel>Send to</InputLabel>
+                <Select label="Send to" value={audience} onChange={(e) => setAudience(e.target.value)}>
+                  <MenuItem value="students">Students</MenuItem>
+                  <MenuItem value="teachers">Teachers</MenuItem>
+                  <MenuItem value="both">Students & teachers</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>Course / subject</InputLabel>
+                <Select label="Course / subject" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
                   <MenuItem value="">All courses</MenuItem>
                   {courses.map((course) => (
                     <MenuItem key={course.id} value={String(course.id)}>
@@ -286,7 +306,7 @@ const EmailStudentsPage = () => {
                   ))}
                 </Select>
               </FormControl>
-              <FormControl size="small" sx={{ minWidth: 140 }}>
+              <FormControl size="small" sx={{ minWidth: 140 }} disabled={audience === "teachers"}>
                 <InputLabel>Semester</InputLabel>
                 <Select label="Semester" value={semesterId} onChange={(e) => setSemesterId(e.target.value)}>
                   <MenuItem value="">All semesters</MenuItem>
@@ -304,11 +324,12 @@ const EmailStudentsPage = () => {
     >
       <Stack spacing={1.2}>
         {!senderEmail ? (
-          <Alert severity="error">Your account has no email. Add it first — students will receive mail from that address.</Alert>
+          <Alert severity="error">Your account has no email. Add it first — recipients will receive mail from that address.</Alert>
         ) : (
           <Alert severity="info">
             Sending as <strong>{sender.name || user?.full_name}</strong> ({roleLabel(sender.role || user?.role)}) from <strong>{senderEmail}</strong>.
-            First delivery can land in Spam — ask students to open it, tap <strong>Not spam</strong>, and save the sender.
+            First delivery can land in Spam — ask recipients to open it, tap <strong>Not spam</strong>, and save the sender.
+            {isTeacher ? " You can only email people from your own courses." : " Course filter applies to that subject's students and teachers. Semester applies to students."}
           </Alert>
         )}
 
@@ -394,17 +415,17 @@ const EmailStudentsPage = () => {
             <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" sx={{ mt: 1.1 }}>
               <Button
                 variant="contained"
-                disabled={!canSend || !selectedStudents.length}
+                disabled={!canSend || !selectedRecipients.length}
                 onClick={() => sendEmail("selected")}
               >
-                {sending ? "Sending..." : `Send to selected (${selectedStudents.length})`}
+                {sending ? "Sending..." : `Send to selected (${selectedRecipients.length})`}
               </Button>
               <Button
                 variant="outlined"
-                disabled={!canSend || !students.length}
+                disabled={!canSend || !recipients.length}
                 onClick={() => sendEmail("all")}
               >
-                {`Send to all (${students.length})`}
+                {`Send to all (${recipients.length})`}
               </Button>
             </Stack>
           </Box>
@@ -450,9 +471,10 @@ const EmailStudentsPage = () => {
         </Stack>
 
         <Stack direction="row" spacing={0.8} sx={{ pt: 0.4 }}>
-          <Chip size="small" variant="outlined" label={`${students.length} students`} />
-          <Chip size="small" color="success" variant="outlined" label={`${students.filter((item) => item.has_email).length} with email`} />
-          <Chip size="small" color="warning" variant="outlined" label={`${students.filter((item) => !item.has_email).length} missing email`} />
+          <Chip size="small" variant="outlined" label={`${studentCount} students`} />
+          <Chip size="small" variant="outlined" label={`${teacherCount} teachers`} />
+          <Chip size="small" color="success" variant="outlined" label={`${recipients.filter((item) => item.has_email).length} with email`} />
+          <Chip size="small" color="warning" variant="outlined" label={`${recipients.filter((item) => !item.has_email).length} missing email`} />
         </Stack>
 
         <TableContainer>
@@ -463,13 +485,14 @@ const EmailStudentsPage = () => {
                   <Checkbox size="small" checked={allChecked} indeterminate={someChecked} onChange={toggleAll} />
                 </TableCell>
                 <TableCell>Name</TableCell>
-                <TableCell>Roll no</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell>Roll / subjects</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>Semester</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {students.map((item) => (
+              {recipients.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell padding="checkbox">
                     <Checkbox
@@ -479,17 +502,24 @@ const EmailStudentsPage = () => {
                     />
                   </TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{item.name}</TableCell>
-                  <TableCell>{item.roll_no || "-"}</TableCell>
+                  <TableCell>
+                    <Chip size="small" color={item.role === "teacher" ? "info" : "default"} label={recipientType(item)} />
+                  </TableCell>
+                  <TableCell>
+                    {item.role === "teacher"
+                      ? (item.courses?.length ? item.courses.join(", ") : "-")
+                      : (item.roll_no || "-")}
+                  </TableCell>
                   <TableCell>
                     {item.has_email ? item.email : <Typography variant="caption" color="error">No email</Typography>}
                   </TableCell>
-                  <TableCell>{item.semester ? `Semester ${item.semester}` : "-"}</TableCell>
+                  <TableCell>{item.role === "teacher" ? "-" : (item.semester ? `Semester ${item.semester}` : "-")}</TableCell>
                 </TableRow>
               ))}
-              {!students.length && !loading && (
+              {!recipients.length && !loading && (
                 <TableRow>
-                  <TableCell colSpan={5}>
-                    <Typography variant="body2" color="text.secondary">No students match these filters.</Typography>
+                  <TableCell colSpan={6}>
+                    <Typography variant="body2" color="text.secondary">No recipients match these filters.</Typography>
                   </TableCell>
                 </TableRow>
               )}

@@ -32,43 +32,103 @@ ALLOWED_EMAIL_FILE_TYPES = {
 }
 
 
+def _allowed_course_ids(user):
+    if user.role == User.Role.TEACHER:
+        return list(user.teaching_courses.values_list("id", flat=True))
+    return None
+
+
+def _course_in_scope(user, course):
+    if not course:
+        return True
+    allowed = _allowed_course_ids(user)
+    if allowed is None:
+        return True
+    try:
+        return int(course) in allowed
+    except (TypeError, ValueError):
+        return False
+
+
+def _search_q(query):
+    query = str(query or "").strip()
+    if not query:
+        return Q()
+    return (
+        Q(first_name__icontains=query)
+        | Q(last_name__icontains=query)
+        | Q(username__icontains=query)
+        | Q(email__icontains=query)
+        | Q(student_profile__student_id__icontains=query)
+    )
+
+
 def _emailable_students(user, course=None, semester=None, search=""):
     queryset = User.objects.filter(role=User.Role.STUDENT, is_active=True).select_related(
         "student_profile", "student_profile__semester"
     )
-    if user.role == User.Role.TEACHER:
-        course_ids = list(user.teaching_courses.values_list("id", flat=True))
-        student_ids = Enrollment.objects.filter(course_id__in=course_ids).values_list("student_id", flat=True)
+    allowed = _allowed_course_ids(user)
+    if allowed is not None:
+        student_ids = Enrollment.objects.filter(course_id__in=allowed).values_list("student_id", flat=True)
         queryset = queryset.filter(id__in=student_ids)
-        if course:
-            try:
-                if int(course) not in course_ids:
-                    return queryset.none()
-            except (TypeError, ValueError):
-                return queryset.none()
+    if not _course_in_scope(user, course):
+        return queryset.none()
     if course:
         queryset = queryset.filter(enrollments__course_id=course)
     if semester:
         queryset = queryset.filter(student_profile__semester_id=semester)
-    query = str(search or "").strip()
-    if query:
-        queryset = queryset.filter(
-            Q(first_name__icontains=query)
-            | Q(last_name__icontains=query)
-            | Q(username__icontains=query)
-            | Q(email__icontains=query)
-            | Q(student_profile__student_id__icontains=query)
-        )
+    queryset = queryset.filter(_search_q(search))
     return queryset.distinct().order_by("student_profile__student_id", "first_name", "last_name")
 
 
-def _parse_student_ids(data):
+def _emailable_teachers(user, course=None, search=""):
+    queryset = User.objects.filter(role=User.Role.TEACHER, is_active=True).prefetch_related("teaching_courses")
+    allowed = _allowed_course_ids(user)
+    if allowed is not None:
+        queryset = queryset.filter(teaching_courses__id__in=allowed)
+    queryset = queryset.exclude(id=user.id)
+    if not _course_in_scope(user, course):
+        return queryset.none()
+    if course:
+        queryset = queryset.filter(teaching_courses__id=course)
+    queryset = queryset.filter(_search_q(search))
+    return queryset.distinct().order_by("first_name", "last_name", "username")
+
+
+def _parse_audience(value, user=None):
+    audience = str(value or "students").strip().lower()
+    if audience not in {"students", "teachers", "both"}:
+        return "students"
+    return audience
+
+
+def _emailable_recipients(user, audience="students", course=None, semester=None, search=""):
+    audience = _parse_audience(audience, user)
+    people = []
+    if audience in {"students", "both"}:
+        people.extend(list(_emailable_students(user, course=course, semester=semester, search=search)))
+    if audience in {"teachers", "both"}:
+        people.extend(list(_emailable_teachers(user, course=course, search=search)))
+    seen = set()
+    unique = []
+    for person in people:
+        if person.id in seen:
+            continue
+        seen.add(person.id)
+        unique.append(person)
+    return unique
+
+
+def _parse_recipient_ids(data):
     raw = []
-    if hasattr(data, "getlist"):
-        raw = [item for item in data.getlist("student_ids") if item not in (None, "")]
-    elif data.get("student_ids") not in (None, ""):
-        raw = data.get("student_ids")
-        raw = raw if isinstance(raw, (list, tuple)) else [raw]
+    for key in ("recipient_ids", "student_ids"):
+        if hasattr(data, "getlist"):
+            raw = [item for item in data.getlist(key) if item not in (None, "")]
+        elif data.get(key) not in (None, ""):
+            raw = data.get(key)
+            raw = raw if isinstance(raw, (list, tuple)) else [raw]
+        if raw:
+            break
     if len(raw) == 1 and isinstance(raw[0], str):
         value = raw[0].strip()
         if value.startswith("["):
@@ -81,7 +141,7 @@ def _parse_student_ids(data):
     try:
         return [int(item) for item in raw]
     except (TypeError, ValueError):
-        raise ValueError("student_ids must be a list of IDs.")
+        raise ValueError("recipient_ids must be a list of IDs.")
 
 
 def _collect_email_attachments(files):
@@ -132,32 +192,45 @@ def _email_template_from_request(data, sender):
     }
 
 
-def _serialize_student(student):
-    profile = getattr(student, "student_profile", None)
+def _serialize_recipient(person):
+    profile = getattr(person, "student_profile", None)
+    courses = []
+    if getattr(person, "role", "") == User.Role.TEACHER:
+        courses = [
+            f"{course.code} — {course.title}".strip(" —")
+            for course in person.teaching_courses.all()
+        ]
     return {
-        "id": student.id,
-        "name": student.get_full_name().strip() or student.username,
-        "email": student.email or "",
+        "id": person.id,
+        "name": person.get_full_name().strip() or person.username,
+        "email": person.email or "",
+        "role": person.role,
         "roll_no": getattr(profile, "student_id", "") or "",
         "semester": getattr(getattr(profile, "semester", None), "number", None),
-        "has_email": bool((student.email or "").strip()),
+        "courses": courses,
+        "has_email": bool((person.email or "").strip()),
     }
 
 
 @api_view(["GET"])
 @permission_classes([IsTeacherOrAdmin])
 def email_recipients(request):
-    students = _emailable_students(
+    audience = _parse_audience(request.query_params.get("audience"), request.user)
+    people = _emailable_recipients(
         request.user,
+        audience=audience,
         course=request.query_params.get("course") or None,
         semester=request.query_params.get("semester") or None,
         search=request.query_params.get("search") or "",
     )
-    rows = [_serialize_student(student) for student in students]
+    rows = [_serialize_recipient(person) for person in people]
     return Response(
         {
             "count": len(rows),
             "with_email": sum(1 for row in rows if row["has_email"]),
+            "student_count": sum(1 for row in rows if row["role"] == User.Role.STUDENT),
+            "teacher_count": sum(1 for row in rows if row["role"] == User.Role.TEACHER),
+            "audience": audience,
             "results": rows,
             "sender": {
                 "name": request.user.get_full_name().strip() or request.user.username,
@@ -187,29 +260,30 @@ def send_student_email(request):
         return Response({"detail": "Message is required."}, status=status.HTTP_400_BAD_REQUEST)
 
     mode = str(request.data.get("mode") or "selected").strip().lower()
-    students = _emailable_students(
+    audience = _parse_audience(request.data.get("audience"), sender)
+    recipients = _emailable_recipients(
         sender,
+        audience=audience,
         course=request.data.get("course") or None,
         semester=request.data.get("semester") or None,
         search=request.data.get("search") or "",
     )
     if mode != "all":
         try:
-            student_ids = _parse_student_ids(request.data)
+            recipient_ids = set(_parse_recipient_ids(request.data))
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        if not student_ids:
-            return Response({"detail": "Select at least one student."}, status=status.HTTP_400_BAD_REQUEST)
-        students = students.filter(id__in=student_ids)
+        if not recipient_ids:
+            return Response({"detail": "Select at least one recipient."}, status=status.HTTP_400_BAD_REQUEST)
+        recipients = [person for person in recipients if person.id in recipient_ids]
 
     try:
         attachments = _collect_email_attachments(request.FILES)
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-    students = list(students)
-    if not students:
-        return Response({"detail": "No students match this selection."}, status=status.HTTP_400_BAD_REQUEST)
+    if not recipients:
+        return Response({"detail": "No recipients match this selection."}, status=status.HTTP_400_BAD_REQUEST)
 
     if not settings.EMAIL_HOST and "console" not in str(settings.EMAIL_BACKEND):
         return Response(
@@ -218,7 +292,7 @@ def send_student_email(request):
         )
 
     template = _email_template_from_request(request.data, sender)
-    result = send_student_emails(sender, students, subject, message, attachments=attachments, template=template)
+    result = send_student_emails(sender, recipients, subject, message, attachments=attachments, template=template)
     failed_count = len(result["failed"])
     first_error = (result["failed"][0].get("detail") if result["failed"] else "") or ""
     attached_names = [item[0] for item in attachments]

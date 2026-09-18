@@ -23,7 +23,7 @@ export const NAV_ITEMS = {
     { label: "Assessment Approvals", path: "/admin/coursework-approvals" },
     { label: "Group Approvals", path: "/admin/groups" },
     { label: "Course Result", path: "/admin/reports" },
-    { label: "Email Students", path: "/admin/email-students" },
+    { label: "Email", path: "/admin/email-students" },
   ],
   [ROLES.TEACHER]: [
     { label: "Dashboard", path: "/teacher/dashboard" },
@@ -32,7 +32,7 @@ export const NAV_ITEMS = {
     { label: "Student Groups", path: "/teacher/groups" },
     { label: "Submissions", path: "/teacher/submissions" },
     { label: "Course Result", path: "/teacher/grading" },
-    { label: "Email Students", path: "/teacher/email-students" },
+    { label: "Email", path: "/teacher/email-students" },
   ],
   [ROLES.STUDENT]: [
     { label: "Dashboard", path: "/student/dashboard" },
