@@ -1,3 +1,5 @@
+import json
+
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
@@ -11,7 +13,13 @@ from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.common.messaging import add_members, find_direct_conversation, post_message
 from apps.common.models import ChatMessage, Conversation, WhatsAppSettings
 from apps.common.uploads import normalize_phone
-from apps.common.whatsapp import get_whatsapp_config, send_whatsapp, user_for_whatsapp_phone
+from apps.common.whatsapp import (
+    get_whatsapp_config,
+    mark_webhook,
+    send_whatsapp,
+    subscribe_whatsapp_app,
+    user_for_whatsapp_phone,
+)
 
 
 def _admins():
@@ -61,13 +69,14 @@ def _unmatched_inbox(phone, body):
     return True
 
 
-def _serialize_settings(request):
+def _serialize_settings(request, subscribe_detail=""):
     config = get_whatsapp_config()
     token = config["token"]
     base = request.build_absolute_uri("/").rstrip("/")
     from django.conf import settings as django_settings
 
     public = str(getattr(django_settings, "PORTAL_PUBLIC_URL", "") or base).rstrip("/")
+    row = WhatsAppSettings.load()
     return {
         "enabled": config["enabled"],
         "configured": bool(token and config["phone_number_id"]),
@@ -76,6 +85,9 @@ def _serialize_settings(request):
         "phone_number_id": config["phone_number_id"],
         "verify_token": config["verify_token"],
         "webhook_url": f"{public}/api/common/whatsapp/webhook/",
+        "last_webhook_at": row.last_webhook_at,
+        "last_webhook_note": row.last_webhook_note or "",
+        "subscribe_detail": subscribe_detail,
     }
 
 
@@ -94,11 +106,18 @@ def whatsapp_webhook(request):
         return Response({"detail": "Invalid verify token."}, status=status.HTTP_403_FORBIDDEN)
 
     payload = request.data if isinstance(request.data, dict) else {}
+    if not payload.get("entry"):
+        try:
+            payload = json.loads((request.body or b"").decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
     stored = 0
+    incoming = 0
     for entry in payload.get("entry") or []:
         for change in entry.get("changes") or []:
             value = change.get("value") or {}
             for item in value.get("messages") or []:
+                incoming += 1
                 phone = normalize_phone(item.get("from"))
                 msg_type = str(item.get("type") or "text")
                 if msg_type == "text":
@@ -122,6 +141,12 @@ def whatsapp_webhook(request):
                     stored += 1
                 except (ValueError, PermissionError):
                     continue
+    if incoming:
+        mark_webhook(f"Received {incoming} WhatsApp reply(ies), saved {stored}.")
+    elif payload.get("entry"):
+        mark_webhook("Meta reached the portal, but no reply text was in this event.")
+    else:
+        mark_webhook("Meta reached the portal with an empty webhook.")
     return Response({"status": "ok", "stored": stored})
 
 
@@ -142,6 +167,8 @@ def whatsapp_settings(request):
         if token:
             row.token = token
         row.save()
+        _ok, subscribe_detail = subscribe_whatsapp_app()
+        return Response(_serialize_settings(request, subscribe_detail))
     return Response(_serialize_settings(request))
 
 

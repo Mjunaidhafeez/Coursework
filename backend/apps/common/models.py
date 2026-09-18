@@ -93,6 +93,8 @@ class WhatsAppSettings(TimeStampedModel):
     token = models.TextField(blank=True)
     phone_number_id = models.CharField(max_length=80, blank=True)
     verify_token = models.CharField(max_length=80, default="mba-whatsapp", blank=True)
+    last_webhook_at = models.DateTimeField(null=True, blank=True)
+    last_webhook_note = models.CharField(max_length=200, blank=True)
 
     class Meta:
         verbose_name = "WhatsApp settings"

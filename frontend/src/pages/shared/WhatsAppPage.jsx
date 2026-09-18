@@ -219,8 +219,14 @@ const WhatsAppPage = () => {
           {settings?.webhook_url ? (
             <Alert severity={settings.enabled ? "success" : "info"} sx={{ mb: 1.2 }}>
               {settings.token_set ? `Token saved ${settings.token_hint}` : "Token not saved yet"}
+              {settings.subscribe_detail ? ` · ${settings.subscribe_detail}` : ""}
             </Alert>
           ) : null}
+          <Alert severity={settings?.last_webhook_at ? "success" : "warning"} sx={{ mb: 1.2 }}>
+            {settings?.last_webhook_at
+              ? `Last WhatsApp webhook: ${settings.last_webhook_note || "received"} (${new Date(settings.last_webhook_at).toLocaleString()})`
+              : "No WhatsApp reply has reached the portal yet. In Meta → Configure Webhooks, subscribe the messages field, then reply again."}
+          </Alert>
           <Stack spacing={1.1}>
             <FormControlLabel
               control={<Switch checked={form.enabled} onChange={(e) => setForm((prev) => ({ ...prev, enabled: e.target.checked }))} />}

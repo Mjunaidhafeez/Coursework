@@ -39,6 +39,65 @@ def whatsapp_enabled():
     return get_whatsapp_config()["enabled"]
 
 
+def _graph(path, method="GET", payload=None):
+    config = get_whatsapp_config()
+    if not config["token"]:
+        return None, "WhatsApp token is missing."
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+    request = Request(
+        f"https://graph.facebook.com/v21.0/{path.lstrip('/')}",
+        data=data,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {config['token']}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            raw = response.read().decode("utf-8") or "{}"
+            return json.loads(raw), ""
+    except HTTPError as exc:
+        detail = ""
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("error", {}).get("message") or ""
+        except Exception:
+            detail = str(exc.reason or exc)
+        return None, detail or "WhatsApp API request failed."
+    except (URLError, TimeoutError, OSError, ValueError) as exc:
+        return None, str(exc) or "Could not reach WhatsApp."
+
+
+def subscribe_whatsapp_app():
+    config = get_whatsapp_config()
+    if not config["token"] or not config["phone_number_id"]:
+        return False, "Save Phone number ID and token first."
+    data, error = _graph(f"{config['phone_number_id']}?fields=whatsapp_business_account")
+    waba = ((data or {}).get("whatsapp_business_account") or {}).get("id")
+    if not waba:
+        return False, error or "Could not read the WhatsApp Business account."
+    data, error = _graph(f"{waba}/subscribed_apps", method="POST")
+    if data is None:
+        return False, error
+    return True, "WhatsApp replies are subscribed."
+
+
+def mark_webhook(note):
+    try:
+        from django.utils import timezone
+
+        from apps.common.models import WhatsAppSettings
+
+        row = WhatsAppSettings.load()
+        row.last_webhook_at = timezone.now()
+        row.last_webhook_note = str(note or "")[:200]
+        row.save(update_fields=["last_webhook_at", "last_webhook_note", "updated_at"])
+    except Exception:
+        pass
+
+
 def send_whatsapp(phone, body):
     to = normalize_phone(phone)
     text = str(body or "").strip()
