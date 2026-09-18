@@ -86,3 +86,21 @@ class ChatMessage(TimeStampedModel):
 
     def __str__(self):
         return f"Message {self.pk} in {self.conversation_id}"
+
+
+class WhatsAppSettings(TimeStampedModel):
+    enabled = models.BooleanField(default=False)
+    token = models.TextField(blank=True)
+    phone_number_id = models.CharField(max_length=80, blank=True)
+    verify_token = models.CharField(max_length=80, default="mba-whatsapp", blank=True)
+
+    class Meta:
+        verbose_name = "WhatsApp settings"
+
+    def __str__(self):
+        return "WhatsApp settings"
+
+    @classmethod
+    def load(cls):
+        row, _ = cls.objects.get_or_create(pk=1)
+        return row

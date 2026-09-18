@@ -24,6 +24,7 @@ export const NAV_ITEMS = {
     { label: "Group Approvals", path: "/admin/groups" },
     { label: "Course Result", path: "/admin/reports" },
     { label: "Email", path: "/admin/email-students" },
+    { label: "WhatsApp", path: "/admin/whatsapp" },
     { label: "Messages", path: "/admin/messages" },
   ],
   [ROLES.TEACHER]: [
@@ -34,6 +35,7 @@ export const NAV_ITEMS = {
     { label: "Submissions", path: "/teacher/submissions" },
     { label: "Course Result", path: "/teacher/grading" },
     { label: "Email", path: "/teacher/email-students" },
+    { label: "WhatsApp", path: "/teacher/whatsapp" },
     { label: "Messages", path: "/teacher/messages" },
   ],
   [ROLES.STUDENT]: [

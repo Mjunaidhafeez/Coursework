@@ -8,19 +8,42 @@ from apps.accounts.models import User
 from apps.common.uploads import normalize_phone
 
 
+def get_whatsapp_config():
+    token = str(getattr(settings, "WHATSAPP_TOKEN", "") or "")
+    phone_id = str(getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", "") or "")
+    verify = str(getattr(settings, "WHATSAPP_VERIFY_TOKEN", "") or "mba-whatsapp")
+    enabled = bool(getattr(settings, "WHATSAPP_ENABLED", False) and token and phone_id)
+    try:
+        from apps.common.models import WhatsAppSettings
+
+        row = WhatsAppSettings.load()
+        if row.token:
+            token = row.token
+        if row.phone_number_id:
+            phone_id = row.phone_number_id
+        if row.verify_token:
+            verify = row.verify_token
+        enabled = bool(row.enabled and token and phone_id)
+    except Exception:
+        pass
+    return {
+        "enabled": enabled,
+        "token": token,
+        "phone_number_id": phone_id,
+        "verify_token": verify or "mba-whatsapp",
+    }
+
+
 def whatsapp_enabled():
-    return bool(
-        getattr(settings, "WHATSAPP_ENABLED", False)
-        and getattr(settings, "WHATSAPP_TOKEN", "")
-        and getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", "")
-    )
+    return get_whatsapp_config()["enabled"]
 
 
 def send_whatsapp(phone, body):
     to = normalize_phone(phone)
     text = str(body or "").strip()
-    if not whatsapp_enabled() or not to or not text:
-        return False
+    config = get_whatsapp_config()
+    if not config["enabled"] or not to or not text:
+        return False, "WhatsApp is not connected or the phone number is missing."
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
@@ -28,19 +51,28 @@ def send_whatsapp(phone, body):
         "text": {"body": text[:4000], "preview_url": False},
     }
     request = Request(
-        f"https://graph.facebook.com/v21.0/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages",
+        f"https://graph.facebook.com/v21.0/{config['phone_number_id']}/messages",
         data=json.dumps(payload).encode("utf-8"),
         method="POST",
         headers={
-            "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}",
+            "Authorization": f"Bearer {config['token']}",
             "Content-Type": "application/json",
         },
     )
     try:
         with urlopen(request, timeout=20) as response:
-            return 200 <= response.status < 300
-    except (HTTPError, URLError, TimeoutError, OSError):
-        return False
+            if 200 <= response.status < 300:
+                return True, ""
+            return False, "WhatsApp did not accept the message."
+    except HTTPError as exc:
+        detail = ""
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("error", {}).get("message") or ""
+        except Exception:
+            detail = str(exc.reason or exc)
+        return False, detail or "WhatsApp API rejected the message."
+    except (URLError, TimeoutError, OSError) as exc:
+        return False, str(exc) or "Could not reach WhatsApp."
 
 
 def notify_users_whatsapp(users, body):

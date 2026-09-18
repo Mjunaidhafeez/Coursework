@@ -59,6 +59,7 @@ def _search_q(query):
         | Q(last_name__icontains=query)
         | Q(username__icontains=query)
         | Q(email__icontains=query)
+        | Q(phone__icontains=query)
         | Q(student_profile__student_id__icontains=query)
     )
 
@@ -204,11 +205,13 @@ def _serialize_recipient(person):
         "id": person.id,
         "name": person.get_full_name().strip() or person.username,
         "email": person.email or "",
+        "phone": person.phone or "",
         "role": person.role,
         "roll_no": getattr(profile, "student_id", "") or "",
         "semester": getattr(getattr(profile, "semester", None), "number", None),
         "courses": courses,
         "has_email": bool((person.email or "").strip()),
+        "has_phone": bool((person.phone or "").strip()),
     }
 
 

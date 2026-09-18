@@ -15,6 +15,8 @@ export const ENDPOINTS = {
   conversations: "/common/conversations/",
   conversationRecipients: "/common/conversations/recipients/",
   conversationUnread: "/common/conversations/unread-count/",
+  whatsappSettings: "/common/whatsapp/settings/",
+  sendWhatsapp: "/common/whatsapp/send/",
   courseworks: "/coursework/courseworks/",
   submissions: "/coursework/submissions/",
   feedback: "/coursework/feedback/",

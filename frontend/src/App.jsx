@@ -16,6 +16,7 @@ const SuperAdminsPage = lazy(() => import("./pages/admin/SuperAdminsPage"));
 const TeachersPage = lazy(() => import("./pages/admin/TeachersPage"));
 const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const EmailStudentsPage = lazy(() => import("./pages/shared/EmailStudentsPage"));
+const WhatsAppPage = lazy(() => import("./pages/shared/WhatsAppPage"));
 const MessagesPage = lazy(() => import("./pages/shared/MessagesPage"));
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
@@ -73,6 +74,7 @@ function App() {
             <Route path="/admin/group" element={<GroupsPage />} />
             <Route path="/admin/reports" element={<ReportsPage />} />
             <Route path="/admin/email-students" element={<EmailStudentsPage />} />
+            <Route path="/admin/whatsapp" element={<WhatsAppPage />} />
             <Route path="/admin/messages" element={<MessagesPage />} />
           </Route>
         </Route>
@@ -86,6 +88,7 @@ function App() {
             <Route path="/teacher/submissions" element={<SubmissionsPage />} />
             <Route path="/teacher/grading" element={<GradingPage />} />
             <Route path="/teacher/email-students" element={<EmailStudentsPage />} />
+            <Route path="/teacher/whatsapp" element={<WhatsAppPage />} />
             <Route path="/teacher/messages" element={<MessagesPage />} />
           </Route>
         </Route>
