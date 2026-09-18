@@ -1,3 +1,4 @@
+import ChatBubbleOutlineRoundedIcon from "@mui/icons-material/ChatBubbleOutlineRounded";
 import NotificationsNoneRoundedIcon from "@mui/icons-material/NotificationsNoneRounded";
 import { Suspense, useEffect, useRef, useState } from "react";
 import {
@@ -19,7 +20,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 
 import api from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
@@ -33,6 +34,8 @@ import { ROLES } from "../utils/roleConfig";
 const DashboardLayout = () => {
   const { user, logout, refreshMe } = useAuth();
   const { notify } = useUi();
+  const navigate = useNavigate();
+  const [messageUnread, setMessageUnread] = useState(0);
   const [anchorEl, setAnchorEl] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -71,9 +74,10 @@ const DashboardLayout = () => {
     let isActive = true;
     const fetchUnreadNotifications = async () => {
       try {
-        const [recentRes, unreadRes] = await Promise.all([
+        const [recentRes, unreadRes, messageRes] = await Promise.all([
           api.get(`${ENDPOINTS.notifications}?page_size=8`, { skipGlobalLoader: true }),
           api.get(`${ENDPOINTS.notifications}?is_read=false&page_size=1`, { skipGlobalLoader: true }),
+          api.get(ENDPOINTS.conversationUnread, { skipGlobalLoader: true }),
         ]);
         if (!isActive) return;
 
@@ -81,6 +85,7 @@ const DashboardLayout = () => {
         const unread = recent.filter((item) => !item.is_read);
         setNotifications(recent);
         setUnreadCount(unreadRes.data.count || unread.length);
+        setMessageUnread(messageRes.data.unread_count || 0);
 
         unread
           .slice()
@@ -223,6 +228,22 @@ const DashboardLayout = () => {
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                 <Chip label={(user?.role || "").replace("_", " ")} size="small" sx={{ bgcolor: "white", color: "#1d4fbf" }} />
+                <IconButton
+                  onClick={() => {
+                    const path = {
+                      super_admin: "/admin/messages",
+                      teacher: "/teacher/messages",
+                      student: "/student/messages",
+                    }[user?.role];
+                    if (path) navigate(path);
+                  }}
+                  sx={{ color: "white" }}
+                  title="Messages"
+                >
+                  <Badge badgeContent={messageUnread} color="error">
+                    <ChatBubbleOutlineRoundedIcon />
+                  </Badge>
+                </IconButton>
                 <IconButton onClick={openNotifications} sx={{ color: "white" }}>
                   <Badge badgeContent={unreadCount} color="error">
                     <NotificationsNoneRoundedIcon />

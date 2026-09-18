@@ -35,3 +35,49 @@ class Notification(TimeStampedModel):
 
     def __str__(self):
         return f"Notification<{self.user_id}>: {self.title}"
+
+
+class Conversation(TimeStampedModel):
+    class Kind(models.TextChoices):
+        DIRECT = "direct", "Direct"
+        BROADCAST = "broadcast", "Broadcast"
+
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.DIRECT)
+    title = models.CharField(max_length=200, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="started_conversations",
+    )
+    last_message_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-last_message_at", "-created_at"]
+
+    def __str__(self):
+        return self.title or f"Conversation {self.pk}"
+
+
+class ConversationMember(TimeStampedModel):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="conversation_memberships")
+    last_read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = [("conversation", "user")]
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.user_id} in {self.conversation_id}"
+
+
+class ChatMessage(TimeStampedModel):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_messages")
+    body = models.TextField()
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"Message {self.pk} in {self.conversation_id}"

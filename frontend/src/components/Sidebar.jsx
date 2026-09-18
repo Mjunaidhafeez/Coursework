@@ -18,6 +18,7 @@ const getIcon = (label) => {
   if (value.includes("user") || value.includes("teacher") || value.includes("student")) return <SchoolIcon fontSize="small" />;
   if (value.includes("course")) return <BookIcon fontSize="small" />;
   if (value.includes("group")) return <GroupsIcon fontSize="small" />;
+  if (value.includes("message")) return <GroupsIcon fontSize="small" />;
   if (value.includes("submit")) return <UploadFileIcon fontSize="small" />;
   if (value.includes("grad")) return <GradingIcon fontSize="small" />;
   return <AssessmentIcon fontSize="small" />;
