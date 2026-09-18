@@ -32,12 +32,18 @@ class CourseStudyFileSerializer(serializers.ModelSerializer):
         read_only_fields = ["course", "uploaded_by", "file_name", "uploaded_by_name", "created_at"]
 
     def get_file_name(self, obj):
+        if obj.title:
+            ext = ""
+            source = obj.original_name or (obj.file.name.split("/")[-1] if obj.file else "")
+            if "." in source:
+                ext = "." + source.rsplit(".", 1)[-1]
+            return f"{obj.title}{ext}" if ext and not obj.title.lower().endswith(ext.lower()) else obj.title
         if obj.original_name:
             return obj.original_name
         if obj.file:
             return obj.file.name.split("/")[-1]
         url = public_file_url(obj, self.context.get("request"))
-        return url.split("/")[-1] if url else ""
+        return url.split("/")[-1] if url else obj.title or ""
 
     def get_uploaded_by_name(self, obj):
         user = getattr(obj, "uploaded_by", None)

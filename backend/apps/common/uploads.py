@@ -326,6 +326,30 @@ def stored_file_name(instance, fallback="file"):
     )
 
 
+def apply_file_display_name(instance, title):
+    title = str(title or "").strip()
+    if not title:
+        raise ValidationError("File name is required.")
+    source = getattr(instance, "original_name", "") or ""
+    field = getattr(instance, "file", None)
+    if not source and field:
+        source = str(getattr(field, "name", "") or "").split("/")[-1]
+    ext = ""
+    if "." in source:
+        ext = "." + source.rsplit(".", 1)[-1]
+    if ext and title.lower().endswith(ext.lower()):
+        stripped = title[: -len(ext)].strip()
+        title = stripped or title
+    title = title[:200]
+    instance.title = title
+    if hasattr(instance, "original_name"):
+        instance.original_name = f"{title}{ext}"[:255] if ext else title[:255]
+        instance.save(update_fields=["title", "original_name"])
+    else:
+        instance.save(update_fields=["title"])
+    return instance
+
+
 def file_response_for_instance(instance, as_attachment=False, extra_headers=None):
     filename = stored_file_name(instance)
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"

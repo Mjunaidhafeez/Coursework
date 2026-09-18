@@ -9,7 +9,14 @@ from rest_framework.response import Response
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
-from apps.common.uploads import delete_stored_file, file_response_for_instance, public_file_url, store_upload, validate_upload
+from apps.common.uploads import (
+    apply_file_display_name,
+    delete_stored_file,
+    file_response_for_instance,
+    public_file_url,
+    store_upload,
+    validate_upload,
+)
 from apps.common.whatsapp import notify_event
 
 from .models import Course, CourseStudyFile, Enrollment, Semester
@@ -49,7 +56,15 @@ class CourseViewSet(viewsets.ModelViewSet):
     ordering_fields = ["code", "title", "created_at"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy", "upload_study_file", "delete_study_file", "rename_study_file"]:
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "upload_study_file",
+            "delete_study_file",
+            "rename_study_file",
+        ]:
             return [IsTeacherOrAdmin()]
         return [permissions.IsAuthenticated()]
 
@@ -80,31 +95,38 @@ class CourseViewSet(viewsets.ModelViewSet):
         notify_event(students, f"New study file in {course.code}: {study_file.title}")
         return Response(CourseStudyFileSerializer(study_file, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["delete"], url_path="study-files/(?P<file_id>[^/.]+)")
-    def delete_study_file(self, request, pk=None, file_id=None):
+    def _get_managed_study_file(self, request, file_id, forbidden_detail):
         course = self.get_object()
         if not self._can_manage_course_files(request.user, course):
-            return Response({"detail": "You can only remove files from your courses."}, status=status.HTTP_403_FORBIDDEN)
+            return None, Response({"detail": forbidden_detail}, status=status.HTTP_403_FORBIDDEN)
         study_file = CourseStudyFile.objects.filter(course=course, id=file_id).first()
         if not study_file:
-            return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+            return None, Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
+        return study_file, None
+
+    @action(detail=True, methods=["delete"], url_path="study-files/(?P<file_id>[^/.]+)")
+    def delete_study_file(self, request, pk=None, file_id=None):
+        study_file, error = self._get_managed_study_file(
+            request, file_id, "You can only remove files from your courses."
+        )
+        if error:
+            return error
         delete_stored_file(study_file)
         study_file.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["patch"], url_path="study-files/(?P<file_id>[^/.]+)")
+    @action(detail=True, methods=["post", "patch"], url_path="study-files/(?P<file_id>[^/.]+)/rename")
     def rename_study_file(self, request, pk=None, file_id=None):
-        course = self.get_object()
-        if not self._can_manage_course_files(request.user, course):
-            return Response({"detail": "You can only rename files for your courses."}, status=status.HTTP_403_FORBIDDEN)
-        study_file = CourseStudyFile.objects.filter(course=course, id=file_id).first()
-        if not study_file:
-            return Response({"detail": "Study file not found."}, status=status.HTTP_404_NOT_FOUND)
-        title = str(request.data.get("title") or "").strip()
-        if not title:
-            return Response({"detail": "File name is required."}, status=status.HTTP_400_BAD_REQUEST)
-        study_file.title = title[:200]
-        study_file.save(update_fields=["title"])
+        study_file, error = self._get_managed_study_file(
+            request, file_id, "You can only rename files for your courses."
+        )
+        if error:
+            return error
+        try:
+            apply_file_display_name(study_file, request.data.get("title"))
+        except ValidationError as exc:
+            detail = exc.detail[0] if isinstance(exc.detail, (list, tuple)) else exc.detail
+            return Response({"detail": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(CourseStudyFileSerializer(study_file, context={"request": request}).data)
 
     def _study_file_or_404(self, course, file_id):

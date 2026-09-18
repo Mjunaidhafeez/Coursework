@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from "react";
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import { useUi } from "../../context/UiContext";
+import { extractApiErrorMessage } from "../../utils/apiErrors";
 import { confirmDelete } from "../../utils/confirm";
 import { oversizedFileNames } from "../../utils/uploadLimits";
 
@@ -175,13 +176,16 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
       notify("File name is required", "warning");
       return;
     }
+    setSaving(true);
     try {
-      await api.patch(`${ENDPOINTS.courses}${course.id}/study-files/${renaming.id}/`, { title: nextTitle });
+      await api.post(`${ENDPOINTS.courses}${course.id}/study-files/${renaming.id}/rename/`, { title: nextTitle });
       notify("File name updated");
       setRenaming(null);
       onChanged?.();
     } catch (err) {
-      notify(err?.response?.data?.detail || "Rename failed", "error");
+      notify(extractApiErrorMessage(err), "error");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -303,8 +307,10 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRenaming(null)}>Cancel</Button>
-          <Button variant="contained" onClick={renameFile}>Save</Button>
+          <Button onClick={() => setRenaming(null)} disabled={saving}>Cancel</Button>
+          <Button variant="contained" onClick={renameFile} disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
         </DialogActions>
       </Dialog>
       <Dialog

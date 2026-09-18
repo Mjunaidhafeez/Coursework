@@ -66,6 +66,7 @@ const SubmitWorkPage = () => {
   const [rowFileDeleting, setRowFileDeleting] = useState({});
   const [renamingFile, setRenamingFile] = useState(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
   const [membersBySubmission, setMembersBySubmission] = useState({});
   const [membersLoadingBySubmission, setMembersLoadingBySubmission] = useState({});
   const [message, setMessage] = useState("");
@@ -375,6 +376,7 @@ const SubmitWorkPage = () => {
       notify("File name is required", "error");
       return;
     }
+    setRenameSaving(true);
     try {
       await api.post(`${ENDPOINTS.submissions}${renamingFile.submission.id}/rename_file/`, {
         file_id: renamingFile.fileItem.id,
@@ -385,6 +387,8 @@ const SubmitWorkPage = () => {
       await loadData();
     } catch (err) {
       notify(extractApiErrorMessage(err), "error");
+    } finally {
+      setRenameSaving(false);
     }
   };
 
@@ -1238,8 +1242,10 @@ const SubmitWorkPage = () => {
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => setRenamingFile(null)}>Cancel</Button>
-        <Button variant="contained" onClick={renameSubmissionFile}>Save</Button>
+        <Button onClick={() => setRenamingFile(null)} disabled={renameSaving}>Cancel</Button>
+        <Button variant="contained" onClick={renameSubmissionFile} disabled={renameSaving}>
+          {renameSaving ? "Saving..." : "Save"}
+        </Button>
       </DialogActions>
     </Dialog>
     </>

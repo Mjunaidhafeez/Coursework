@@ -12,7 +12,13 @@ from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.academics.models import Enrollment
 from apps.common.mixins import AuditLogMixin
 from apps.common.notify import push_notifications
-from apps.common.uploads import delete_stored_file, file_response_for_instance, store_upload, validate_upload
+from apps.common.uploads import (
+    apply_file_display_name,
+    delete_stored_file,
+    file_response_for_instance,
+    store_upload,
+    validate_upload,
+)
 from apps.common.whatsapp import notify_event
 from apps.groups.models import GroupMember
 
@@ -613,8 +619,11 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
         target = submission.submission_files.filter(id=file_id).first()
         if not target:
             return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
-        target.title = title[:200]
-        target.save(update_fields=["title"])
+        try:
+            apply_file_display_name(target, title)
+        except ValidationError as exc:
+            detail = exc.detail[0] if isinstance(exc.detail, (list, tuple)) else exc.detail
+            return Response({"detail": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
         submission.refresh_from_db()
         return Response({"submission": self.get_serializer(submission).data}, status=status.HTTP_200_OK)
 
