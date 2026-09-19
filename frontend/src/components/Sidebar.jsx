@@ -1,11 +1,14 @@
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import BookIcon from "@mui/icons-material/Book";
+import ChatBubbleOutlineRoundedIcon from "@mui/icons-material/ChatBubbleOutlineRounded";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import GroupsIcon from "@mui/icons-material/Groups";
 import GradingIcon from "@mui/icons-material/Grading";
 import HomeIcon from "@mui/icons-material/Home";
+import MailOutlineRoundedIcon from "@mui/icons-material/MailOutlineRounded";
 import SchoolIcon from "@mui/icons-material/School";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography } from "@mui/material";
 import { NavLink } from "react-router-dom";
 
@@ -18,7 +21,9 @@ const getIcon = (label) => {
   if (value.includes("user") || value.includes("teacher") || value.includes("student")) return <SchoolIcon fontSize="small" />;
   if (value.includes("course")) return <BookIcon fontSize="small" />;
   if (value.includes("group")) return <GroupsIcon fontSize="small" />;
-  if (value.includes("message")) return <GroupsIcon fontSize="small" />;
+  if (value.includes("email") || value.includes("mail")) return <MailOutlineRoundedIcon fontSize="small" />;
+  if (value.includes("whatsapp")) return <WhatsAppIcon fontSize="small" />;
+  if (value.includes("message")) return <ChatBubbleOutlineRoundedIcon fontSize="small" />;
   if (value.includes("submit")) return <UploadFileIcon fontSize="small" />;
   if (value.includes("grad")) return <GradingIcon fontSize="small" />;
   return <AssessmentIcon fontSize="small" />;

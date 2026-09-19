@@ -1,5 +1,10 @@
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import ChatBubbleOutlineRoundedIcon from "@mui/icons-material/ChatBubbleOutlineRounded";
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Chip,
@@ -9,37 +14,39 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
 import ListingPage from "../../components/shared/ListingPage";
+import { COMMS, formatWhen, formatWhenShort, initialsFrom } from "../../components/shared/commsUi";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 
-const formatWhen = (value) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString();
-};
-
 const MessagesPage = () => {
   const { user } = useAuth();
   const { notify, isGlobalLoading } = useUi();
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
   const role = user?.role;
   const isAdmin = role === "super_admin";
   const isTeacher = role === "teacher";
   const isStudent = role === "student";
   const [conversations, setConversations] = useState([]);
   const [activeId, setActiveId] = useState(null);
+  const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
+  const [inboxQuery, setInboxQuery] = useState("");
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,20 +60,38 @@ const MessagesPage = () => {
   const [semesterId, setSemesterId] = useState("");
   const [courseId, setCourseId] = useState("");
   const [firstMessage, setFirstMessage] = useState("");
-  const bottomRef = useRef(null);
+  const threadScrollRef = useRef(null);
+  const activeIdRef = useRef(null);
+
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
 
   const active = useMemo(
     () => conversations.find((item) => String(item.id) === String(activeId)) || null,
     [conversations, activeId]
   );
 
-  const loadConversations = async ({ keepId = activeId } = {}) => {
+  const visibleConversations = useMemo(() => {
+    const query = inboxQuery.trim().toLowerCase();
+    if (!query) return conversations;
+    return conversations.filter((item) => {
+      const title = String(item.title || "").toLowerCase();
+      const last = String(item.last_message || "").toLowerCase();
+      return title.includes(query) || last.includes(query);
+    });
+  }, [conversations, inboxQuery]);
+
+  const loadConversations = async ({ keepId, selectFirst = false } = {}) => {
     const { data } = await api.get(ENDPOINTS.conversations, { skipGlobalLoader: true });
     const rows = data.results || [];
     setConversations(rows);
-    if (keepId && rows.some((item) => String(item.id) === String(keepId))) {
-      setActiveId(keepId);
-    } else if (!keepId && rows[0]) {
+    const preferred = keepId !== undefined ? keepId : activeIdRef.current;
+    if (preferred && rows.some((item) => String(item.id) === String(preferred))) {
+      if (String(activeIdRef.current) !== String(preferred)) setActiveId(preferred);
+      return;
+    }
+    if (selectFirst && !activeIdRef.current && rows[0]) {
       setActiveId(rows[0].id);
     }
   };
@@ -92,6 +117,11 @@ const MessagesPage = () => {
     setPeople(data.results || []);
   };
 
+  const openConversation = (id) => {
+    setActiveId(id);
+    setMobileThreadOpen(true);
+  };
+
   useEffect(() => {
     let alive = true;
     const boot = async () => {
@@ -104,13 +134,16 @@ const MessagesPage = () => {
         if (!alive) return;
         setSemesters(semesterRes.data.results || []);
         setCourses(courseRes.data.results || []);
-        await loadConversations({ keepId: null });
+        await loadConversations({
+          keepId: null,
+          selectFirst: window.matchMedia("(min-width: 900px)").matches,
+        });
       } finally {
         if (alive) setLoading(false);
       }
     };
     boot();
-    const timer = window.setInterval(() => loadConversations({ keepId: activeId }), 12000);
+    const timer = window.setInterval(() => loadConversations(), 12000);
     return () => {
       alive = false;
       window.clearInterval(timer);
@@ -125,8 +158,10 @@ const MessagesPage = () => {
   }, [activeId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    const box = threadScrollRef.current;
+    if (!box) return;
+    box.scrollTop = box.scrollHeight;
+  }, [messages.length, activeId]);
 
   useEffect(() => {
     if (!composeOpen) return;
@@ -143,6 +178,7 @@ const MessagesPage = () => {
       setDraft("");
       await loadMessages(activeId);
       await loadConversations({ keepId: activeId });
+      setMobileThreadOpen(true);
     } catch (err) {
       notify(err?.response?.data?.detail || "Could not send message", "error");
     } finally {
@@ -186,6 +222,7 @@ const MessagesPage = () => {
       setPersonId("");
       await loadConversations({ keepId: data.id });
       setActiveId(data.id);
+      setMobileThreadOpen(true);
     } catch (err) {
       notify(err?.response?.data?.detail || "Could not start conversation", "error");
     } finally {
@@ -206,73 +243,161 @@ const MessagesPage = () => {
   const needsPerson = ["student", "teacher", "super_admin"].includes(target);
   const needsSemester = target === "semester_students" || (target === "student" && (isAdmin || isTeacher));
   const needsCourse = target === "course_students" || (target === "student" && isTeacher);
+  const showInbox = isDesktop || !mobileThreadOpen;
+  const showThread = isDesktop || mobileThreadOpen;
 
   return (
     <ListingPage
+      fill
       title="Messages"
-      subtitle="Portal-to-portal chat. Messages stay inside the portal for the people you are allowed to contact."
+      subtitle="Stay in the selected chat. Inbox will not jump back while you type."
+      icon={<ChatBubbleOutlineRoundedIcon />}
       actions={(
-        <Button variant="contained" onClick={() => setComposeOpen(true)}>
-          New message
+        <Button
+          size="small"
+          variant="contained"
+          startIcon={<ChatBubbleOutlineRoundedIcon />}
+          onClick={() => setComposeOpen(true)}
+          sx={{ whiteSpace: "nowrap" }}
+        >
+          New
         </Button>
       )}
     >
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ minHeight: { xs: "auto", md: 520 }, height: { xs: "auto", md: "100%" } }}>
-        <Box sx={{ width: { xs: "100%", md: 300 }, border: "1px solid #dbeafe", borderRadius: 2, overflow: "hidden", bgcolor: "#fff" }}>
-          <Box sx={{ px: 1.5, py: 1, bgcolor: "#102a5c", color: "#fff" }}>
+      <Stack direction="row" spacing={1} sx={{ flex: 1, minHeight: 0, height: "100%" }}>
+        <Box
+          sx={{
+            width: { xs: "100%", md: 300 },
+            display: showInbox ? "flex" : "none",
+            flexDirection: "column",
+            border: `1px solid ${COMMS.line}`,
+            borderRadius: 2,
+            overflow: "hidden",
+            bgcolor: "#fff",
+            minHeight: 0,
+          }}
+        >
+          <Box sx={{ px: 1.2, py: 0.9, bgcolor: COMMS.navy, color: "#fff" }}>
             <Typography sx={{ fontWeight: 800, fontSize: 13 }}>Inbox</Typography>
           </Box>
-          <Box sx={{ maxHeight: { xs: 180, md: 560 }, overflow: "auto" }}>
-            {conversations.map((item) => (
-              <Box
-                key={item.id}
-                onClick={() => setActiveId(item.id)}
-                sx={{
-                  px: 1.4,
-                  py: 1.1,
-                  cursor: "pointer",
-                  bgcolor: String(item.id) === String(activeId) ? "#e8f0ff" : "transparent",
-                  borderBottom: "1px solid #eef2f7",
-                }}
-              >
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography sx={{ fontWeight: item.unread_count ? 800 : 600, color: "#102a5c", fontSize: 14 }}>
-                    {item.title}
-                  </Typography>
-                  {item.unread_count ? <Chip size="small" color="error" label={item.unread_count} /> : null}
-                </Stack>
-                <Typography variant="caption" color="text.secondary" noWrap>
-                  {item.last_message || "No messages yet"}
-                </Typography>
-              </Box>
-            ))}
-            {!conversations.length && !loading && (
+          <Box sx={{ px: 1, py: 0.8, borderBottom: `1px solid ${COMMS.line}` }}>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Search chats"
+              value={inboxQuery}
+              onChange={(e) => setInboxQuery(e.target.value)}
+              sx={{ "& .MuiInputBase-root": { fontSize: 13, height: 36 } }}
+            />
+          </Box>
+          <Box sx={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+            {visibleConversations.map((item) => {
+              const selected = String(item.id) === String(activeId);
+              return (
+                <Box
+                  key={item.id}
+                  onClick={() => openConversation(item.id)}
+                  sx={{
+                    px: 1.1,
+                    py: 0.95,
+                    cursor: "pointer",
+                    bgcolor: selected ? "#e8f0ff" : "transparent",
+                    borderBottom: `1px solid ${COMMS.wash}`,
+                    "&:hover": { bgcolor: selected ? "#e8f0ff" : COMMS.wash },
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Avatar sx={{ width: 34, height: 34, bgcolor: selected ? COMMS.chat : "#94a3b8", fontSize: 13, fontWeight: 800 }}>
+                      {initialsFrom(item.title)}
+                    </Avatar>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={0.6}>
+                        <Typography noWrap sx={{ fontWeight: item.unread_count ? 800 : 650, color: COMMS.navy, fontSize: 13.5 }}>
+                          {item.title}
+                        </Typography>
+                        <Typography sx={{ fontSize: 10, color: COMMS.muted, flexShrink: 0 }}>
+                          {formatWhenShort(item.last_message_at)}
+                        </Typography>
+                      </Stack>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={0.6}>
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          {item.last_message || "No messages yet"}
+                        </Typography>
+                        {item.unread_count ? <Chip size="small" color="error" label={item.unread_count} sx={{ height: 18, "& .MuiChip-label": { px: 0.6, fontSize: 10 } }} /> : null}
+                      </Stack>
+                    </Box>
+                  </Stack>
+                </Box>
+              );
+            })}
+            {!visibleConversations.length && !loading && (
               <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
-                No conversations yet. Start with New message.
+                {conversations.length ? "No chat matches this search." : "No conversations yet. Start with New."}
               </Typography>
             )}
           </Box>
         </Box>
 
-        <Box sx={{ flex: 1, minWidth: 0, border: "1px solid #dbeafe", borderRadius: 2, overflow: "hidden", bgcolor: "#fff", display: "flex", flexDirection: "column" }}>
-          <Box sx={{ px: 2, py: 1.2, bgcolor: "#102a5c", color: "#fff" }}>
-            <Typography sx={{ fontWeight: 800 }}>{active?.title || "Select a conversation"}</Typography>
-            {active?.member_count > 2 ? (
-              <Typography sx={{ fontSize: 12, opacity: 0.8 }}>{active.member_count} people</Typography>
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            display: showThread ? "flex" : "none",
+            flexDirection: "column",
+            border: `1px solid ${COMMS.line}`,
+            borderRadius: 2,
+            overflow: "hidden",
+            bgcolor: "#fff",
+          }}
+        >
+          <Stack direction="row" alignItems="center" spacing={0.8} sx={{ px: 1.2, py: 0.85, bgcolor: COMMS.navy, color: "#fff" }}>
+            {!isDesktop ? (
+              <IconButton size="small" onClick={() => setMobileThreadOpen(false)} sx={{ color: "#fff" }}>
+                <ArrowBackRoundedIcon fontSize="small" />
+              </IconButton>
             ) : null}
-          </Box>
-          <Box sx={{ flex: 1, p: 1.5, overflow: "auto", minHeight: { xs: 180, md: 320 }, bgcolor: "#f8fbff" }}>
+            <Avatar sx={{ width: 30, height: 30, bgcolor: "#3b82f6", fontSize: 12, fontWeight: 800 }}>
+              {initialsFrom(active?.title || "Chat")}
+            </Avatar>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography noWrap sx={{ fontWeight: 800, fontSize: 14 }}>{active?.title || "Select a conversation"}</Typography>
+              {active?.member_count > 2 ? (
+                <Typography sx={{ fontSize: 11, opacity: 0.8 }}>{active.member_count} people</Typography>
+              ) : null}
+            </Box>
+          </Stack>
+          <Box ref={threadScrollRef} sx={{ flex: 1, p: 1.3, overflow: "auto", minHeight: 0, bgcolor: COMMS.wash }}>
             {messages.map((item) => {
               const mine = item.sender?.id === user?.id;
+              const fromWhatsapp = item.source === "whatsapp";
               return (
                 <Box key={item.id} sx={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", mb: 1 }}>
-                  <Box sx={{ maxWidth: "78%", bgcolor: mine ? "#102a5c" : "#fff", color: mine ? "#fff" : "#1e293b", border: mine ? 0 : "1px solid #dbeafe", borderRadius: 2, px: 1.2, py: 0.8 }}>
-                    <Typography sx={{ fontSize: 11, opacity: 0.8, mb: 0.3 }}>
-                      {item.sender?.name} · {item.sender?.role_label}
-                      {item.source === "whatsapp" ? " · WhatsApp" : ""}
-                    </Typography>
+                  <Box
+                    sx={{
+                      maxWidth: "78%",
+                      bgcolor: mine ? COMMS.navy : "#fff",
+                      color: mine ? "#fff" : "#1e293b",
+                      border: mine ? 0 : `1px solid ${COMMS.line}`,
+                      borderRadius: mine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                      px: 1.2,
+                      py: 0.75,
+                    }}
+                  >
+                    <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mb: 0.25 }}>
+                      <Typography sx={{ fontSize: 11, opacity: 0.8 }}>
+                        {item.sender?.name} · {item.sender?.role_label}
+                      </Typography>
+                      {fromWhatsapp ? (
+                        <Chip
+                          size="small"
+                          icon={<WhatsAppIcon sx={{ fontSize: "12px !important" }} />}
+                          label="WhatsApp"
+                          sx={{ height: 18, bgcolor: mine ? "rgba(255,255,255,0.14)" : "#ecfdf5", color: mine ? "#fff" : COMMS.whatsapp, "& .MuiChip-label": { px: 0.5, fontSize: 10 } }}
+                        />
+                      ) : null}
+                    </Stack>
                     <Typography sx={{ whiteSpace: "pre-wrap", fontSize: 14 }}>{item.body}</Typography>
-                    <Typography sx={{ fontSize: 10, opacity: 0.7, mt: 0.4 }}>{formatWhen(item.created_at)}</Typography>
+                    <Typography sx={{ fontSize: 10, opacity: 0.7, mt: 0.35, textAlign: "right" }}>{formatWhen(item.created_at)}</Typography>
                   </Box>
                 </Box>
               );
@@ -280,12 +405,16 @@ const MessagesPage = () => {
             {!messages.length && active ? (
               <Typography variant="body2" color="text.secondary">No messages in this thread yet.</Typography>
             ) : null}
-            <div ref={bottomRef} />
+            {!active ? (
+              <Typography variant="body2" color="text.secondary">Choose a chat from inbox to start typing.</Typography>
+            ) : null}
           </Box>
-          <Stack direction="row" spacing={1} sx={{ p: 1.2, borderTop: "1px solid #e2e8f0" }}>
+          <Stack direction="row" spacing={0.8} alignItems="flex-end" sx={{ p: 1, borderTop: `1px solid ${COMMS.line}`, bgcolor: "#fff" }}>
             <TextField
               size="small"
               fullWidth
+              multiline
+              maxRows={4}
               placeholder={active ? "Write a reply..." : "Select a conversation first"}
               value={draft}
               disabled={!active || sending}
@@ -296,25 +425,36 @@ const MessagesPage = () => {
                   sendReply();
                 }
               }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      color="primary"
+                      disabled={!active || !draft.trim() || sending}
+                      onClick={sendReply}
+                      sx={{ bgcolor: !active || !draft.trim() ? "transparent" : "#e8f0ff" }}
+                    >
+                      <SendRoundedIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
-            <Button variant="contained" disabled={!active || !draft.trim() || sending} onClick={sendReply}>
-              Send
-            </Button>
           </Stack>
         </Box>
       </Stack>
       {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
 
-      <Dialog open={composeOpen} onClose={() => setComposeOpen(false)} fullWidth maxWidth="sm" fullScreen={false} scroll="paper" sx={{ "& .MuiDialog-paper": { m: { xs: 1, sm: 2 }, width: { xs: "calc(100% - 16px)", sm: "auto" } } }}>
-        <DialogTitle>New message</DialogTitle>
+      <Dialog open={composeOpen} onClose={() => setComposeOpen(false)} fullWidth maxWidth="sm" scroll="paper" sx={{ "& .MuiDialog-paper": { m: { xs: 1, sm: 2 }, width: { xs: "calc(100% - 16px)", sm: "auto" } } }}>
+        <DialogTitle sx={{ pb: 1 }}>New message</DialogTitle>
         <DialogContent>
           <Stack spacing={1.2} sx={{ mt: 0.5 }}>
-            <Alert severity="info">
+            <Alert severity="info" sx={{ py: 0.6 }}>
               {isAdmin
-                ? "You can message one student, one teacher, all students, a semester, or all teachers."
+                ? "Message one person, a semester, all students, or all teachers."
                 : isTeacher
-                  ? "You can message your course students, a semester group from your courses, or an administrator."
-                  : "You can message your course teachers or an administrator."}
+                  ? "Message your course students, a semester group, or an administrator."
+                  : "Message your course teachers or an administrator."}
             </Alert>
             <FormControl size="small" fullWidth>
               <InputLabel>Send to</InputLabel>
@@ -372,7 +512,7 @@ const MessagesPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setComposeOpen(false)}>Cancel</Button>
-          <Button variant="contained" disabled={sending} onClick={startConversation}>Send</Button>
+          <Button variant="contained" startIcon={<SendRoundedIcon />} disabled={sending} onClick={startConversation}>Send</Button>
         </DialogActions>
       </Dialog>
     </ListingPage>

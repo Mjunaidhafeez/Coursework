@@ -1,6 +1,13 @@
+import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
-  Box,
   Button,
   Checkbox,
   Chip,
@@ -26,6 +33,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../api/client";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
+import { COMMS, CommsSection } from "../../components/shared/commsUi";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
@@ -200,96 +208,91 @@ const WhatsAppPage = () => {
   };
 
   return (
-    <ListingPage title="WhatsApp">
-      <Alert severity={settings?.enabled ? "success" : "warning"} sx={{ mb: 2 }}>
+    <ListingPage
+      title="WhatsApp"
+      icon={<WhatsAppIcon />}
+      subtitle="Send portal updates on WhatsApp. Replies land in Messages."
+    >
+      <Stack spacing={1.2}>
+      <Alert severity={settings?.enabled ? "success" : "warning"} icon={<WhatsAppIcon fontSize="inherit" />} sx={{ py: 0.6 }}>
         {settings?.enabled
           ? "WhatsApp is connected. Portal notifications and messages go to WhatsApp. Replies appear on Messages."
           : "WhatsApp is off until Admin saves Phone number ID, Access token, and turns Enable on."}
       </Alert>
 
       {isAdmin ? (
-        <Box sx={{ mb: 2, p: 1.5, border: "1px solid #dbeafe", borderRadius: 2, bgcolor: "#fff" }}>
-          <Typography sx={{ fontWeight: 800, mb: 0.5 }}>WhatsApp API configuration</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.2 }}>
-            1. Open Meta for Developers → your app → WhatsApp → API Setup. Copy Phone number ID and a permanent access token.
-            2. WhatsApp → Configuration → Webhook. Paste the webhook URL below, use the same Verify token, and subscribe to the messages field.
-            3. Put student and teacher phones on their profiles with country code, for example 923001234567.
-            4. Turn Enable on, Save, then send a test. The first reply from that phone must come after they message your WhatsApp business number, or after you send them a message. Replies open on the Messages page.
-          </Typography>
-          {settings?.webhook_url ? (
-            <Alert severity={settings.enabled ? "success" : "info"} sx={{ mb: 1.2 }}>
-              {settings.token_set ? `Token saved ${settings.token_hint}` : "Token not saved yet"}
-              {settings.subscribe_detail ? ` · ${settings.subscribe_detail}` : ""}
-            </Alert>
-          ) : null}
-          <Alert severity={settings?.last_webhook_at ? "success" : "warning"} sx={{ mb: 1.2 }}>
-            {settings?.last_webhook_at
-              ? `Last WhatsApp webhook: ${settings.last_webhook_note || "received"} (${new Date(settings.last_webhook_at).toLocaleString()})`
-              : "No WhatsApp reply has reached the portal yet. In Meta → Configure Webhooks, subscribe the messages field, then reply again."}
-          </Alert>
-          <Stack spacing={1.1}>
-            <FormControlLabel
-              control={<Switch checked={form.enabled} onChange={(e) => setForm((prev) => ({ ...prev, enabled: e.target.checked }))} />}
-              label="Enable WhatsApp"
-            />
-            <TextField
-              size="small"
-              label="Phone number ID"
-              value={form.phone_number_id}
-              onChange={(e) => setForm((prev) => ({ ...prev, phone_number_id: e.target.value }))}
-              helperText="From Meta WhatsApp API Setup"
-            />
-            <TextField
-              size="small"
-              label="Access token"
-              type="password"
-              value={form.token}
-              onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))}
-              helperText="Permanent token. Leave blank to keep the saved token."
-            />
-            <TextField
-              size="small"
-              label="Webhook verify token"
-              value={form.verify_token}
-              onChange={(e) => setForm((prev) => ({ ...prev, verify_token: e.target.value }))}
-              helperText="Use this exact value in Meta webhook verification."
-            />
-            <TextField
-              size="small"
-              label="Webhook URL"
-              value={settings?.webhook_url || ""}
-              InputProps={{ readOnly: true }}
-              helperText="Paste this exact URL in Meta. Keep the trailing slash."
-            />
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-              <Button variant="contained" disabled={saving} onClick={saveSettings}>
-                {saving ? "Saving..." : "Save WhatsApp settings"}
-              </Button>
-              <Button variant="outlined" onClick={() => copyText(settings?.webhook_url, "Webhook URL")}>
-                Copy webhook URL
-              </Button>
-              <Button variant="outlined" onClick={() => copyText(form.verify_token, "Verify token")}>
-                Copy verify token
-              </Button>
-            </Stack>
-          </Stack>
-        </Box>
+        <CommsSection
+          icon={<SettingsRoundedIcon />}
+          title="API settings"
+          subtitle="Meta Cloud API · webhook · enable"
+          accent={COMMS.whatsapp}
+        >
+          <Accordion defaultExpanded={!settings?.enabled} disableGutters elevation={0} sx={{ border: `1px solid ${COMMS.line}`, borderRadius: "8px !important", "&:before": { display: "none" } }}>
+            <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />} sx={{ minHeight: 40, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
+              <Typography sx={{ fontWeight: 700, fontSize: 13, color: COMMS.ink }}>Configure connection</Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ pt: 0 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.2, fontSize: 12.5 }}>
+                Meta → WhatsApp → API Setup se Phone number ID aur token copy karo. Webhook URL aur verify token yahan se paste karo, messages field subscribe karo, phir Enable on karke Save.
+              </Typography>
+              {settings?.webhook_url ? (
+                <Alert severity={settings.enabled ? "success" : "info"} sx={{ mb: 1, py: 0.5 }}>
+                  {settings.token_set ? `Token saved ${settings.token_hint}` : "Token not saved yet"}
+                  {settings.subscribe_detail ? ` · ${settings.subscribe_detail}` : ""}
+                </Alert>
+              ) : null}
+              <Alert severity={settings?.last_webhook_at ? "success" : "warning"} sx={{ mb: 1, py: 0.5 }}>
+                {settings?.last_webhook_at
+                  ? `Last webhook: ${settings.last_webhook_note || "received"} (${new Date(settings.last_webhook_at).toLocaleString()})`
+                  : "No WhatsApp reply has reached the portal yet."}
+              </Alert>
+              <Stack spacing={1.1}>
+                <FormControlLabel
+                  control={<Switch checked={form.enabled} onChange={(e) => setForm((prev) => ({ ...prev, enabled: e.target.checked }))} />}
+                  label="Enable WhatsApp"
+                />
+                <TextField size="small" label="Phone number ID" value={form.phone_number_id} onChange={(e) => setForm((prev) => ({ ...prev, phone_number_id: e.target.value }))} />
+                <TextField size="small" label="Access token" type="password" value={form.token} onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))} helperText="Leave blank to keep the saved token." />
+                <TextField size="small" label="Webhook verify token" value={form.verify_token} onChange={(e) => setForm((prev) => ({ ...prev, verify_token: e.target.value }))} />
+                <TextField size="small" label="Webhook URL" value={settings?.webhook_url || ""} InputProps={{ readOnly: true }} helperText="Paste this exact URL in Meta. Keep the trailing slash." />
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <Button variant="contained" disabled={saving} onClick={saveSettings}>
+                    {saving ? "Saving..." : "Save settings"}
+                  </Button>
+                  <Button variant="outlined" startIcon={<ContentCopyRoundedIcon />} onClick={() => copyText(settings?.webhook_url, "Webhook URL")}>
+                    Webhook
+                  </Button>
+                  <Button variant="outlined" startIcon={<ContentCopyRoundedIcon />} onClick={() => copyText(form.verify_token, "Verify token")}>
+                    Verify token
+                  </Button>
+                </Stack>
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
+        </CommsSection>
       ) : (
-        <Alert severity="info" sx={{ mb: 2 }}>
+        <Alert severity="info" sx={{ py: 0.6 }}>
           Admin connects WhatsApp once. Teachers can then message selected or all students. Students and teachers need a phone with country code on their profile.
         </Alert>
       )}
 
-      <Stack spacing={1.2} sx={{ mb: 1.5 }}>
+      <CommsSection
+        icon={<WhatsAppIcon />}
+        title="Compose"
+        subtitle="Test one number, or send to selected / all listed people"
+        accent={COMMS.whatsapp}
+      >
         <TextField
+          size="small"
           label="Message"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           multiline
           minRows={4}
           placeholder="Type the WhatsApp message"
+          fullWidth
         />
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} sx={{ mt: 1.1 }}>
           <TextField
             size="small"
             label="Test phone"
@@ -298,12 +301,18 @@ const WhatsAppPage = () => {
             helperText="Country code ke sath"
             sx={{ minWidth: 180 }}
           />
-          <Button variant="outlined" disabled={sending} onClick={sendTest}>Send test</Button>
-          <Button variant="contained" disabled={sending} onClick={() => sendWhatsapp("selected")}>Send to selected</Button>
-          <Button variant="contained" color="secondary" disabled={sending} onClick={() => sendWhatsapp("all")}>Send to all listed</Button>
+          <Button variant="outlined" startIcon={<SendRoundedIcon />} disabled={sending} onClick={sendTest}>Test</Button>
+          <Button variant="contained" startIcon={<SendRoundedIcon />} disabled={sending} onClick={() => sendWhatsapp("selected")}>Selected</Button>
+          <Button variant="contained" color="success" startIcon={<WhatsAppIcon />} disabled={sending} onClick={() => sendWhatsapp("all")}>All listed</Button>
         </Stack>
-      </Stack>
+      </CommsSection>
 
+      <CommsSection
+        icon={<WhatsAppIcon />}
+        title="Recipients"
+        subtitle={`${recipients.length} listed · ${withPhone} have a phone`}
+        accent={COMMS.whatsapp}
+      >
       <SearchToolbar
         search={search}
         onSearchChange={setSearch}
@@ -347,12 +356,8 @@ const WhatsAppPage = () => {
           </>
         )}
       />
-
-      <Typography variant="body2" sx={{ mb: 1 }}>
-        {recipients.length} people listed · {withPhone} have a phone
-        {loading ? <CircularProgress size={14} sx={{ ml: 1 }} /> : null}
-      </Typography>
-      <TableContainer>
+      {loading ? <CircularProgress size={14} sx={{ ml: 1, mb: 1 }} /> : null}
+      <TableContainer sx={{ mt: 1 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -382,6 +387,8 @@ const WhatsAppPage = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      </CommsSection>
+      </Stack>
     </ListingPage>
   );
 };

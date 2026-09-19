@@ -1,4 +1,11 @@
+import AttachFileRoundedIcon from "@mui/icons-material/AttachFileRounded";
+import MailOutlineRoundedIcon from "@mui/icons-material/MailOutlineRounded";
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -19,11 +26,13 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
+import { COMMS, CommsSection } from "../../components/shared/commsUi";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
@@ -269,6 +278,7 @@ const EmailStudentsPage = () => {
   return (
     <ListingPage
       title="Email"
+      icon={<MailOutlineRoundedIcon />}
       subtitle={isTeacher
         ? "Send to students or teachers of your courses. Filter by course and semester, then send to selected or all."
         : "Send to students and teachers. Filter by subject/course and semester, then send to selected or all."}
@@ -334,38 +344,24 @@ const EmailStudentsPage = () => {
         )}
 
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2} alignItems="stretch">
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontWeight: 800, color: "#13377a", mb: 1 }}>Compose</Typography>
-            <Typography sx={{ fontWeight: 700, color: "#334155", mb: 0.8, fontSize: 13 }}>Template</Typography>
-            <TextField
-              size="small"
-              fullWidth
-              label="Header line"
-              value={headerTop}
-              onChange={(e) => setHeaderTop(e.target.value.slice(0, 120))}
-              sx={{ mb: 1 }}
-            />
-            <TextField
-              size="small"
-              fullWidth
-              label="Header title"
-              value={headerTitle}
-              onChange={(e) => setHeaderTitle(e.target.value.slice(0, 120))}
-              sx={{ mb: 1 }}
-            />
-            <TextField
-              size="small"
-              fullWidth
-              multiline
-              minRows={3}
-              label="Footer"
-              value={footer}
-              onChange={(e) => setFooter(e.target.value.slice(0, 1000))}
-              sx={{ mb: 1 }}
-            />
-            <Button size="small" onClick={resetTemplate} sx={{ mb: 1.2 }}>
-              Reset template
-            </Button>
+          <CommsSection
+            icon={<MailOutlineRoundedIcon />}
+            title="Compose"
+            subtitle="University notice from your portal email"
+            accent={COMMS.email}
+            sx={{ flex: 1, minWidth: 0 }}
+          >
+            <Accordion disableGutters elevation={0} sx={{ mb: 1, border: `1px solid ${COMMS.line}`, borderRadius: "8px !important", "&:before": { display: "none" } }}>
+              <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />} sx={{ minHeight: 40, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
+                <Typography sx={{ fontWeight: 700, fontSize: 13, color: COMMS.ink }}>Email template</Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0 }}>
+                <TextField size="small" fullWidth label="Header line" value={headerTop} onChange={(e) => setHeaderTop(e.target.value.slice(0, 120))} sx={{ mb: 1 }} />
+                <TextField size="small" fullWidth label="Header title" value={headerTitle} onChange={(e) => setHeaderTitle(e.target.value.slice(0, 120))} sx={{ mb: 1 }} />
+                <TextField size="small" fullWidth multiline minRows={2} label="Footer" value={footer} onChange={(e) => setFooter(e.target.value.slice(0, 1000))} sx={{ mb: 1 }} />
+                <Button size="small" onClick={resetTemplate}>Reset template</Button>
+              </AccordionDetails>
+            </Accordion>
             <TextField
               size="small"
               fullWidth
@@ -378,15 +374,15 @@ const EmailStudentsPage = () => {
               size="small"
               fullWidth
               multiline
-              minRows={{ xs: 4, md: 8 }}
+              minRows={{ xs: 4, md: 7 }}
               label="Message"
               placeholder="Write the notice, deadline reminder, or announcement..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
             <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mt: 1.1 }}>
-              <Button size="small" variant="outlined" component="label" disabled={sending || files.length >= MAX_EMAIL_FILES}>
-                Attach files
+              <Button size="small" variant="outlined" startIcon={<AttachFileRoundedIcon />} component="label" disabled={sending || files.length >= MAX_EMAIL_FILES}>
+                Attach
                 <input
                   ref={fileInputRef}
                   hidden
@@ -406,6 +402,7 @@ const EmailStudentsPage = () => {
                   <Chip
                     key={`${file.name}-${index}`}
                     size="small"
+                    icon={<AttachFileRoundedIcon />}
                     label={`${file.name} (${formatFileSize(file.size)})`}
                     onDelete={() => setFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
                   />
@@ -415,22 +412,31 @@ const EmailStudentsPage = () => {
             <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" sx={{ mt: 1.1 }}>
               <Button
                 variant="contained"
+                startIcon={<SendRoundedIcon />}
                 disabled={!canSend || !selectedRecipients.length}
                 onClick={() => sendEmail("selected")}
               >
-                {sending ? "Sending..." : `Send to selected (${selectedRecipients.length})`}
+                {sending ? "Sending..." : `Send selected (${selectedRecipients.length})`}
               </Button>
               <Button
                 variant="outlined"
+                startIcon={<SendRoundedIcon />}
                 disabled={!canSend || !recipients.length}
                 onClick={() => sendEmail("all")}
               >
-                {`Send to all (${recipients.length})`}
+                {`Send all (${recipients.length})`}
               </Button>
             </Stack>
-          </Box>
+          </CommsSection>
 
-          <Box sx={{ flex: 1, minWidth: 0, border: "1px solid #dbeafe", borderRadius: 2, overflow: "hidden" }}>
+          <CommsSection
+            icon={<VisibilityOutlinedIcon />}
+            title="Preview"
+            subtitle="How the university email will look"
+            accent={COMMS.email}
+            sx={{ flex: 1, minWidth: 0, "& > .MuiBox-root:last-child": { p: 0 } }}
+          >
+          <Box sx={{ border: "1px solid #dbeafe", borderRadius: 0, overflow: "hidden" }}>
             <Box sx={{ bgcolor: "#102a5c", color: "#fff", px: 2, py: 1.4 }}>
               {headerTop.trim() && (
                 <Typography sx={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", opacity: 0.8 }}>
@@ -468,15 +474,21 @@ const EmailStudentsPage = () => {
               )}
             </Box>
           </Box>
+          </CommsSection>
         </Stack>
 
-        <Stack direction="row" spacing={0.8} sx={{ pt: 0.4 }}>
-          <Chip size="small" variant="outlined" label={`${studentCount} students`} />
-          <Chip size="small" variant="outlined" label={`${teacherCount} teachers`} />
-          <Chip size="small" color="success" variant="outlined" label={`${recipients.filter((item) => item.has_email).length} with email`} />
-          <Chip size="small" color="warning" variant="outlined" label={`${recipients.filter((item) => !item.has_email).length} missing email`} />
-        </Stack>
-
+        <CommsSection
+          icon={<MailOutlineRoundedIcon />}
+          title="Recipients"
+          subtitle={`${studentCount} students · ${teacherCount} teachers`}
+          accent={COMMS.email}
+          action={(
+            <Stack direction="row" spacing={0.6} useFlexGap flexWrap="wrap">
+              <Chip size="small" variant="outlined" label={`${recipients.filter((item) => item.has_email).length} email`} />
+              <Chip size="small" color="warning" variant="outlined" label={`${recipients.filter((item) => !item.has_email).length} missing`} />
+            </Stack>
+          )}
+        >
         <TableContainer>
           <Table size="small" stickyHeader>
             <TableHead>
@@ -527,6 +539,7 @@ const EmailStudentsPage = () => {
           </Table>
         </TableContainer>
         {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
+        </CommsSection>
       </Stack>
     </ListingPage>
   );

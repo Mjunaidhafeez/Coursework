@@ -3,40 +3,61 @@ import { Box, Paper, Stack, Typography } from "@mui/material";
 const ListingPage = ({
   title,
   subtitle = null,
+  icon = null,
   actions = null,
   addForm = null,
   tabs = null,
   filters = null,
   toolbar = null,
   footer = null,
+  fill = false,
   children,
 }) => (
   <Stack
     spacing={0.9}
     sx={{
       flex: 1,
-      height: { xs: "auto", md: "100%" },
+      height: fill ? "100%" : { xs: "auto", md: "100%" },
       minHeight: 0,
-      overflow: { xs: "visible", md: "hidden" },
+      overflow: fill ? "hidden" : { xs: "visible", md: "hidden" },
     }}
   >
     <Stack
-      direction={{ xs: "column", sm: "row" }}
+      direction="row"
       spacing={1}
-      alignItems={{ xs: "stretch", sm: "flex-start" }}
+      alignItems="center"
       justifyContent="space-between"
       sx={{ flexShrink: 0 }}
     >
-      <Box>
-        <Typography sx={{ fontWeight: 800, fontSize: "1.02rem", color: "#13377a", lineHeight: 1.2 }}>
-          {title}
-        </Typography>
-        {subtitle ? (
-          <Typography variant="body2" sx={{ color: "#4b5d7a", mt: 0.35, maxWidth: 720, display: { xs: "none", md: "block" } }}>
-            {subtitle}
-          </Typography>
+      <Stack direction="row" spacing={1} alignItems="center" minWidth={0}>
+        {icon ? (
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: 1.4,
+              display: "grid",
+              placeItems: "center",
+              bgcolor: "#e8effc",
+              color: "#13377a",
+              flexShrink: 0,
+              "& svg": { fontSize: 18 },
+            }}
+          >
+            {icon}
+          </Box>
         ) : null}
-      </Box>
+        <Box minWidth={0}>
+          <Typography sx={{ fontWeight: 800, fontSize: "1.02rem", color: "#13377a", lineHeight: 1.2 }}>
+            {title}
+          </Typography>
+          {subtitle ? (
+            <Typography variant="body2" sx={{ color: "#4b5d7a", mt: 0.2, maxWidth: 720, display: { xs: "none", md: "block" } }}>
+              {subtitle}
+            </Typography>
+          ) : null}
+        </Box>
+      </Stack>
       {actions}
     </Stack>
     {addForm ? (
@@ -55,11 +76,11 @@ const ListingPage = ({
         p: { xs: 0.8, md: 1 },
         borderColor: "#dbeafe",
         bgcolor: "#fff",
-        flex: { xs: "none", md: 1 },
-        minHeight: { xs: "auto", md: 0 },
+        flex: fill ? 1 : { xs: "none", md: 1 },
+        minHeight: fill ? 0 : { xs: "auto", md: 0 },
         display: "flex",
         flexDirection: "column",
-        overflow: { xs: "visible", md: "hidden" },
+        overflow: fill ? "hidden" : { xs: "visible", md: "hidden" },
       }}
     >
       {toolbar ? (
@@ -72,7 +93,9 @@ const ListingPage = ({
         sx={{
           flex: 1,
           minHeight: 0,
-          overflow: "auto",
+          overflow: fill ? "hidden" : "auto",
+          display: fill ? "flex" : "block",
+          flexDirection: fill ? "column" : undefined,
           "& thead th": {
             position: "sticky",
             top: 0,
