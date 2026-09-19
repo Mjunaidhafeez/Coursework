@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import PageGuard from "./components/PageGuard";
 import SiteLayout from "./layout/SiteLayout";
+import ActivitiesPage from "./pages/ActivitiesPage";
 import AboutPage from "./pages/AboutPage";
 import AdmissionsPage from "./pages/AdmissionsPage";
 import AlumniPage from "./pages/AlumniPage";
@@ -14,6 +15,7 @@ import HomePage from "./pages/HomePage";
 import ProgramsPage from "./pages/ProgramsPage";
 import ResultsPage from "./pages/ResultsPage";
 import SimpleCardsPage from "./pages/SimpleCardsPage";
+import StudentsPage from "./pages/StudentsPage";
 import TeachersPage from "./pages/TeachersPage";
 import VcPage from "./pages/VcPage";
 
@@ -31,6 +33,8 @@ function App() {
         <Route path="/teachers" element={guarded("teachers", <TeachersPage />)} />
         <Route path="/alumni" element={guarded("alumni", <AlumniPage />)} />
         <Route path="/results" element={guarded("results", <ResultsPage />)} />
+        <Route path="/students" element={guarded("students", <StudentsPage />)} />
+        <Route path="/activities" element={guarded("activities", <ActivitiesPage />)} />
         <Route path="/campus" element={guarded("campus", <SimpleCardsPage pageKey="campus" kicker="Campus" />)} />
         <Route path="/scholarships" element={guarded("scholarships", <SimpleCardsPage pageKey="scholarships" kicker="Support" />)} />
         <Route path="/why" element={guarded("why", <SimpleCardsPage pageKey="why" kicker="Why us" />)} />

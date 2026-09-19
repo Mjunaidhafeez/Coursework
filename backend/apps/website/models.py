@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from apps.common.models import TimeStampedModel
 from .defaults import PAGE_CATALOG, default_page_flags
@@ -123,6 +124,39 @@ class WebsiteResult(TimeStampedModel):
 
     class Meta:
         ordering = ["-year", "student_name"]
+
+
+class WebsiteStudent(TimeStampedModel):
+    name = models.CharField(max_length=160)
+    roll_no = models.CharField(max_length=60)
+    semester = models.CharField(max_length=40, blank=True)
+    class_name = models.CharField(max_length=160, blank=True)
+    note = models.CharField(max_length=240, blank=True)
+    photo_url = models.URLField(max_length=500, blank=True)
+    published = models.BooleanField(default=True)
+    source_user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="website_profiles",
+    )
+
+    class Meta:
+        ordering = ["semester", "class_name", "name"]
+
+
+class WebsiteActivity(TimeStampedModel):
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    image_url = models.URLField(max_length=500, blank=True)
+    posted_on = models.DateField(default=timezone.now)
+    semester = models.CharField(max_length=40, blank=True)
+    class_name = models.CharField(max_length=160, blank=True)
+    published = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-posted_on", "-created_at"]
 
 
 class WebsiteInquiry(TimeStampedModel):

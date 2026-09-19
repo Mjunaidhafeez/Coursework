@@ -20,6 +20,7 @@ from apps.common.uploads import cloudinary_enabled, upload_to_cloudinary, valida
 
 from .defaults import DEFAULT_PAGES, PAGE_CATALOG, default_page_flags
 from .models import (
+    WebsiteActivity,
     WebsiteAlumnus,
     WebsiteAnnouncement,
     WebsiteDownload,
@@ -27,6 +28,7 @@ from .models import (
     WebsiteInquiry,
     WebsiteResult,
     WebsiteSettings,
+    WebsiteStudent,
     WebsiteTeacher,
 )
 
@@ -155,6 +157,30 @@ def _public_payload():
                 "photo_url": item.photo_url,
             }
             for item in WebsiteResult.objects.filter(published=True)
+        ],
+        "students": [
+            {
+                "id": item.id,
+                "name": item.name,
+                "roll_no": item.roll_no,
+                "semester": item.semester,
+                "class_name": item.class_name,
+                "note": item.note,
+                "photo_url": item.photo_url,
+            }
+            for item in WebsiteStudent.objects.filter(published=True)[:400]
+        ],
+        "activities": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "body": item.body,
+                "image_url": item.image_url,
+                "posted_on": item.posted_on,
+                "semester": item.semester,
+                "class_name": item.class_name,
+            }
+            for item in WebsiteActivity.objects.filter(published=True)[:80]
         ],
     }
 
@@ -336,6 +362,63 @@ class ResultViewSet(viewsets.ModelViewSet):
                     "photo_url",
                     "published",
                 ]
+
+        return S
+
+
+class StudentViewSet(viewsets.ModelViewSet):
+    queryset = WebsiteStudent.objects.all()
+    permission_classes = [IsSuperAdmin]
+
+    def get_serializer_class(self):
+        class S(serializers.ModelSerializer):
+            class Meta:
+                model = WebsiteStudent
+                fields = ["id", "name", "roll_no", "semester", "class_name", "note", "photo_url", "published", "source_user"]
+
+        return S
+
+    @action(detail=False, methods=["post"], url_path="import-portal")
+    def import_portal(self, request):
+        created = 0
+        skipped = 0
+        people = User.objects.filter(role=User.Role.STUDENT, is_active=True).select_related("student_profile__semester").prefetch_related("enrollments__course")
+        for person in people:
+            profile = getattr(person, "student_profile", None)
+            roll = (getattr(profile, "student_id", None) or person.username).strip()
+            if WebsiteStudent.objects.filter(roll_no__iexact=roll).exists():
+                skipped += 1
+                continue
+            semester = ""
+            if profile and profile.semester_id:
+                semester = f"Semester {profile.semester.number}"
+            course = person.enrollments.select_related("course").first()
+            class_name = f"{course.course.code} — {course.course.title}" if course else ""
+            photo = ""
+            if person.avatar:
+                photo = request.build_absolute_uri(person.avatar.url)
+            WebsiteStudent.objects.create(
+                name=person.get_full_name().strip() or person.username,
+                roll_no=roll[:60],
+                semester=semester,
+                class_name=class_name[:160],
+                photo_url=photo,
+                published=True,
+                source_user=person,
+            )
+            created += 1
+        return Response({"created": created, "skipped": skipped})
+
+
+class ActivityViewSet(viewsets.ModelViewSet):
+    queryset = WebsiteActivity.objects.all()
+    permission_classes = [IsSuperAdmin]
+
+    def get_serializer_class(self):
+        class S(serializers.ModelSerializer):
+            class Meta:
+                model = WebsiteActivity
+                fields = ["id", "title", "body", "image_url", "posted_on", "semester", "class_name", "published"]
 
         return S
 

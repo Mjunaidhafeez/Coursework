@@ -45,5 +45,7 @@ export const ENDPOINTS = {
   websiteTeachers: "/website/teachers/",
   websiteAlumni: "/website/alumni/",
   websiteResults: "/website/results/",
+  websiteStudents: "/website/students/",
+  websiteActivities: "/website/activities/",
   websiteInquiries: "/website/inquiries/",
 };

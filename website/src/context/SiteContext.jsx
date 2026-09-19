@@ -34,6 +34,8 @@ const FALLBACK = {
   teachers: [],
   alumni: [],
   results: [],
+  students: [],
+  activities: [],
 };
 
 export const SiteProvider = ({ children }) => {

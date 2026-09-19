@@ -16,12 +16,16 @@ const emptyDownload = { title: "", description: "", file_url: "", published: tru
 const emptyTeacher = { name: "", designation: "", department: "", degrees: "", bio: "", photo_url: "", published: true };
 const emptyAlumni = { name: "", batch: "", program: "", current_role: "", story: "", photo_url: "", published: true };
 const emptyResult = { student_name: "", roll_no: "", program: "", year: "", grade: "", marks: "", teacher_names: "", degrees: "", photo_url: "", published: true };
+const emptyStudent = { name: "", roll_no: "", semester: "", class_name: "", note: "", photo_url: "", published: true };
+const emptyActivity = { title: "", body: "", image_url: "", posted_on: "", semester: "", class_name: "", published: true };
 
 const TABS = [
   { value: "brand", label: "Brand" },
   { value: "pages", label: "Pages" },
   { value: "teachers", label: "Faculty" },
   { value: "alumni", label: "Alumni" },
+  { value: "students", label: "Students" },
+  { value: "activities", label: "Activities" },
   { value: "results", label: "Results" },
   { value: "announcements", label: "Announcements" },
   { value: "gallery", label: "Gallery" },
@@ -34,17 +38,19 @@ const WebsiteCmsPage = () => {
   const { notify } = useUi();
   const [tab, setTab] = useState("brand");
   const [form, setForm] = useState({});
-  const [lists, setLists] = useState({ announcements: [], gallery: [], downloads: [], teachers: [], alumni: [], results: [], inquiries: [] });
+  const [lists, setLists] = useState({ announcements: [], gallery: [], downloads: [], teachers: [], alumni: [], results: [], students: [], activities: [], inquiries: [] });
   const [announcement, setAnnouncement] = useState(emptyAnnouncement);
   const [photo, setPhoto] = useState(emptyGallery);
   const [download, setDownload] = useState(emptyDownload);
   const [teacher, setTeacher] = useState(emptyTeacher);
   const [alumnus, setAlumnus] = useState(emptyAlumni);
   const [result, setResult] = useState(emptyResult);
+  const [student, setStudent] = useState(emptyStudent);
+  const [activity, setActivity] = useState(emptyActivity);
   const [reply, setReply] = useState({});
 
   const load = async () => {
-    const [settingsRes, annRes, galRes, dlRes, teachRes, alumRes, resRes, inqRes] = await Promise.all([
+    const [settingsRes, annRes, galRes, dlRes, teachRes, alumRes, resRes, stuRes, actRes, inqRes] = await Promise.all([
       api.get(ENDPOINTS.websiteSettings),
       api.get(`${ENDPOINTS.websiteAnnouncements}?page_size=50`),
       api.get(`${ENDPOINTS.websiteGallery}?page_size=50`),
@@ -52,6 +58,8 @@ const WebsiteCmsPage = () => {
       api.get(`${ENDPOINTS.websiteTeachers}?page_size=50`),
       api.get(`${ENDPOINTS.websiteAlumni}?page_size=50`),
       api.get(`${ENDPOINTS.websiteResults}?page_size=50`),
+      api.get(`${ENDPOINTS.websiteStudents}?page_size=200`),
+      api.get(`${ENDPOINTS.websiteActivities}?page_size=80`),
       api.get(`${ENDPOINTS.websiteInquiries}?page_size=50`),
     ]);
     setForm(settingsRes.data);
@@ -62,6 +70,8 @@ const WebsiteCmsPage = () => {
       teachers: listRows(teachRes.data),
       alumni: listRows(alumRes.data),
       results: listRows(resRes.data),
+      students: listRows(stuRes.data),
+      activities: listRows(actRes.data),
       inquiries: listRows(inqRes.data),
     });
   };
@@ -109,6 +119,16 @@ const WebsiteCmsPage = () => {
     await api.delete(`${endpoint}${id}/`);
     load();
   };
+  const importPortalStudents = async () => {
+    try {
+      const { data } = await api.post(`${ENDPOINTS.websiteStudents}import-portal/`);
+      notify(`Imported ${data.created} students, skipped ${data.skipped}`);
+      load();
+    } catch (err) {
+      notify(err?.response?.data?.detail || "Could not import portal students", "error");
+    }
+  };
+
   const sendReply = async (id) => {
     await api.post(`${ENDPOINTS.websiteInquiries}${id}/reply/`, { body: reply[id] || "" });
     notify("Reply emailed and saved in Messages");
@@ -251,6 +271,47 @@ const WebsiteCmsPage = () => {
               <Stack key={item.id} direction="row" justifyContent="space-between" sx={{ p: 1, border: "1px solid #e2e8f0", borderRadius: 1.5 }}>
                 <Typography>{item.student_name} · {item.roll_no}</Typography>
                 <Button size="small" color="error" onClick={() => removeRow(ENDPOINTS.websiteResults, item.id)}>Remove</Button>
+              </Stack>
+            ))}
+          </Stack>
+        ) : null}
+
+        {tab === "students" ? (
+          <Stack spacing={1}>
+            <Typography color="text.secondary">Public site shows only name, photo, roll no, semester and class — no email or phone. Import copies active portal students, then you can remove any profile.</Typography>
+            <Button variant="outlined" onClick={importPortalStudents} sx={{ alignSelf: "flex-start" }}>Publish portal students</Button>
+            <TextField size="small" label="Name" value={student.name} onChange={(e) => setStudent({ ...student, name: e.target.value })} />
+            <TextField size="small" label="Roll no" value={student.roll_no} onChange={(e) => setStudent({ ...student, roll_no: e.target.value })} />
+            <TextField size="small" label="Semester" value={student.semester} onChange={(e) => setStudent({ ...student, semester: e.target.value })} placeholder="Semester 3" />
+            <TextField size="small" label="Class / course" value={student.class_name} onChange={(e) => setStudent({ ...student, class_name: e.target.value })} placeholder="MBA Evening" />
+            <TextField size="small" label="Note" value={student.note} onChange={(e) => setStudent({ ...student, note: e.target.value })} />
+            <TextField size="small" label="Photo URL" value={student.photo_url} onChange={(e) => setStudent({ ...student, photo_url: e.target.value })} />
+            <Button size="small" variant="outlined" component="label">Upload photo<input hidden type="file" accept="image/*" onChange={(e) => upload(e.target.files?.[0], (url) => setStudent((p) => ({ ...p, photo_url: url })))} /></Button>
+            <Button variant="contained" onClick={() => createRow(ENDPOINTS.websiteStudents, student, () => setStudent(emptyStudent))} sx={{ alignSelf: "flex-start" }}>Add student</Button>
+            {lists.students.map((item) => (
+              <Stack key={item.id} direction="row" justifyContent="space-between" sx={{ p: 1, border: "1px solid #e2e8f0", borderRadius: 1.5 }}>
+                <Typography>{item.name} · {item.roll_no} · {item.semester} · {item.class_name}</Typography>
+                <Button size="small" color="error" onClick={() => removeRow(ENDPOINTS.websiteStudents, item.id)}>Remove</Button>
+              </Stack>
+            ))}
+          </Stack>
+        ) : null}
+
+        {tab === "activities" ? (
+          <Stack spacing={1}>
+            <Typography color="text.secondary">Post daily student activities. Optional semester/class tags help visitors filter the public page.</Typography>
+            <TextField size="small" label="Title" value={activity.title} onChange={(e) => setActivity({ ...activity, title: e.target.value })} />
+            <TextField size="small" type="date" label="Date" InputLabelProps={{ shrink: true }} value={activity.posted_on} onChange={(e) => setActivity({ ...activity, posted_on: e.target.value })} />
+            <TextField size="small" label="Semester (optional)" value={activity.semester} onChange={(e) => setActivity({ ...activity, semester: e.target.value })} />
+            <TextField size="small" label="Class (optional)" value={activity.class_name} onChange={(e) => setActivity({ ...activity, class_name: e.target.value })} />
+            <TextField size="small" multiline minRows={3} label="What happened" value={activity.body} onChange={(e) => setActivity({ ...activity, body: e.target.value })} />
+            <TextField size="small" label="Image URL" value={activity.image_url} onChange={(e) => setActivity({ ...activity, image_url: e.target.value })} />
+            <Button size="small" variant="outlined" component="label">Upload photo<input hidden type="file" accept="image/*" onChange={(e) => upload(e.target.files?.[0], (url) => setActivity((p) => ({ ...p, image_url: url })))} /></Button>
+            <Button variant="contained" onClick={() => createRow(ENDPOINTS.websiteActivities, { ...activity, posted_on: activity.posted_on || new Date().toISOString().slice(0, 10) }, () => setActivity(emptyActivity))} sx={{ alignSelf: "flex-start" }}>Publish activity</Button>
+            {lists.activities.map((item) => (
+              <Stack key={item.id} direction="row" justifyContent="space-between" sx={{ p: 1, border: "1px solid #e2e8f0", borderRadius: 1.5 }}>
+                <Typography>{item.posted_on} · {item.title}</Typography>
+                <Button size="small" color="error" onClick={() => removeRow(ENDPOINTS.websiteActivities, item.id)}>Remove</Button>
               </Stack>
             ))}
           </Stack>

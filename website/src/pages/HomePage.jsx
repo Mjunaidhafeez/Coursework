@@ -8,6 +8,7 @@ const HomePage = () => {
   const latest = (site.announcements || []).slice(0, 3);
   const photos = (site.gallery || []).slice(0, 6);
   const faculty = (site.teachers || []).slice(0, 3);
+  const latestActivities = (site.activities || []).slice(0, 3);
   const vc = site.pages?.vc || {};
   const flags = site.page_flags || {};
 
@@ -54,6 +55,24 @@ const HomePage = () => {
                 {item.image_url ? <img src={item.image_url} alt="" className="card-media" /> : null}
                 <h3>{item.title}</h3>
                 <p>{item.excerpt || item.body?.slice(0, 140)}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {flags.activities !== false && latestActivities.length ? (
+        <section className="site-wrap site-section">
+          <div className="section-head">
+            <h2>Student activities</h2>
+            <Link to="/activities">Daily posts</Link>
+          </div>
+          <div className="card-grid">
+            {latestActivities.map((item) => (
+              <Link key={item.id} to="/activities" className="card">
+                {item.image_url ? <img src={item.image_url} alt="" className="card-media" /> : null}
+                <p className="meta">{item.posted_on}</p>
+                <h3>{item.title}</h3>
+                <p>{item.body.slice(0, 120)}…</p>
               </Link>
             ))}
           </div>
