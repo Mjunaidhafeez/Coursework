@@ -6,6 +6,8 @@ backend/media/
 backend/staticfiles/
 frontend/node_modules/
 frontend/.env
+website/node_modules/
+website/.env
 .DS_Store
 *.pyc
 __pycache__/

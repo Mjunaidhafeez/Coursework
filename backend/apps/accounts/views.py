@@ -42,3 +42,10 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.action in ["create", "update", "partial_update"]:
             return UserCreateUpdateSerializer
         return UserSerializer
+
+    def perform_destroy(self, instance):
+        if instance.role == User.Role.SUPER_ADMIN:
+            instance.delete()
+            return
+        instance.is_active = False
+        instance.save(update_fields=["is_active"])

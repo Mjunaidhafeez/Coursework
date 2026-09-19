@@ -98,6 +98,7 @@ const SettingsPage = () => {
         login_background_url: form.login_background_url,
         modules: form.modules,
         labels: form.labels,
+        weekly_digest: form.weekly_digest,
       });
       apply(data);
       notify("Portal settings saved");
@@ -193,6 +194,13 @@ const SettingsPage = () => {
               );
             })}
           </Stack>
+        </CommsSection>
+
+        <CommsSection icon={<SettingsRoundedIcon />} title="Weekly digest" subtitle="Optional daily PA task: python manage.py weekly_digest" accent={COMMS.ink}>
+          <FormControlLabel
+            control={<Switch checked={Boolean(form.weekly_digest)} onChange={(e) => setField("weekly_digest", e.target.checked)} />}
+            label="Email students a weekly deadline digest"
+          />
         </CommsSection>
 
         {["teacher", "student"].map((role) => (

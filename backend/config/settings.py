@@ -35,6 +35,8 @@ INSTALLED_APPS = [
     "apps.academics",
     "apps.groups",
     "apps.coursework",
+    "apps.campus",
+    "apps.website",
 ]
 
 MIDDLEWARE = [
@@ -113,6 +115,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
+WEBSITE_DIST = BASE_DIR.parent / "website" / "dist"
 STATICFILES_DIRS = [FRONTEND_DIST] if FRONTEND_DIST.exists() else []
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"

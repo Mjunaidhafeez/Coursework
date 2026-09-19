@@ -18,6 +18,7 @@ import {
   ListItem,
   ListItemText,
   Menu,
+  Paper,
   Stack,
   TextField,
   Typography,
@@ -49,6 +50,8 @@ const DashboardLayout = () => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchHits, setSearchHits] = useState([]);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileForm, setProfileForm] = useState({
     first_name: "",
@@ -70,6 +73,35 @@ const DashboardLayout = () => {
     ? `${user.avatar}${String(user.avatar).includes("?") ? "&" : "?"}v=${user?.avatar_cache_key || 1}`
     : undefined;
   const canEditNamePassword = [ROLES.STUDENT, ROLES.TEACHER].includes(user?.role);
+
+  useEffect(() => {
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      setSearchHits([]);
+      return undefined;
+    }
+    const handle = window.setTimeout(async () => {
+      try {
+        const { data } = await api.get(`${ENDPOINTS.campusSearch}?q=${encodeURIComponent(searchQuery.trim())}`, { skipGlobalLoader: true });
+        setSearchHits(data.results || []);
+      } catch {
+        setSearchHits([]);
+      }
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery]);
+
+  const openSearchHit = (hit) => {
+    const role = user?.role;
+    if (hit.type === "course") {
+      navigate(role === "student" ? "/student/courses" : role === "teacher" ? "/teacher/courses" : "/admin/courses");
+    } else if (hit.type === "assessment") {
+      navigate(role === "student" ? "/student/submit" : role === "teacher" ? "/teacher/coursework" : "/admin/coursework");
+    } else if (hit.type === "user") {
+      navigate("/admin/user-center");
+    }
+    setSearchQuery("");
+    setSearchHits([]);
+  };
 
   useEffect(() => {
     if (!user?.id) return undefined;
@@ -271,6 +303,31 @@ const DashboardLayout = () => {
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.4, md: 1.5 }, flexShrink: 0 }}>
+                <Box sx={{ position: "relative", display: { xs: "none", md: "block" }, minWidth: 220 }}>
+                  <TextField
+                    size="small"
+                    placeholder="Search courses, assessments..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        bgcolor: "rgba(255,255,255,0.12)",
+                        color: "white",
+                        "& fieldset": { borderColor: "rgba(255,255,255,0.25)" },
+                      },
+                      "& input": { color: "white", py: 0.6 },
+                    }}
+                  />
+                  {searchHits.length ? (
+                    <Paper sx={{ position: "absolute", top: 40, left: 0, right: 0, zIndex: 20, p: 0.5 }}>
+                      {searchHits.map((hit) => (
+                        <Button key={`${hit.type}-${hit.id}`} fullWidth sx={{ justifyContent: "flex-start", textTransform: "none" }} onClick={() => openSearchHit(hit)}>
+                          {hit.label}
+                        </Button>
+                      ))}
+                    </Paper>
+                  ) : null}
+                </Box>
                 <Chip label={(user?.role || "").replace("_", " ")} size="small" sx={{ display: { xs: "none", sm: "inline-flex" }, bgcolor: "white", color: "var(--portal-header)" }} />
                 {showMessages ? (
                 <IconButton

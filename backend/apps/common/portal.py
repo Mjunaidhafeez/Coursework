@@ -12,6 +12,14 @@ DEFAULT_MODULES = {
         "email": True,
         "whatsapp": True,
         "messages": True,
+        "calendar": True,
+        "attendance": True,
+        "appeals": True,
+        "help": True,
+        "templates": True,
+        "comments": True,
+        "queue": True,
+        "rubric": True,
     },
     "student": {
         "courses": True,
@@ -19,6 +27,12 @@ DEFAULT_MODULES = {
         "grades": True,
         "submit": True,
         "messages": True,
+        "calendar": True,
+        "attendance": True,
+        "transcript": True,
+        "appeals": True,
+        "help": True,
+        "deadlines": True,
     },
 }
 
@@ -39,6 +53,14 @@ DEFAULT_LABELS = {
         "whatsapp": "WhatsApp",
         "messages": "Messages",
         "settings": "Settings",
+        "website": "Website",
+        "calendar": "Calendar",
+        "import": "Bulk import",
+        "audit": "Audit log",
+        "backup": "Backup",
+        "recycle": "Recycle bin",
+        "help": "Help guides",
+        "search": "Search",
     },
     "teacher": {
         "dashboard": "Dashboard",
@@ -50,6 +72,14 @@ DEFAULT_LABELS = {
         "email": "Email",
         "whatsapp": "WhatsApp",
         "messages": "Messages",
+        "calendar": "Calendar",
+        "attendance": "Attendance",
+        "appeals": "Appeals",
+        "help": "Help",
+        "templates": "Templates",
+        "comments": "Comment bank",
+        "queue": "Grading queue",
+        "rubric": "Rubric",
     },
     "student": {
         "dashboard": "Dashboard",
@@ -58,6 +88,12 @@ DEFAULT_LABELS = {
         "grades": "Course Result",
         "submit": "Assessment Workflow",
         "messages": "Messages",
+        "calendar": "Calendar",
+        "attendance": "Attendance",
+        "transcript": "Transcript",
+        "appeals": "Appeals",
+        "help": "Help",
+        "deadlines": "My deadlines",
     },
 }
 
@@ -100,6 +136,7 @@ def branding_payload(row):
         "login_background_url": row.login_background_url or "",
         "modules": _merge_map(DEFAULT_MODULES, row.modules),
         "labels": _merge_map(DEFAULT_LABELS, row.labels),
+        "weekly_digest": bool(row.weekly_digest),
     }
 
 
@@ -141,6 +178,8 @@ def apply_updates(row, data):
                     row.modules[role][key] = True
     if "labels" in data:
         row.labels = _merge_map(DEFAULT_LABELS, data.get("labels"))
+    if "weekly_digest" in data:
+        row.weekly_digest = bool(data.get("weekly_digest"))
     row.save()
     return row
 

@@ -29,6 +29,14 @@ const FALLBACK = {
       email: true,
       whatsapp: true,
       messages: true,
+      calendar: true,
+      attendance: true,
+      appeals: true,
+      help: true,
+      templates: true,
+      comments: true,
+      queue: true,
+      rubric: true,
     },
     student: {
       courses: true,
@@ -36,9 +44,16 @@ const FALLBACK = {
       grades: true,
       submit: true,
       messages: true,
+      calendar: true,
+      attendance: true,
+      transcript: true,
+      appeals: true,
+      help: true,
+      deadlines: true,
     },
   },
   labels: {},
+  weekly_digest: false,
 };
 
 export const PortalSettingsProvider = ({ children }) => {

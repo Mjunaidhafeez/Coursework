@@ -119,7 +119,7 @@ const StudentDashboard = () => {
           </Paper>
           <OpeningAssessmentsCard
             items={courseworks.slice(0, 8)}
-            title="Opening Assessment Deadlines"
+            title="My deadlines"
             emptyText="No opening assessment found."
           />
         </Stack>

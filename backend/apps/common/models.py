@@ -137,6 +137,7 @@ class PortalSettings(TimeStampedModel):
     login_background_url = models.URLField(max_length=500, blank=True)
     modules = models.JSONField(default=dict, blank=True)
     labels = models.JSONField(default=dict, blank=True)
+    weekly_digest = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Portal settings"
