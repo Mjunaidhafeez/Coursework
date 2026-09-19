@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import DashboardLayout from "./layouts/DashboardLayout";
+import FeatureRoute from "./routes/FeatureRoute";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import { ROLES } from "./utils/roleConfig";
 
@@ -18,6 +19,7 @@ const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const EmailStudentsPage = lazy(() => import("./pages/shared/EmailStudentsPage"));
 const WhatsAppPage = lazy(() => import("./pages/shared/WhatsAppPage"));
 const MessagesPage = lazy(() => import("./pages/shared/MessagesPage"));
+const SettingsPage = lazy(() => import("./pages/admin/SettingsPage"));
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 
@@ -76,20 +78,21 @@ function App() {
             <Route path="/admin/email-students" element={<EmailStudentsPage />} />
             <Route path="/admin/whatsapp" element={<WhatsAppPage />} />
             <Route path="/admin/messages" element={<MessagesPage />} />
+            <Route path="/admin/settings" element={<SettingsPage />} />
           </Route>
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[ROLES.TEACHER]} />}>
           <Route element={<DashboardLayout />}>
             <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
-            <Route path="/teacher/courses" element={<MyCoursesPage />} />
-            <Route path="/teacher/coursework" element={<TeacherCourseworkPage />} />
-            <Route path="/teacher/groups" element={<TeacherGroupsPage />} />
-            <Route path="/teacher/submissions" element={<SubmissionsPage />} />
-            <Route path="/teacher/grading" element={<GradingPage />} />
-            <Route path="/teacher/email-students" element={<EmailStudentsPage />} />
-            <Route path="/teacher/whatsapp" element={<WhatsAppPage />} />
-            <Route path="/teacher/messages" element={<MessagesPage />} />
+            <Route path="/teacher/courses" element={<FeatureRoute feature="courses"><MyCoursesPage /></FeatureRoute>} />
+            <Route path="/teacher/coursework" element={<FeatureRoute feature="coursework"><TeacherCourseworkPage /></FeatureRoute>} />
+            <Route path="/teacher/groups" element={<FeatureRoute feature="groups"><TeacherGroupsPage /></FeatureRoute>} />
+            <Route path="/teacher/submissions" element={<FeatureRoute feature="submissions"><SubmissionsPage /></FeatureRoute>} />
+            <Route path="/teacher/grading" element={<FeatureRoute feature="grading"><GradingPage /></FeatureRoute>} />
+            <Route path="/teacher/email-students" element={<FeatureRoute feature="email"><EmailStudentsPage /></FeatureRoute>} />
+            <Route path="/teacher/whatsapp" element={<FeatureRoute feature="whatsapp"><WhatsAppPage /></FeatureRoute>} />
+            <Route path="/teacher/messages" element={<FeatureRoute feature="messages"><MessagesPage /></FeatureRoute>} />
           </Route>
         </Route>
 
@@ -97,12 +100,12 @@ function App() {
           <Route element={<DashboardLayout />}>
             <Route path="/student/dashboard" element={<StudentDashboard />} />
             <Route path="/student/my-coursework" element={<MyCourseworkPage />} />
-            <Route path="/student/courses" element={<MyStudentCoursesPage />} />
+            <Route path="/student/courses" element={<FeatureRoute feature="courses"><MyStudentCoursesPage /></FeatureRoute>} />
             <Route path="/student/coursework" element={<StudentCourseworkPage />} />
-            <Route path="/student/submit" element={<SubmitWorkPage />} />
-            <Route path="/student/groups" element={<StudentGroupsPage />} />
-            <Route path="/student/grades" element={<GradesPage />} />
-            <Route path="/student/messages" element={<MessagesPage />} />
+            <Route path="/student/submit" element={<FeatureRoute feature="submit"><SubmitWorkPage /></FeatureRoute>} />
+            <Route path="/student/groups" element={<FeatureRoute feature="groups"><StudentGroupsPage /></FeatureRoute>} />
+            <Route path="/student/grades" element={<FeatureRoute feature="grades"><GradesPage /></FeatureRoute>} />
+            <Route path="/student/messages" element={<FeatureRoute feature="messages"><MessagesPage /></FeatureRoute>} />
           </Route>
         </Route>
 

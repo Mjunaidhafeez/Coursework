@@ -1,13 +1,13 @@
 import { Box, Stack, Typography } from "@mui/material";
 
 export const COMMS = {
-  navy: "#102a5c",
-  ink: "#13377a",
+  navy: "var(--portal-navy)",
+  ink: "var(--portal-ink)",
   line: "#d7e4f8",
   wash: "#f5f8fd",
   muted: "#64748b",
-  email: "#1d4ed8",
-  chat: "#2563eb",
+  email: "var(--portal-primary)",
+  chat: "var(--portal-primary)",
   whatsapp: "#0f766e",
 };
 

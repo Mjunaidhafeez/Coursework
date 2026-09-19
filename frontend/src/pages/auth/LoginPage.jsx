@@ -5,16 +5,20 @@ import { Alert, Box, Button, IconButton, InputAdornment, Paper, Stack, TextField
 import { useState } from "react";
 
 import { useAuth } from "../../context/AuthContext";
+import { usePortalSettings } from "../../context/PortalSettingsContext";
+import { resolveTheme } from "../../theme/portalTheme";
 
-const campusImage = `${import.meta.env.BASE_URL}login/campus.png?v=7`;
-const developedBy = "Developed by : Junaid Hafeez (SVL) MBA NON Business 2025-2027";
+const fallbackCampus = `${import.meta.env.BASE_URL}login/campus.png?v=7`;
 
 const LoginPage = () => {
   const { login } = useAuth();
+  const { settings } = usePortalSettings();
+  const palette = resolveTheme(settings.theme);
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const background = settings.login_background_url || fallbackCampus;
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -35,7 +39,7 @@ const LoginPage = () => {
         minHeight: "100vh",
         position: "relative",
         overflow: "hidden",
-        backgroundColor: "#0b1524",
+        backgroundColor: palette.navy,
         "@keyframes fadeUp": {
           from: { opacity: 0, transform: "translateY(14px)" },
           to: { opacity: 1, transform: "translateY(0)" },
@@ -44,7 +48,7 @@ const LoginPage = () => {
     >
       <Box
         component="img"
-        src={campusImage}
+        src={background}
         alt=""
         sx={{
           position: "absolute",
@@ -60,8 +64,8 @@ const LoginPage = () => {
           position: "absolute",
           inset: 0,
           background: {
-            xs: "linear-gradient(180deg, rgba(8,16,30,0.72) 0%, rgba(8,16,30,0.38) 46%, rgba(8,16,30,0.28) 100%)",
-            md: "linear-gradient(105deg, rgba(8,16,30,0.78) 0%, rgba(8,16,30,0.52) 34%, rgba(8,16,30,0.16) 58%, rgba(8,16,30,0.08) 100%)",
+            xs: `linear-gradient(180deg, ${palette.navy}b8 0%, ${palette.navy}61 46%, ${palette.navy}47 100%)`,
+            md: `linear-gradient(105deg, ${palette.navy}c7 0%, ${palette.navy}85 34%, ${palette.navy}29 58%, ${palette.navy}14 100%)`,
           },
         }}
       />
@@ -78,9 +82,12 @@ const LoginPage = () => {
         }}
       >
         <Box sx={{ maxWidth: 560 }}>
+          {settings.logo_url ? (
+            <Box component="img" src={settings.logo_url} alt={settings.app_name} sx={{ height: 42, objectFit: "contain", mb: 1.2, display: { xs: "block", md: "block" }, mx: { xs: "auto", md: 0 } }} />
+          ) : null}
           <Typography
             sx={{
-              color: "#e8c77a",
+              color: palette.accent,
               letterSpacing: { xs: "0.1em", md: "0.16em" },
               fontWeight: 700,
               fontSize: { xs: "0.72rem", md: "0.78rem" },
@@ -88,7 +95,7 @@ const LoginPage = () => {
               textAlign: { xs: "center", md: "left" },
             }}
           >
-            Superior University Lahore
+            {settings.university_name}
           </Typography>
           <Box
             sx={{
@@ -97,23 +104,25 @@ const LoginPage = () => {
               width: 42,
               height: 2,
               borderRadius: 99,
-              background: "#e8c77a",
+              background: palette.accent,
               mx: { xs: "auto", md: 0 },
             }}
           />
-          <Typography
-            sx={{
-              color: "rgba(255,255,255,0.86)",
-              fontWeight: 500,
-              fontSize: { xs: "0.78rem", md: "0.82rem" },
-              letterSpacing: "0.01em",
-              wordSpacing: "0.08em",
-              textAlign: { xs: "center", md: "left" },
-              lineHeight: 1.5,
-            }}
-          >
-            {developedBy}
-          </Typography>
+          {settings.footer_text ? (
+            <Typography
+              sx={{
+                color: "rgba(255,255,255,0.86)",
+                fontWeight: 500,
+                fontSize: { xs: "0.78rem", md: "0.82rem" },
+                letterSpacing: "0.01em",
+                wordSpacing: "0.08em",
+                textAlign: { xs: "center", md: "left" },
+                lineHeight: 1.5,
+              }}
+            >
+              {settings.footer_text}
+            </Typography>
+          ) : null}
         </Box>
 
         <Box
@@ -125,13 +134,7 @@ const LoginPage = () => {
             pb: { xs: 4, md: 6 },
           }}
         >
-          <Box
-            sx={{
-              width: "100%",
-              maxWidth: 430,
-              animation: "fadeUp 560ms ease-out",
-            }}
-          >
+          <Box sx={{ width: "100%", maxWidth: 430, animation: "fadeUp 560ms ease-out" }}>
             <Typography
               sx={{
                 color: "#fff",
@@ -143,7 +146,7 @@ const LoginPage = () => {
                 textAlign: { xs: "center", md: "left" },
               }}
             >
-              Student Assessment Tracking
+              {settings.tagline}
             </Typography>
             <Typography
               sx={{
@@ -156,7 +159,7 @@ const LoginPage = () => {
                 mx: { xs: "auto", md: 0 },
               }}
             >
-              Sign in to manage coursework, submissions, and results.
+              {settings.login_subtitle}
             </Typography>
 
             <Paper
@@ -169,16 +172,8 @@ const LoginPage = () => {
                 boxShadow: "0 18px 48px rgba(6, 14, 32, 0.28)",
               }}
             >
-              <Typography
-                sx={{
-                  fontWeight: 800,
-                  fontSize: "1.2rem",
-                  color: "#122a57",
-                  letterSpacing: "-0.01em",
-                  mb: 0.4,
-                }}
-              >
-                Sign in
+              <Typography sx={{ fontWeight: 800, fontSize: "1.2rem", color: palette.navy, letterSpacing: "-0.01em", mb: 0.4 }}>
+                {settings.login_button_text || "Sign in"}
               </Typography>
               <Typography sx={{ color: "#5b6b86", fontSize: "0.86rem", mb: 2.4 }}>
                 Use your portal username and password.
@@ -225,14 +220,12 @@ const LoginPage = () => {
                       fontWeight: 700,
                       fontSize: "0.98rem",
                       borderRadius: 2,
-                      background: "#1d4cb4",
-                      boxShadow: "0 10px 20px rgba(29, 76, 180, 0.28)",
-                      "&:hover": {
-                        background: "#173f96",
-                      },
+                      background: palette.primary,
+                      boxShadow: `0 10px 20px ${palette.primary}47`,
+                      "&:hover": { background: palette.navy },
                     }}
                   >
-                    {loading ? "Signing in..." : "Sign in"}
+                    {loading ? "Signing in..." : (settings.login_button_text || "Sign in")}
                   </Button>
                 </Stack>
               </form>

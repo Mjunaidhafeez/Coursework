@@ -31,14 +31,16 @@ def default_email_template(sender=None):
     sender_name = ""
     if sender:
         sender_name = sender.get_full_name().strip() or sender.username
-    portal_name = getattr(settings, "PORTAL_PUBLIC_NAME", "MBA Coursework Portal")
+    from apps.common.portal import portal_name, portal_university
+
+    name = portal_name()
     portal_url = getattr(settings, "PORTAL_PUBLIC_URL", "")
-    footer = f"This is a coursework notice from {portal_name}.\nReply to this email to contact {sender_name or 'the sender'}."
+    footer = f"This is a coursework notice from {name}.\nReply to this email to contact {sender_name or 'the sender'}."
     if portal_url:
         footer = f"{footer}\n{portal_url}"
     return {
-        "header_top": "Superior University Lahore",
-        "header_title": portal_name,
+        "header_top": portal_university(),
+        "header_title": name,
         "footer": footer,
     }
 

@@ -31,6 +31,7 @@ import { ENDPOINTS } from "../api/endpoints";
 import Sidebar from "../components/Sidebar";
 import RouteFallback from "../components/shared/RouteFallback";
 import { useAuth } from "../context/AuthContext";
+import { usePortalSettings } from "../context/PortalSettingsContext";
 import { useUi } from "../context/UiContext";
 import { getTimeGreeting } from "../utils/greeting";
 import { ROLES } from "../utils/roleConfig";
@@ -38,6 +39,7 @@ import { ROLES } from "../utils/roleConfig";
 const DashboardLayout = () => {
   const { user, logout, refreshMe } = useAuth();
   const { notify } = useUi();
+  const { headerFor, isModuleOn } = usePortalSettings();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -59,18 +61,8 @@ const DashboardLayout = () => {
   });
   const isStudent = user?.role === ROLES.STUDENT;
   const shownToastIdsRef = useRef(new Set());
-  const headerConfig = {
-    [ROLES.SUPER_ADMIN]: {
-      title: "Student Assessment Submission Portal",
-    },
-    [ROLES.TEACHER]: {
-      title: "Teacher Dashboard",
-    },
-    [ROLES.STUDENT]: {
-      title: "Student Dashboard",
-    },
-  };
-  const currentHeader = headerConfig[user?.role] || headerConfig[ROLES.SUPER_ADMIN];
+  const currentHeader = { title: headerFor(user?.role) };
+  const showMessages = isModuleOn(user?.role, "messages");
   const greeting = getTimeGreeting();
   const GreetingIcon = greeting.Icon;
   const fullName = user?.full_name || `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || user?.username || "User";
@@ -210,7 +202,7 @@ const DashboardLayout = () => {
       sx={{
         height: "100dvh",
         overflow: "hidden",
-        background: "linear-gradient(130deg, #0f1c3f 0%, #1a2f69 45%, #2354c7 100%)",
+        background: "linear-gradient(130deg, var(--portal-sidebar-from) 0%, var(--portal-navy) 45%, var(--portal-primary) 100%)",
       }}
     >
       <Box
@@ -238,7 +230,7 @@ const DashboardLayout = () => {
           <Box
             sx={{
               flexShrink: 0,
-              bgcolor: "rgba(29,79,191,0.95)",
+              bgcolor: "color-mix(in srgb, var(--portal-header) 95%, black)",
               color: "white",
               px: { xs: 1.5, md: 2.4 },
               py: 1.05,
@@ -279,7 +271,8 @@ const DashboardLayout = () => {
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.4, md: 1.5 }, flexShrink: 0 }}>
-                <Chip label={(user?.role || "").replace("_", " ")} size="small" sx={{ display: { xs: "none", sm: "inline-flex" }, bgcolor: "white", color: "#1d4fbf" }} />
+                <Chip label={(user?.role || "").replace("_", " ")} size="small" sx={{ display: { xs: "none", sm: "inline-flex" }, bgcolor: "white", color: "var(--portal-header)" }} />
+                {showMessages ? (
                 <IconButton
                   onClick={() => {
                     const path = {
@@ -296,6 +289,7 @@ const DashboardLayout = () => {
                     <ChatBubbleOutlineRoundedIcon />
                   </Badge>
                 </IconButton>
+                ) : null}
                 <IconButton onClick={openNotifications} sx={{ color: "white" }}>
                   <Badge badgeContent={unreadCount} color="error">
                     <NotificationsNoneRoundedIcon />
@@ -356,7 +350,7 @@ const DashboardLayout = () => {
                     <Typography sx={{ fontSize: "0.75rem", opacity: 0.82 }}>@{user?.username}</Typography>
                   </Box>
                 </Stack>
-                <Button variant="contained" color="inherit" onClick={logout} sx={{ color: "#1d4fbf", fontWeight: 700, minWidth: { xs: 0, md: 64 }, px: { xs: 1, md: 2 }, fontSize: { xs: 12, md: 14 } }}>
+                <Button variant="contained" color="inherit" onClick={logout} sx={{ color: "var(--portal-header)", fontWeight: 700, minWidth: { xs: 0, md: 64 }, px: { xs: 1, md: 2 }, fontSize: { xs: 12, md: 14 } }}>
                   Logout
                 </Button>
               </Box>

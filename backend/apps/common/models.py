@@ -106,3 +106,45 @@ class WhatsAppSettings(TimeStampedModel):
     def load(cls):
         row, _ = cls.objects.get_or_create(pk=1)
         return row
+
+
+class PortalSettings(TimeStampedModel):
+    class Theme(models.TextChoices):
+        NAVY = "navy", "Navy"
+        EMERALD = "emerald", "Emerald"
+        ROYAL = "royal", "Royal"
+        SLATE = "slate", "Slate"
+
+    app_name = models.CharField(max_length=120, default="MBA Coursework Portal")
+    university_name = models.CharField(max_length=160, default="Superior University Lahore")
+    tagline = models.CharField(max_length=160, default="Student Assessment Tracking")
+    login_subtitle = models.CharField(
+        max_length=240,
+        default="Sign in to manage coursework, submissions, and results.",
+    )
+    footer_text = models.CharField(
+        max_length=240,
+        default="Developed by : Junaid Hafeez (SVL) MBA NON Business 2025-2027",
+        blank=True,
+    )
+    sidebar_title = models.CharField(max_length=80, blank=True)
+    admin_header = models.CharField(max_length=160, default="Student Assessment Submission Portal")
+    teacher_header = models.CharField(max_length=160, default="Teacher Dashboard")
+    student_header = models.CharField(max_length=160, default="Student Dashboard")
+    login_button_text = models.CharField(max_length=40, default="Sign in")
+    theme = models.CharField(max_length=20, choices=Theme.choices, default=Theme.NAVY)
+    logo_url = models.URLField(max_length=500, blank=True)
+    login_background_url = models.URLField(max_length=500, blank=True)
+    modules = models.JSONField(default=dict, blank=True)
+    labels = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Portal settings"
+
+    def __str__(self):
+        return self.app_name or "Portal settings"
+
+    @classmethod
+    def load(cls):
+        row, _ = cls.objects.get_or_create(pk=1)
+        return row

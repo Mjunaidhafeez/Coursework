@@ -2,6 +2,15 @@
 
 :root {
   font-family: "Plus Jakarta Sans", Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  --portal-primary: #2354c7;
+  --portal-secondary: #7c3aed;
+  --portal-navy: #102a5c;
+  --portal-ink: #13377a;
+  --portal-header: #1d4fbf;
+  --portal-sidebar-from: #0a183e;
+  --portal-sidebar-to: #112b68;
+  --portal-accent: #e8c77a;
+  --portal-bg: #eef3fb;
 }
 
 * {
@@ -10,9 +19,9 @@
 
 body {
   margin: 0;
-  background: #eef3fb;
+  background: var(--portal-bg);
   font-size: 16px;
-  color: #10213f;
+  color: var(--portal-navy);
   text-rendering: optimizeLegibility;
 }
 

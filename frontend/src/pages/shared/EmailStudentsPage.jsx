@@ -34,6 +34,7 @@ import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { COMMS, CommsSection } from "../../components/shared/commsUi";
 import { useAuth } from "../../context/AuthContext";
+import { usePortalSettings } from "../../context/PortalSettingsContext";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 
@@ -82,6 +83,7 @@ const recipientType = (item) => (item?.role === "teacher" ? "Teacher" : "Student
 
 const EmailStudentsPage = () => {
   const { user } = useAuth();
+  const { settings: portal } = usePortalSettings();
   const { notify, isGlobalLoading } = useUi();
   const isTeacher = user?.role === "teacher";
   const [subject, setSubject] = useState("");
@@ -132,8 +134,8 @@ const EmailStudentsPage = () => {
       if (!templateLoadedRef.current) {
         const stored = readStoredTemplate();
         const apiTemplate = data.template || {};
-        setHeaderTop(stored?.headerTop || apiTemplate.header_top || DEFAULT_HEADER_TOP);
-        setHeaderTitle(stored?.headerTitle || apiTemplate.header_title || DEFAULT_HEADER_TITLE);
+        setHeaderTop(stored?.headerTop || apiTemplate.header_top || portal.university_name || DEFAULT_HEADER_TOP);
+        setHeaderTitle(stored?.headerTitle || apiTemplate.header_title || portal.app_name || DEFAULT_HEADER_TITLE);
         setFooter(stored?.footer || apiTemplate.footer || defaultFooter(data.sender?.name || ""));
         templateLoadedRef.current = true;
       }

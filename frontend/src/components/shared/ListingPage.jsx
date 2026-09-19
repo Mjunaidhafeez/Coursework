@@ -39,7 +39,7 @@ const ListingPage = ({
               display: "grid",
               placeItems: "center",
               bgcolor: "#e8effc",
-              color: "#13377a",
+              color: "var(--portal-ink)",
               flexShrink: 0,
               "& svg": { fontSize: 18 },
             }}
@@ -48,7 +48,7 @@ const ListingPage = ({
           </Box>
         ) : null}
         <Box minWidth={0}>
-          <Typography sx={{ fontWeight: 800, fontSize: "1.02rem", color: "#13377a", lineHeight: 1.2 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: "1.02rem", color: "var(--portal-ink)", lineHeight: 1.2 }}>
             {title}
           </Typography>
           {subtitle ? (
