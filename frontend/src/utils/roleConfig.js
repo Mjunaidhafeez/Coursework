@@ -23,6 +23,7 @@ export const NAV_ITEMS = {
     { key: "approvals", label: "Assessment Approvals", path: "/admin/coursework-approvals" },
     { key: "groups", label: "Group Approvals", path: "/admin/groups" },
     { key: "reports", label: "Course Result", path: "/admin/reports" },
+    { key: "attendance", label: "Attendance", path: "/admin/attendance" },
     { key: "email", label: "Email", path: "/admin/email-students" },
     { key: "whatsapp", label: "WhatsApp", path: "/admin/whatsapp" },
     { key: "messages", label: "Messages", path: "/admin/messages" },

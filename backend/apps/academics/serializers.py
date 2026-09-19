@@ -113,6 +113,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     course_title = serializers.CharField(source="course.title", read_only=True)
     student_name = serializers.SerializerMethodField()
     student_roll_no = serializers.SerializerMethodField()
+    student_avatar = serializers.SerializerMethodField()
 
     def get_student_name(self, obj):
         return obj.student.get_full_name().strip() or obj.student.username
@@ -120,6 +121,23 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     def get_student_roll_no(self, obj):
         return getattr(getattr(obj.student, "student_profile", None), "student_id", "") or ""
 
+    def get_student_avatar(self, obj):
+        if not getattr(obj.student, "avatar", None):
+            return None
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(obj.student.avatar.url)
+        return obj.student.avatar.url
+
     class Meta:
         model = Enrollment
-        fields = ["id", "student", "student_name", "student_roll_no", "course", "course_title", "created_at"]
+        fields = [
+            "id",
+            "student",
+            "student_name",
+            "student_roll_no",
+            "student_avatar",
+            "course",
+            "course_title",
+            "created_at",
+        ]

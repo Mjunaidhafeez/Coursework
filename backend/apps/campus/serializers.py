@@ -36,22 +36,56 @@ class NoticeSerializer(serializers.ModelSerializer):
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
-    student_name = serializers.CharField(source="student.get_full_name", read_only=True)
+    student_name = serializers.SerializerMethodField()
     username = serializers.CharField(source="student.username", read_only=True)
+    roll_no = serializers.SerializerMethodField()
+    avatar = serializers.SerializerMethodField()
 
     class Meta:
         model = AttendanceRecord
-        fields = ["id", "student", "student_name", "username", "status"]
+        fields = ["id", "student", "student_name", "username", "roll_no", "avatar", "status", "remark"]
+
+    def get_student_name(self, obj):
+        return obj.student.get_full_name().strip() or obj.student.username
+
+    def get_roll_no(self, obj):
+        return getattr(getattr(obj.student, "student_profile", None), "student_id", "") or ""
+
+    def get_avatar(self, obj):
+        if not getattr(obj.student, "avatar", None):
+            return None
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(obj.student.avatar.url)
+        return obj.student.avatar.url
 
 
 class AttendanceSessionSerializer(serializers.ModelSerializer):
     records = AttendanceRecordSerializer(many=True, read_only=True)
     course_code = serializers.CharField(source="course.code", read_only=True)
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    marked_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = AttendanceSession
-        fields = ["id", "course", "course_code", "session_date", "topic", "marked_by", "records", "created_at"]
+        fields = [
+            "id",
+            "course",
+            "course_code",
+            "course_title",
+            "session_date",
+            "topic",
+            "marked_by",
+            "marked_by_name",
+            "records",
+            "created_at",
+        ]
         read_only_fields = ["marked_by"]
+
+    def get_marked_by_name(self, obj):
+        if not obj.marked_by:
+            return ""
+        return obj.marked_by.get_full_name().strip() or obj.marked_by.username
 
 
 class AppealSerializer(serializers.ModelSerializer):

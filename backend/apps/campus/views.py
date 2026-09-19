@@ -1,9 +1,10 @@
 import csv
 import io
 import json
-from datetime import timedelta
+from calendar import monthrange
+from datetime import date, datetime, timedelta
 
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -77,14 +78,69 @@ class NoticeViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["is_deleted"])
 
 
+def _parse_iso_date(value, fallback=None):
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _attendance_percent(present, late, absent, leave=0):
+    counted = present + late + absent
+    if counted <= 0:
+        return 100.0 if leave else 0.0
+    return round(((present + late) / counted) * 100, 1)
+
+
+def _student_roll(user):
+    return getattr(getattr(user, "student_profile", None), "student_id", "") or ""
+
+
+def _student_avatar(user, request):
+    if not getattr(user, "avatar", None):
+        return None
+    if request:
+        return request.build_absolute_uri(user.avatar.url)
+    return user.avatar.url
+
+
+def _student_label(user):
+    return user.get_full_name().strip() or user.username
+
+
+def _period_bounds(period, anchor, date_from, date_to):
+    today = timezone.localdate()
+    anchor = _parse_iso_date(anchor, today)
+    if period == "week":
+        weekday = anchor.weekday()
+        start = anchor - timedelta(days=weekday)
+        return start, start + timedelta(days=6)
+    if period == "month":
+        last = monthrange(anchor.year, anchor.month)[1]
+        return date(anchor.year, anchor.month, 1), date(anchor.year, anchor.month, last)
+    start = _parse_iso_date(date_from, anchor)
+    end = _parse_iso_date(date_to, today)
+    if start > end:
+        start, end = end, start
+    return start, end
+
+
 class AttendanceViewSet(viewsets.ModelViewSet):
     serializer_class = AttendanceSessionSerializer
     permission_classes = [permissions.IsAuthenticated]
     filterset_fields = ["course", "session_date"]
 
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy", "mark"]:
+            return [IsTeacherOrAdmin()]
+        return [permissions.IsAuthenticated()]
+
     def get_queryset(self):
-        qs = AttendanceSession.objects.select_related("course").prefetch_related("records__student")
         user = self.request.user
+        records = AttendanceRecord.objects.select_related("student", "student__student_profile")
+        if user.role == User.Role.STUDENT:
+            records = records.filter(student=user)
+        qs = AttendanceSession.objects.select_related("course", "marked_by").prefetch_related(Prefetch("records", queryset=records))
         if _is_admin(user):
             return qs
         if _is_teacher(user):
@@ -94,11 +150,11 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         course = request.data.get("course")
         session_date = request.data.get("session_date")
-        existing = AttendanceSession.objects.filter(course_id=course, session_date=session_date).first()
+        existing = self.get_queryset().filter(course_id=course, session_date=session_date).first()
         if existing:
-            if request.data.get("topic"):
-                existing.topic = request.data.get("topic")
-                existing.save(update_fields=["topic"])
+            existing.topic = str(request.data.get("topic") or existing.topic or "")[:200]
+            existing.marked_by = request.user
+            existing.save(update_fields=["topic", "marked_by", "updated_at"])
             return Response(self.get_serializer(existing).data)
         return super().create(request, *args, **kwargs)
 
@@ -108,39 +164,190 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def mark(self, request, pk=None):
         session = self.get_object()
+        allowed = set(AttendanceRecord.Status.values)
+        enrolled = set(Enrollment.objects.filter(course=session.course).values_list("student_id", flat=True))
         rows = request.data.get("records") or []
         for row in rows:
             student_id = row.get("student")
-            status_value = row.get("status") or AttendanceRecord.Status.PRESENT
-            if not student_id:
+            try:
+                student_id = int(student_id)
+            except (TypeError, ValueError):
                 continue
+            if student_id not in enrolled:
+                continue
+            status_value = str(row.get("status") or AttendanceRecord.Status.PRESENT).lower()
+            if status_value not in allowed:
+                status_value = AttendanceRecord.Status.PRESENT
             AttendanceRecord.objects.update_or_create(
                 session=session,
                 student_id=student_id,
-                defaults={"status": status_value},
+                defaults={"status": status_value, "remark": str(row.get("remark") or "")[:240]},
             )
+        session.marked_by = request.user
+        session.save(update_fields=["marked_by", "updated_at"])
         return Response(self.get_serializer(session).data)
+
+    def _scoped_records(self, request, course_id=None, start=None, end=None, student_id=None):
+        user = request.user
+        qs = AttendanceRecord.objects.select_related(
+            "student",
+            "student__student_profile",
+            "session",
+            "session__course",
+        )
+        if user.role == User.Role.STUDENT:
+            qs = qs.filter(student=user)
+        elif _is_teacher(user):
+            qs = qs.filter(session__course__teachers=user)
+        if course_id:
+            qs = qs.filter(session__course_id=course_id)
+        if start:
+            qs = qs.filter(session__session_date__gte=start)
+        if end:
+            qs = qs.filter(session__session_date__lte=end)
+        if student_id and user.role != User.Role.STUDENT:
+            qs = qs.filter(student_id=student_id)
+        return qs
+
+    def _counts(self, records):
+        present = sum(1 for item in records if item.status == AttendanceRecord.Status.PRESENT)
+        leave = sum(1 for item in records if item.status == AttendanceRecord.Status.LEAVE)
+        absent = sum(1 for item in records if item.status == AttendanceRecord.Status.ABSENT)
+        late = sum(1 for item in records if item.status == AttendanceRecord.Status.LATE)
+        total = len(records)
+        return {
+            "present": present,
+            "leave": leave,
+            "absent": absent,
+            "late": late,
+            "total": total,
+            "percent": _attendance_percent(present, late, absent, leave),
+        }
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
         user = request.user
         if user.role == User.Role.STUDENT:
-            total = AttendanceRecord.objects.filter(student=user).count()
-            present = AttendanceRecord.objects.filter(student=user, status=AttendanceRecord.Status.PRESENT).count()
-            late = AttendanceRecord.objects.filter(student=user, status=AttendanceRecord.Status.LATE).count()
-            percent = round(((present + late * 0.5) / total) * 100, 1) if total else 0
-            return Response({"total": total, "present": present, "late": late, "percent": percent})
+            counts = self._counts(list(self._scoped_records(request)))
+            return Response(counts)
         course_id = request.query_params.get("course")
-        qs = AttendanceRecord.objects.all()
-        if course_id:
-            qs = qs.filter(session__course_id=course_id)
-        if _is_teacher(user):
-            qs = qs.filter(session__course__teachers=user)
-        grouped = (
-            qs.values("student_id", "student__first_name", "student__last_name", "student__username")
-            .annotate(total=Count("id"), present=Count("id", filter=Q(status="present")))
+        qs = self._scoped_records(request, course_id=course_id)
+        grouped = {}
+        for record in qs:
+            bucket = grouped.setdefault(record.student_id, {"student": record.student, "records": []})
+            bucket["records"].append(record)
+        results = []
+        for student_id, bucket in grouped.items():
+            person = bucket["student"]
+            results.append(
+                {
+                    "student_id": student_id,
+                    "student__first_name": person.first_name,
+                    "student__last_name": person.last_name,
+                    "student__username": person.username,
+                    "name": _student_label(person),
+                    "roll_no": _student_roll(person),
+                    **self._counts(bucket["records"]),
+                }
+            )
+        results.sort(key=lambda row: (row.get("roll_no") or "", row.get("name") or ""))
+        return Response({"results": results})
+
+    @action(detail=False, methods=["get"])
+    def report(self, request):
+        course_id = request.query_params.get("course")
+        student_id = request.query_params.get("student")
+        period = str(request.query_params.get("period") or "range").lower()
+        start, end = _period_bounds(
+            period,
+            request.query_params.get("date"),
+            request.query_params.get("from") or request.query_params.get("date_from"),
+            request.query_params.get("to") or request.query_params.get("date_to"),
         )
-        return Response({"results": list(grouped)})
+        sessions_qs = self.get_queryset().filter(session_date__gte=start, session_date__lte=end)
+        if course_id:
+            sessions_qs = sessions_qs.filter(course_id=course_id)
+        sessions = list(sessions_qs.order_by("session_date", "id"))
+        records = list(self._scoped_records(request, course_id=course_id, start=start, end=end, student_id=student_id))
+        students_map = {}
+        if course_id and request.user.role != User.Role.STUDENT:
+            enrollments = (
+                Enrollment.objects.filter(course_id=course_id)
+                .select_related("student", "student__student_profile")
+                .order_by("student__student_profile__student_id", "student__first_name")
+            )
+            if student_id:
+                enrollments = enrollments.filter(student_id=student_id)
+            for enrollment in enrollments:
+                person = enrollment.student
+                students_map[person.id] = {
+                    "student_id": person.id,
+                    "name": _student_label(person),
+                    "roll_no": _student_roll(person),
+                    "avatar": _student_avatar(person, request),
+                    "records": [],
+                }
+        for record in records:
+            person = record.student
+            bucket = students_map.setdefault(
+                person.id,
+                {
+                    "student_id": person.id,
+                    "name": _student_label(person),
+                    "roll_no": _student_roll(person),
+                    "avatar": _student_avatar(person, request),
+                    "records": [],
+                },
+            )
+            bucket["records"].append(record)
+
+        session_payload = [
+            {
+                "id": item.id,
+                "session_date": item.session_date,
+                "topic": item.topic,
+                "course": item.course_id,
+                "course_code": item.course.code,
+                "course_title": item.course.title,
+            }
+            for item in sessions
+        ]
+        students = []
+        for bucket in students_map.values():
+            days = {}
+            for record in bucket["records"]:
+                key = str(record.session.session_date)
+                days[key] = {
+                    "status": record.status,
+                    "remark": record.remark,
+                    "session_id": record.session_id,
+                    "course_code": record.session.course.code,
+                    "topic": record.session.topic,
+                }
+            students.append(
+                {
+                    "student_id": bucket["student_id"],
+                    "name": bucket["name"],
+                    "roll_no": bucket["roll_no"],
+                    "avatar": bucket["avatar"],
+                    "days": days,
+                    **self._counts(bucket["records"]),
+                }
+            )
+        students.sort(key=lambda row: (row.get("roll_no") or "", row.get("name") or ""))
+        course = Course.objects.filter(id=course_id).first() if course_id else None
+        return Response(
+            {
+                "period": period,
+                "from": start,
+                "to": end,
+                "course": course.id if course else None,
+                "course_code": course.code if course else "",
+                "course_title": course.title if course else "",
+                "sessions": session_payload,
+                "students": students,
+            }
+        )
 
 
 class AppealViewSet(viewsets.ModelViewSet):

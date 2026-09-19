@@ -90,6 +90,7 @@ function App() {
             <Route path="/admin/groups/create" element={<GroupsPage />} />
             <Route path="/admin/group" element={<GroupsPage />} />
             <Route path="/admin/reports" element={<ReportsPage />} />
+            <Route path="/admin/attendance" element={<AttendancePage />} />
             <Route path="/admin/email-students" element={<EmailStudentsPage />} />
             <Route path="/admin/whatsapp" element={<WhatsAppPage />} />
             <Route path="/admin/messages" element={<MessagesPage />} />

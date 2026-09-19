@@ -42,12 +42,14 @@ class AttendanceSession(TimeStampedModel):
 class AttendanceRecord(TimeStampedModel):
     class Status(models.TextChoices):
         PRESENT = "present", "Present"
+        LEAVE = "leave", "Leave"
         ABSENT = "absent", "Absent"
         LATE = "late", "Late"
 
     session = models.ForeignKey(AttendanceSession, on_delete=models.CASCADE, related_name="records")
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="attendance_records")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PRESENT)
+    remark = models.CharField(max_length=240, blank=True)
 
     class Meta:
         unique_together = ("session", "student")

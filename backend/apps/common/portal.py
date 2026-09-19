@@ -49,6 +49,7 @@ DEFAULT_LABELS = {
         "approvals": "Assessment Approvals",
         "groups": "Group Approvals",
         "reports": "Course Result",
+        "attendance": "Attendance",
         "email": "Email",
         "whatsapp": "WhatsApp",
         "messages": "Messages",
