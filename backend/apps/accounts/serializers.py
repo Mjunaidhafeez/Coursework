@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from apps.common.uploads import normalize_phone
+from apps.common.uploads import media_field_url, normalize_phone
 
 from .models import StudentProfile, TeacherProfile, User
 
@@ -85,12 +85,7 @@ class UserSerializer(serializers.ModelSerializer):
         return obj.get_full_name().strip() or obj.username
 
     def get_avatar(self, obj):
-        if not obj.avatar:
-            return None
-        request = self.context.get("request")
-        if request:
-            return request.build_absolute_uri(obj.avatar.url)
-        return obj.avatar.url
+        return media_field_url(obj.avatar, self.context.get("request"))
 
     def get_mailing_address(self, obj):
         return getattr(getattr(obj, "student_profile", None), "mailing_address", "") or ""

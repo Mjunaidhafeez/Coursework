@@ -16,7 +16,7 @@ from apps.common.mailer import _smtp_from
 from apps.common.messaging import add_members, post_message
 from apps.common.models import Conversation
 from apps.common.notify import push_notifications
-from apps.common.uploads import cloudinary_enabled, upload_to_cloudinary, validate_upload
+from apps.common.uploads import cloudinary_enabled, media_field_url, upload_to_cloudinary, validate_upload
 
 from .defaults import DEFAULT_PAGES, PAGE_CATALOG, default_page_flags
 from .models import (
@@ -394,9 +394,7 @@ class StudentViewSet(viewsets.ModelViewSet):
                 semester = f"Semester {profile.semester.number}"
             course = person.enrollments.select_related("course").first()
             class_name = f"{course.course.code} — {course.course.title}" if course else ""
-            photo = ""
-            if person.avatar:
-                photo = request.build_absolute_uri(person.avatar.url)
+            photo = media_field_url(person.avatar, request) or ""
             WebsiteStudent.objects.create(
                 name=person.get_full_name().strip() or person.username,
                 roll_no=roll[:60],

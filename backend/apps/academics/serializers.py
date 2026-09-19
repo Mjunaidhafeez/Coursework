@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.common.uploads import public_file_url
+from apps.common.uploads import media_field_url, public_file_url
 
 from .models import Course, CourseStudyFile, Enrollment, Semester
 
@@ -122,12 +122,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         return getattr(getattr(obj.student, "student_profile", None), "student_id", "") or ""
 
     def get_student_avatar(self, obj):
-        if not getattr(obj.student, "avatar", None):
-            return None
-        request = self.context.get("request")
-        if request:
-            return request.build_absolute_uri(obj.student.avatar.url)
-        return obj.student.avatar.url
+        return media_field_url(getattr(obj.student, "avatar", None), self.context.get("request"))
 
     class Meta:
         model = Enrollment

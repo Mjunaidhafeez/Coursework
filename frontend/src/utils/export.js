@@ -22,6 +22,14 @@ export const downloadCsvFile = ({ filePrefix, headers, rows }) => {
   downloadTextFile(`${fileSafe(filePrefix)}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
 };
 
+export const exportTable = ({ kind, filePrefix, title, headers, rows }) => {
+  if (kind === "pdf") {
+    printTablePdf({ title, headers, rows });
+    return;
+  }
+  downloadCsvFile({ filePrefix, headers, rows });
+};
+
 export const printTablePdf = ({ title, headers, rows }) => {
   const headerRow = headers.map((header) => `<th>${header}</th>`).join("");
   const bodyRows = rows

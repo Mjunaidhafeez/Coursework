@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.common.uploads import media_field_url
+
 from .models import (
     Appeal,
     AttendanceRecord,
@@ -52,12 +54,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         return getattr(getattr(obj.student, "student_profile", None), "student_id", "") or ""
 
     def get_avatar(self, obj):
-        if not getattr(obj.student, "avatar", None):
-            return None
-        request = self.context.get("request")
-        if request:
-            return request.build_absolute_uri(obj.student.avatar.url)
-        return obj.student.avatar.url
+        return media_field_url(getattr(obj.student, "avatar", None), self.context.get("request"))
 
 
 class AttendanceSessionSerializer(serializers.ModelSerializer):

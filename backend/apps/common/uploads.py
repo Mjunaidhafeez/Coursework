@@ -302,6 +302,18 @@ def delete_stored_file(instance, field_name="file"):
         field.delete(save=False)
 
 
+def media_field_url(file_field, request=None):
+    if not file_field:
+        return None
+    try:
+        relative = file_field.url
+    except ValueError:
+        return None
+    if request:
+        return request.build_absolute_uri(relative)
+    return relative
+
+
 def public_file_url(instance, request=None):
     url = getattr(instance, "file_url", "") or ""
     if url:

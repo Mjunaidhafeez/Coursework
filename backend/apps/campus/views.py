@@ -17,6 +17,7 @@ from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
 from apps.academics.models import Course, Enrollment, Semester
 from apps.common.models import AuditLog
 from apps.common.notify import push_notifications
+from apps.common.uploads import media_field_url
 from apps.coursework.models import Coursework, FeedbackGrade, Submission
 
 from .models import (
@@ -97,11 +98,7 @@ def _student_roll(user):
 
 
 def _student_avatar(user, request):
-    if not getattr(user, "avatar", None):
-        return None
-    if request:
-        return request.build_absolute_uri(user.avatar.url)
-    return user.avatar.url
+    return media_field_url(getattr(user, "avatar", None), request)
 
 
 def _student_label(user):

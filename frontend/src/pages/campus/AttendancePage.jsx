@@ -31,7 +31,7 @@ import { ENDPOINTS } from "../../api/endpoints";
 import ListingPage from "../../components/shared/ListingPage";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
-import { downloadCsvFile, printTablePdf } from "../../utils/export";
+import { exportTable } from "../../utils/export";
 import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 import { listRows } from "./listRows";
 
@@ -80,6 +80,8 @@ const sortStudents = (rows) =>
     return String(a.student_name || a.name || "").localeCompare(String(b.student_name || b.name || ""), undefined, { sensitivity: "base" });
   });
 
+const statusLabel = (status) => STATUS_MAP[status]?.label || status || "-";
+
 const statusChip = (status) => {
   const meta = STATUS_MAP[status] || STATUS_MAP.present;
   return (
@@ -97,6 +99,33 @@ const statusChip = (status) => {
     />
   );
 };
+
+const PeriodControls = ({ period, setPeriod, anchorDate, setAnchorDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo }) => (
+  <>
+    <TextField size="small" select label="View" value={period} onChange={(e) => setPeriod(e.target.value)} sx={{ minWidth: 140 }}>
+      <MenuItem value="week">Weekly</MenuItem>
+      <MenuItem value="month">Monthly</MenuItem>
+      <MenuItem value="range">Date range</MenuItem>
+    </TextField>
+    {period === "month" ? (
+      <TextField size="small" type="month" label="Month" InputLabelProps={{ shrink: true }} value={monthValue(anchorDate)} onChange={(e) => setAnchorDate(`${e.target.value}-01`)} />
+    ) : period === "week" ? (
+      <TextField size="small" type="date" label="Week of" InputLabelProps={{ shrink: true }} value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} />
+    ) : (
+      <>
+        <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} />
+        <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} />
+      </>
+    )}
+  </>
+);
+
+const ExportButtons = ({ disabled, onCsv, onPdf, csvLabel = "CSV", pdfLabel = "PDF" }) => (
+  <>
+    <Button size="small" startIcon={<DownloadRoundedIcon />} onClick={onCsv} disabled={disabled}>{csvLabel}</Button>
+    <Button size="small" startIcon={<PictureAsPdfRoundedIcon />} onClick={onPdf} disabled={disabled}>{pdfLabel}</Button>
+  </>
+);
 
 const AttendancePage = () => {
   const { user } = useAuth();
@@ -263,66 +292,24 @@ const AttendancePage = () => {
   };
 
   const classTitle = selectedCourse ? `${selectedCourse.code} — ${selectedCourse.title || ""}`.trim() : "Class";
-
-  const downloadClassSheet = () => {
-    const headers = ["Sr #", "Roll No", "Name", "Status", "Remark"];
-    const rows = students.map((row, index) => [
-      index + 1,
-      row.student_roll_no || "",
-      row.student_name || "",
-      STATUS_MAP[marks[row.student]]?.label || "Present",
-      remarks[row.student] || "",
-    ]);
-    downloadCsvFile({
-      filePrefix: `attendance-${selectedCourse?.code || "class"}-${form.session_date}`,
-      headers,
-      rows,
-    });
-  };
-
-  const printClassSheet = () => {
-    printTablePdf({
-      title: `Attendance · ${classTitle} · ${form.session_date}${form.topic ? ` · ${form.topic}` : ""}`,
-      headers: ["Sr #", "Roll No", "Name", "Status", "Remark"],
-      rows: students.map((row, index) => [
-        index + 1,
-        row.student_roll_no || "",
-        row.student_name || "",
-        STATUS_MAP[marks[row.student]]?.label || "Present",
-        remarks[row.student] || "",
-      ]),
-    });
-  };
-
   const reportRows = report?.students || [];
   const reportSessions = report?.sessions || [];
 
-  const downloadClassReport = () => {
-    const dateHeaders = reportSessions.map((item) => item.session_date);
-    const headers = ["Sr #", "Roll No", "Name", "Present", "Leave", "Absent", "Late", "%", ...dateHeaders];
-    const rows = reportRows.map((row, index) => [
+  const markSheet = () => ({
+    headers: ["Sr #", "Roll No", "Name", "Status", "Remark"],
+    rows: students.map((row, index) => [
       index + 1,
-      row.roll_no || "",
-      row.name || "",
-      row.present,
-      row.leave,
-      row.absent,
-      row.late,
-      `${row.percent}%`,
-      ...reportSessions.map((item) => STATUS_MAP[row.days?.[item.session_date]?.status]?.label || "-"),
-    ]);
-    downloadCsvFile({
-      filePrefix: `attendance-${report?.course_code || "class"}-${report?.from}-${report?.to}`,
-      headers,
-      rows,
-    });
-  };
+      row.student_roll_no || "",
+      row.student_name || "",
+      statusLabel(marks[row.student] || "present"),
+      remarks[row.student] || "",
+    ]),
+  });
 
-  const printClassReport = () => {
+  const classReportSheet = () => {
     const dateHeaders = reportSessions.map((item) => item.session_date);
-    printTablePdf({
-      title: `Attendance report · ${report?.course_code || classTitle} · ${report?.from} to ${report?.to}`,
-      headers: ["Sr #", "Roll No", "Name", "P", "Lv", "A", "Lt", "%", ...dateHeaders],
+    return {
+      headers: ["Sr #", "Roll No", "Name", "Present", "Leave", "Absent", "Late", "%", ...dateHeaders],
       rows: reportRows.map((row, index) => [
         index + 1,
         row.roll_no || "",
@@ -332,9 +319,9 @@ const AttendancePage = () => {
         row.absent,
         row.late,
         `${row.percent}%`,
-        ...reportSessions.map((item) => STATUS_MAP[row.days?.[item.session_date]?.status]?.label || "-"),
+        ...reportSessions.map((item) => statusLabel(row.days?.[item.session_date]?.status)),
       ]),
-    });
+    };
   };
 
   const studentRecordRows = (student) => {
@@ -348,25 +335,43 @@ const AttendancePage = () => {
     ]);
   };
 
-  const downloadStudentRecord = (student) => {
-    const rows = studentRecordRows(student).map((row) => [row[0], row[1], STATUS_MAP[row[2]]?.label || row[2], row[3], row[4]]);
-    downloadCsvFile({
-      filePrefix: `attendance-${student.roll_no || student.name}-${report?.from || "record"}`,
-      headers: ["Date", "Course", "Status", "Topic", "Remark"],
+  const studentExportRows = (student) =>
+    studentRecordRows(student).map((row) => [row[0], row[1], statusLabel(row[2]), row[3], row[4]]);
+
+  const exportClassSheet = (kind) => {
+    const { headers, rows } = markSheet();
+    exportTable({
+      kind,
+      filePrefix: `attendance-${selectedCourse?.code || "class"}-${form.session_date}`,
+      title: `Attendance · ${classTitle} · ${form.session_date}${form.topic ? ` · ${form.topic}` : ""}`,
+      headers,
       rows,
     });
   };
 
-  const printStudentRecord = (student) => {
-    const rows = studentRecordRows(student).map((row) => [row[0], row[1], STATUS_MAP[row[2]]?.label || row[2], row[3], row[4]]);
-    printTablePdf({
+  const exportClassReport = (kind) => {
+    const { headers, rows } = classReportSheet();
+    exportTable({
+      kind,
+      filePrefix: `attendance-${report?.course_code || "class"}-${report?.from}-${report?.to}`,
+      title: `Attendance report · ${report?.course_code || classTitle} · ${report?.from} to ${report?.to}`,
+      headers,
+      rows,
+    });
+  };
+
+  const exportStudentRecord = (student, kind) => {
+    exportTable({
+      kind,
+      filePrefix: `attendance-${student.roll_no || student.name}-${report?.from || "record"}`,
       title: `Attendance · ${student.name} (${student.roll_no || "-"}) · ${student.percent}%`,
       headers: ["Date", "Course", "Status", "Topic", "Remark"],
-      rows,
+      rows: studentExportRows(student),
     });
   };
 
   const studentSelf = reportRows[0] || null;
+  const selfRows = studentRecordRows(studentSelf);
 
   const toolbar = !isStudent ? (
     <Stack spacing={1}>
@@ -388,21 +393,7 @@ const AttendancePage = () => {
           </>
         ) : (
           <>
-            <TextField size="small" select label="View" value={period} onChange={(e) => setPeriod(e.target.value)} sx={{ minWidth: 140 }}>
-              <MenuItem value="week">Weekly</MenuItem>
-              <MenuItem value="month">Monthly</MenuItem>
-              <MenuItem value="range">Date range</MenuItem>
-            </TextField>
-            {period === "month" ? (
-              <TextField size="small" type="month" label="Month" InputLabelProps={{ shrink: true }} value={monthValue(anchorDate)} onChange={(e) => setAnchorDate(`${e.target.value}-01`)} />
-            ) : period === "week" ? (
-              <TextField size="small" type="date" label="Week of" InputLabelProps={{ shrink: true }} value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} />
-            ) : (
-              <>
-                <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} />
-                <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} />
-              </>
-            )}
+            <PeriodControls period={period} setPeriod={setPeriod} anchorDate={anchorDate} setAnchorDate={setAnchorDate} rangeFrom={rangeFrom} setRangeFrom={setRangeFrom} rangeTo={rangeTo} setRangeTo={setRangeTo} />
           </>
         )}
       </Stack>
@@ -427,21 +418,7 @@ const AttendancePage = () => {
           </MenuItem>
         ))}
       </TextField>
-      <TextField size="small" select label="View" value={period} onChange={(e) => setPeriod(e.target.value)} sx={{ minWidth: 140 }}>
-        <MenuItem value="week">Weekly</MenuItem>
-        <MenuItem value="month">Monthly</MenuItem>
-        <MenuItem value="range">Date range</MenuItem>
-      </TextField>
-      {period === "month" ? (
-        <TextField size="small" type="month" label="Month" InputLabelProps={{ shrink: true }} value={monthValue(anchorDate)} onChange={(e) => setAnchorDate(`${e.target.value}-01`)} />
-      ) : period === "week" ? (
-        <TextField size="small" type="date" label="Week of" InputLabelProps={{ shrink: true }} value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} />
-      ) : (
-        <>
-          <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} />
-          <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} />
-        </>
-      )}
+      <PeriodControls period={period} setPeriod={setPeriod} anchorDate={anchorDate} setAnchorDate={setAnchorDate} rangeFrom={rangeFrom} setRangeFrom={setRangeFrom} rangeTo={rangeTo} setRangeTo={setRangeTo} />
     </Stack>
   );
 
@@ -457,12 +434,7 @@ const AttendancePage = () => {
             All {item.label}
           </Button>
         ))}
-        <Button size="small" startIcon={<DownloadRoundedIcon />} onClick={downloadClassSheet} disabled={!students.length}>
-          CSV
-        </Button>
-        <Button size="small" startIcon={<PictureAsPdfRoundedIcon />} onClick={printClassSheet} disabled={!students.length}>
-          PDF
-        </Button>
+        <ExportButtons disabled={!students.length} onCsv={() => exportClassSheet("csv")} onPdf={() => exportClassSheet("pdf")} />
       </Stack>
       <TableContainer sx={{ overflowX: "auto" }}>
         <Table size="small" stickyHeader>
@@ -539,12 +511,7 @@ const AttendancePage = () => {
           {report ? `${reportRows.length} students · ${reportSessions.length} sessions` : "Select a course to view status and percentage."}
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Button size="small" startIcon={<DownloadRoundedIcon />} onClick={downloadClassReport} disabled={!reportRows.length}>
-          Class CSV
-        </Button>
-        <Button size="small" startIcon={<PictureAsPdfRoundedIcon />} onClick={printClassReport} disabled={!reportRows.length}>
-          Class PDF
-        </Button>
+        <ExportButtons disabled={!reportRows.length} csvLabel="Class CSV" pdfLabel="Class PDF" onCsv={() => exportClassReport("csv")} onPdf={() => exportClassReport("pdf")} />
       </Stack>
       <TableContainer sx={{ overflowX: "auto" }}>
         <Table size="small" stickyHeader>
@@ -608,7 +575,7 @@ const AttendancePage = () => {
                     <Button size="small" onClick={() => setStudentDialog(row)}>
                       View
                     </Button>
-                    <Button size="small" onClick={() => downloadStudentRecord(row)}>
+                    <Button size="small" onClick={() => exportStudentRecord(row, "csv")}>
                       CSV
                     </Button>
                   </Stack>
@@ -645,12 +612,7 @@ const AttendancePage = () => {
       {studentSelf ? (
         <Stack direction="row" spacing={1}>
           <Chip label={`${studentSelf.percent}% this view`} sx={{ fontWeight: 800 }} />
-          <Button size="small" startIcon={<DownloadRoundedIcon />} onClick={() => downloadStudentRecord(studentSelf)}>
-            My CSV
-          </Button>
-          <Button size="small" startIcon={<PictureAsPdfRoundedIcon />} onClick={() => printStudentRecord(studentSelf)}>
-            My PDF
-          </Button>
+          <ExportButtons csvLabel="My CSV" pdfLabel="My PDF" onCsv={() => exportStudentRecord(studentSelf, "csv")} onPdf={() => exportStudentRecord(studentSelf, "pdf")} />
         </Stack>
       ) : null}
       <TableContainer>
@@ -665,7 +627,7 @@ const AttendancePage = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {studentRecordRows(studentSelf).map((row) => (
+            {selfRows.map((row) => (
               <TableRow key={`${row[0]}-${row[1]}`}>
                 <TableCell>{row[0]}</TableCell>
                 <TableCell>{row[1]}</TableCell>
@@ -674,7 +636,7 @@ const AttendancePage = () => {
                 <TableCell>{row[4] || "-"}</TableCell>
               </TableRow>
             ))}
-            {!studentRecordRows(studentSelf).length ? (
+            {!selfRows.length ? (
               <TableRow>
                 <TableCell colSpan={5}>
                   <Typography variant="body2" color="text.secondary">No attendance recorded in this period.</Typography>
@@ -732,8 +694,8 @@ const AttendancePage = () => {
           </Table>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => studentDialog && downloadStudentRecord(studentDialog)}>Download CSV</Button>
-          <Button onClick={() => studentDialog && printStudentRecord(studentDialog)}>Download PDF</Button>
+          <Button onClick={() => studentDialog && exportStudentRecord(studentDialog, "csv")}>Download CSV</Button>
+          <Button onClick={() => studentDialog && exportStudentRecord(studentDialog, "pdf")}>Download PDF</Button>
           <Button onClick={() => setStudentDialog(null)}>Close</Button>
         </DialogActions>
       </Dialog>
