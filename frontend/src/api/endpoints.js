@@ -42,4 +42,8 @@ export const ENDPOINTS = {
   websiteAnnouncements: "/website/announcements/",
   websiteGallery: "/website/gallery/",
   websiteDownloads: "/website/downloads/",
+  websiteTeachers: "/website/teachers/",
+  websiteAlumni: "/website/alumni/",
+  websiteResults: "/website/results/",
+  websiteInquiries: "/website/inquiries/",
 };

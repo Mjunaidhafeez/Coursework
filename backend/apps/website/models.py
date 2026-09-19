@@ -1,19 +1,11 @@
 from django.db import models
 
 from apps.common.models import TimeStampedModel
+from .defaults import PAGE_CATALOG, default_page_flags
 
 
 def default_nav():
-    return [
-        {"label": "Home", "path": "/"},
-        {"label": "About", "path": "/about"},
-        {"label": "VC Message", "path": "/vc"},
-        {"label": "Programs", "path": "/programs"},
-        {"label": "Admissions", "path": "/admissions"},
-        {"label": "Announcements", "path": "/announcements"},
-        {"label": "Gallery", "path": "/gallery"},
-        {"label": "Downloads", "path": "/downloads"},
-    ]
+    return [{"label": item["label"], "path": item["path"]} for item in PAGE_CATALOG]
 
 
 def default_pages():
@@ -25,6 +17,10 @@ class WebsiteSettings(TimeStampedModel):
     tagline = models.CharField(max_length=240, default="Excellence in professional education")
     primary_color = models.CharField(max_length=20, default="#102a5c")
     accent_color = models.CharField(max_length=20, default="#c9a227")
+    secondary_color = models.CharField(max_length=20, default="#8c1d2c")
+    header_color = models.CharField(max_length=20, default="#0b1c40")
+    footer_color = models.CharField(max_length=20, default="#071428")
+    page_flags = models.JSONField(default=default_page_flags, blank=True)
     logo_url = models.URLField(max_length=500, blank=True)
     hero_image_url = models.URLField(max_length=500, blank=True)
     show_login_button = models.BooleanField(default=True)
@@ -81,6 +77,73 @@ class WebsiteDownload(TimeStampedModel):
     file_url = models.URLField(max_length=500)
     original_name = models.CharField(max_length=255, blank=True)
     published = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class WebsiteTeacher(TimeStampedModel):
+    name = models.CharField(max_length=160)
+    designation = models.CharField(max_length=160, blank=True)
+    department = models.CharField(max_length=160, blank=True)
+    degrees = models.CharField(max_length=300, blank=True)
+    bio = models.TextField(blank=True)
+    photo_url = models.URLField(max_length=500, blank=True)
+    published = models.BooleanField(default=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+
+
+class WebsiteAlumnus(TimeStampedModel):
+    name = models.CharField(max_length=160)
+    batch = models.CharField(max_length=40, blank=True)
+    program = models.CharField(max_length=120, blank=True)
+    current_role = models.CharField(max_length=200, blank=True)
+    story = models.TextField(blank=True)
+    photo_url = models.URLField(max_length=500, blank=True)
+    published = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class WebsiteResult(TimeStampedModel):
+    student_name = models.CharField(max_length=160)
+    roll_no = models.CharField(max_length=60)
+    program = models.CharField(max_length=120, blank=True)
+    year = models.CharField(max_length=20, blank=True)
+    grade = models.CharField(max_length=40, blank=True)
+    marks = models.CharField(max_length=40, blank=True)
+    teacher_names = models.CharField(max_length=300, blank=True)
+    degrees = models.CharField(max_length=300, blank=True)
+    photo_url = models.URLField(max_length=500, blank=True)
+    published = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-year", "student_name"]
+
+
+class WebsiteInquiry(TimeStampedModel):
+    class Status(models.TextChoices):
+        NEW = "new", "New"
+        REPLIED = "replied", "Replied"
+
+    name = models.CharField(max_length=160)
+    email = models.EmailField()
+    phone = models.CharField(max_length=40, blank=True)
+    subject = models.CharField(max_length=200, blank=True)
+    message = models.TextField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
+    admin_reply = models.TextField(blank=True)
+    conversation = models.ForeignKey(
+        "common.Conversation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="website_inquiries",
+    )
 
     class Meta:
         ordering = ["-created_at"]

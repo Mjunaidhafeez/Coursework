@@ -10,17 +10,28 @@ const SiteLayout = () => {
 
   return (
     <div className="site-shell">
+      <div className="site-topbar">
+        <div className="site-wrap site-topbar-inner">
+          <span>{[site.phone, site.email, site.address].filter(Boolean).join("  ·  ")}</span>
+          <span className="site-top-socials">
+            {site.facebook ? <a href={site.facebook}>Facebook</a> : null}
+            {site.twitter ? <a href={site.twitter}>X</a> : null}
+            {site.instagram ? <a href={site.instagram}>Instagram</a> : null}
+            {site.youtube ? <a href={site.youtube}>YouTube</a> : null}
+          </span>
+        </div>
+      </div>
       <header className="site-header">
         <div className="site-wrap site-header-inner">
           <Link to="/" className="site-brand" onClick={() => setOpen(false)}>
-            {site.logo_url ? <img src={site.logo_url} alt={site.site_name} /> : null}
+            {site.logo_url ? <img src={site.logo_url} alt={site.site_name} /> : <span className="brand-mark">{(site.site_name || "U").slice(0, 1)}</span>}
             <span>
               <strong>{site.site_name}</strong>
               {site.tagline ? <em>{site.tagline}</em> : null}
             </span>
           </Link>
           <button className="site-menu-btn" type="button" onClick={() => setOpen((v) => !v)} aria-label="Menu">
-            Menu
+            {open ? "Close" : "Menu"}
           </button>
           <nav className={`site-nav ${open ? "is-open" : ""}`}>
             {nav.map((item) => (
@@ -44,15 +55,18 @@ const SiteLayout = () => {
             <p>{site.footer_text}</p>
           </div>
           <div>
+            <strong>Visit</strong>
             {site.address ? <p>{site.address}</p> : null}
             {site.phone ? <p>{site.phone}</p> : null}
             {site.email ? <p>{site.email}</p> : null}
           </div>
-          <div className="site-socials">
-            {site.facebook ? <a href={site.facebook}>Facebook</a> : null}
-            {site.twitter ? <a href={site.twitter}>Twitter</a> : null}
-            {site.instagram ? <a href={site.instagram}>Instagram</a> : null}
-            {site.youtube ? <a href={site.youtube}>YouTube</a> : null}
+          <div>
+            <strong>Explore</strong>
+            <div className="site-socials">
+              {nav.slice(0, 6).map((item) => (
+                <Link key={item.path} to={item.path}>{item.label}</Link>
+              ))}
+            </div>
           </div>
         </div>
       </footer>

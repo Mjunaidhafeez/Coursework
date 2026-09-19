@@ -9,6 +9,9 @@ const FALLBACK = {
   tagline: "",
   primary_color: "#102a5c",
   accent_color: "#c9a227",
+  secondary_color: "#8c1d2c",
+  header_color: "#0b1c40",
+  footer_color: "#071428",
   logo_url: "",
   hero_image_url: "",
   show_login_button: true,
@@ -22,20 +25,15 @@ const FALLBACK = {
   twitter: "",
   instagram: "",
   youtube: "",
-  nav: [
-    { label: "Home", path: "/" },
-    { label: "About", path: "/about" },
-    { label: "VC Message", path: "/vc" },
-    { label: "Programs", path: "/programs" },
-    { label: "Admissions", path: "/admissions" },
-    { label: "Announcements", path: "/announcements" },
-    { label: "Gallery", path: "/gallery" },
-    { label: "Downloads", path: "/downloads" },
-  ],
+  page_flags: {},
+  nav: [],
   pages: {},
   announcements: [],
   gallery: [],
   downloads: [],
+  teachers: [],
+  alumni: [],
+  results: [],
 };
 
 export const SiteProvider = ({ children }) => {
@@ -51,8 +49,12 @@ export const SiteProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    document.documentElement.style.setProperty("--site-primary", site.primary_color || "#102a5c");
-    document.documentElement.style.setProperty("--site-accent", site.accent_color || "#c9a227");
+    const root = document.documentElement;
+    root.style.setProperty("--site-primary", site.primary_color || "#102a5c");
+    root.style.setProperty("--site-accent", site.accent_color || "#c9a227");
+    root.style.setProperty("--site-secondary", site.secondary_color || "#8c1d2c");
+    root.style.setProperty("--site-header", site.header_color || "#0b1c40");
+    root.style.setProperty("--site-footer", site.footer_color || "#071428");
     document.title = site.site_name || "University";
   }, [site]);
 
