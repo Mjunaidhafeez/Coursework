@@ -1,1 +1,0 @@
-import{j as t,as as s}from"./index-KNWtumXg.js";const a=()=>t.jsx(s,{to:"/student/submit",replace:!0});export{a as default};

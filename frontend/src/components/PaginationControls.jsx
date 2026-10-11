@@ -28,7 +28,7 @@ const PaginationControls = ({ page, pageSize, total, onPageChange, onPageSizeCha
       }}
     >
       <Typography variant="body2" color="text.secondary">
-        Page {page} of {totalPages} ? {total} records
+        Page {page} of {totalPages} ? {total} {total === 1 ? "record" : "records"}
       </Typography>
       <Box sx={{ display: "flex", gap: 0.8, alignItems: "center" }}>
         <TextField
