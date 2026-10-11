@@ -4,7 +4,9 @@ import json
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 
+from django.db import transaction
 from django.db.models import Count, Prefetch, Q
+from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -670,27 +672,50 @@ def global_search(request):
     return Response({"results": results})
 
 
-@api_view(["GET", "POST"])
+def _recycle_ids(data):
+    notice_ids = list(data.get("notice_ids") or [])
+    user_ids = list(data.get("user_ids") or [])
+    if data.get("notice_id"):
+        notice_ids.append(data.get("notice_id"))
+    if data.get("user_id"):
+        user_ids.append(data.get("user_id"))
+    return user_ids, notice_ids
+
+
+@api_view(["GET", "POST", "DELETE"])
 @permission_classes([IsSuperAdmin])
 def recycle_bin(request):
-    if request.method == "POST":
-        notice_ids = list(request.data.get("notice_ids") or [])
-        user_ids = list(request.data.get("user_ids") or [])
-        if request.data.get("notice_id"):
-            notice_ids.append(request.data.get("notice_id"))
-        if request.data.get("user_id"):
-            user_ids.append(request.data.get("user_id"))
-        restored = {"users": 0, "notices": 0}
-        if notice_ids:
-            notices = Notice.objects.filter(id__in=notice_ids, is_deleted=True)
-            restored["notices"] = notices.update(is_deleted=False)
-        if user_ids:
-            people = User.objects.filter(id__in=user_ids).exclude(role=User.Role.SUPER_ADMIN)
-            restored["users"] = people.update(is_active=True)
+    if request.method in ("POST", "DELETE"):
+        user_ids, notice_ids = _recycle_ids(request.data)
         if not notice_ids and not user_ids:
-            return Response({"detail": "Nothing to restore."}, status=404)
-        return Response({"detail": "Restored.", "restored": restored})
-    inactive = User.objects.filter(is_active=False).order_by("-id")[:200]
+            return Response({"detail": "Nothing selected."}, status=status.HTTP_400_BAD_REQUEST)
+        if request.method == "POST":
+            restored = {"users": 0, "notices": 0}
+            if notice_ids:
+                notices = Notice.objects.filter(id__in=notice_ids, is_deleted=True)
+                restored["notices"] = notices.update(is_deleted=False)
+            if user_ids:
+                people = User.objects.filter(id__in=user_ids, is_active=False).exclude(role=User.Role.SUPER_ADMIN)
+                restored["users"] = people.update(is_active=True)
+            return Response({"detail": "Restored.", "restored": restored})
+        people = User.objects.filter(id__in=user_ids, is_active=False).exclude(role=User.Role.SUPER_ADMIN)
+        if people.filter(id=request.user.id).exists():
+            return Response({"detail": "You cannot permanently delete your own account."}, status=status.HTTP_400_BAD_REQUEST)
+        notices = Notice.objects.filter(id__in=notice_ids, is_deleted=True)
+        try:
+            with transaction.atomic():
+                deleted = {"users": people.count(), "notices": notices.count()}
+                if notice_ids:
+                    notices.delete()
+                if user_ids:
+                    people.delete()
+        except ProtectedError:
+            return Response(
+                {"detail": "Some records are still linked and cannot be permanently deleted."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"detail": "Permanently deleted.", "deleted": deleted})
+    inactive = User.objects.filter(is_active=False).exclude(role=User.Role.SUPER_ADMIN).order_by("-id")[:200]
     notices = Notice.objects.filter(is_deleted=True).order_by("-updated_at")[:100]
     return Response(
         {

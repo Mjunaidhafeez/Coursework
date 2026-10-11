@@ -7,6 +7,12 @@ from apps.common.uploads import media_field_url, normalize_phone
 from .models import StudentProfile, TeacherProfile, User
 
 
+def _taken_error(label, inactive=False):
+    if inactive:
+        return f"This {label} is in the recycle bin. Restore that account or permanently delete it first."
+    return f"This {label} is already in use."
+
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
@@ -193,8 +199,9 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
         qs = User.objects.filter(username__iexact=username)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("This username is already in use.")
+        conflict = qs.first()
+        if conflict:
+            raise serializers.ValidationError(_taken_error("username", not conflict.is_active))
         return username
 
     def validate(self, attrs):
@@ -211,8 +218,9 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
         qs = User.objects.filter(email__iexact=email)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError({"email": "This email is already in use."})
+        conflict = qs.first()
+        if conflict:
+            raise serializers.ValidationError({"email": _taken_error("email", not conflict.is_active)})
 
         if role == User.Role.TEACHER:
             if teacher_profile_data is None:
@@ -232,8 +240,11 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
             profile_qs = StudentProfile.objects.filter(student_id=student_id)
             if self.instance and hasattr(self.instance, "student_profile"):
                 profile_qs = profile_qs.exclude(pk=self.instance.student_profile.pk)
-            if profile_qs.exists():
-                raise serializers.ValidationError({"student_profile": {"student_id": "Student profile with this student id already exists."}})
+            conflict = profile_qs.select_related("user").first()
+            if conflict:
+                raise serializers.ValidationError({
+                    "student_profile": {"student_id": _taken_error("student ID", not conflict.user.is_active)},
+                })
 
         return attrs
 

@@ -5,3 +5,10 @@ export const confirmDelete = (entityLabel = "record") =>
 
 export const confirmBulkDelete = (count, entityLabel = "records") =>
   confirmAction(`Delete ${count} selected ${entityLabel}?`);
+
+export const confirmPermanentDelete = (entityLabel = "record", count = 1) =>
+  confirmAction(
+    count > 1
+      ? `Permanently delete ${count} selected ${entityLabel}? This cannot be undone.`
+      : `Permanently delete this ${entityLabel}? This cannot be undone.`
+  );
