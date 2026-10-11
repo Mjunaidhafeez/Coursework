@@ -459,7 +459,7 @@ const AttendancePage = () => {
                 <TableRow key={row.id || row.student} hover>
                   <TableCell>{index + 1}</TableCell>
                   <TableCell>
-                    <PersonAvatar person={row} src={row.student_avatar} name={row.student_name} role="student" size={32} />
+                    <PersonAvatar person={row} src={row.student_avatar} name={row.student_name} size={32} />
                   </TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{row.student_roll_no || "-"}</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{row.student_name || row.student}</TableCell>
@@ -542,7 +542,7 @@ const AttendancePage = () => {
               <TableRow key={row.student_id} hover>
                 <TableCell>{index + 1}</TableCell>
                 <TableCell>
-                  <PersonAvatar person={row} name={row.name} role="student" size={30} />
+                  <PersonAvatar person={row} name={row.name} size={30} />
                 </TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>{row.roll_no || "-"}</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>{row.name}</TableCell>
@@ -668,7 +668,7 @@ const AttendancePage = () => {
       <Dialog open={Boolean(studentDialog)} onClose={() => setStudentDialog(null)} fullWidth maxWidth="sm">
         <DialogTitle>
           <Stack direction="row" spacing={1} alignItems="center">
-            <PersonAvatar person={studentDialog} name={studentDialog?.name} role="student" size={36} />
+            <PersonAvatar person={studentDialog} name={studentDialog?.name} size={36} />
             <span>{studentDialog?.name} · {studentDialog?.roll_no || "-"} · {studentDialog?.percent}%</span>
           </Stack>
         </DialogTitle>

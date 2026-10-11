@@ -1,3 +1,11 @@
+export const getRoleLetter = (role) => {
+  const value = String(role || "").toLowerCase();
+  if (value === "student") return "S";
+  if (value === "teacher") return "T";
+  if (value === "super_admin") return "A";
+  return (value.slice(0, 1) || "-").toUpperCase();
+};
+
 export const getUserDisplayName = (user, options = {}) => {
   const { includeUsername = false } = options;
   if (!user) return "";

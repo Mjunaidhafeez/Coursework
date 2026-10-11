@@ -126,7 +126,7 @@ const TopicAllotDialog = ({ coursework, onClose, onSaved }) => {
           {targets.map((row) => (
             <Stack key={row.id} spacing={0.3}>
               <Stack direction="row" spacing={0.8} alignItems="center">
-                <PersonNameCell person={{ ...row, role: perGroup ? "" : "student" }} name={row.name} size={28} />
+                <PersonNameCell person={row} name={row.name} size={28} />
                 {row.roll_no ? (
                   <Typography variant="caption" color="text.secondary">
                     {row.roll_no}

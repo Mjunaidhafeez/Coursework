@@ -36,7 +36,7 @@ import useRowSelection from "../../hooks/useRowSelection";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { downloadCsvFile, printTablePdf } from "../../utils/export";
-import { getUserDisplayName } from "../../utils/userDisplay";
+import { getRoleLetter, getUserDisplayName } from "../../utils/userDisplay";
 import { PersonNameCell, PersonPhotoField } from "../../components/shared/PersonAvatar";
 import SelectPlaceholder from "../../components/shared/SelectPlaceholder";
 import { confirmDelete } from "../../utils/confirm";
@@ -87,7 +87,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const [formErrors, setFormErrors] = useState({});
   const [showValidation, setShowValidation] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [sortBy, setSortBy] = useState("username");
+  const [sortBy, setSortBy] = useState("first_name");
   const [sortOrder, setSortOrder] = useState("asc");
   const isStudentAdminPage = urlRole === "student";
   const isUserCenterPage = !fixedRole && !urlRole;
@@ -456,8 +456,8 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   };
   const nameHeaderLabel = urlRole === "teacher" ? "Teacher Name" : urlRole === "student" ? "Student Name" : "Full Name";
   const sortableColumns = [
-    { key: "username", label: "Username" },
     { key: "first_name", label: nameHeaderLabel },
+    { key: "username", label: "Username" },
     { key: "email", label: "Email" },
     { key: "role", label: "Role" },
   ];
@@ -483,7 +483,6 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             src={form.avatarUrl}
             file={form.avatar}
             name={`${form.first_name} ${form.last_name}`.trim() || form.username}
-            role={form.role}
             onChange={(file) => updateForm((p) => ({ ...p, avatar: file }))}
           />
           <TextField required size="small" label="Username" value={form.username} error={showValidation && Boolean(formErrors.username)} helperText={showValidation ? formErrors.username || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, username: e.target.value }))} />
@@ -675,12 +674,12 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                 <TableCell padding="checkbox">
                   <Checkbox size="small" checked={selection.isSelected(user.id)} onChange={() => selection.toggle(user.id)} />
                 </TableCell>
-                <TableCell>{user.username}</TableCell>
                 <TableCell>
                   <PersonNameCell person={user} />
                 </TableCell>
+                <TableCell>{user.username}</TableCell>
                 <TableCell>{user.email}</TableCell>
-                <TableCell>{String(user.role || "").replace("_", " ")}</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>{getRoleLetter(user.role)}</TableCell>
                 <TableCell>{user.student_profile?.department_name || user.teacher_profile?.department_name || user.teacher_profile?.department || "-"}</TableCell>
                 {isStudentAdminPage ? <TableCell>{user.student_profile?.school_class_name || "-"}</TableCell> : null}
                 {isStudentAdminPage ? <TableCell>{user.student_profile?.section_name || "-"}</TableCell> : null}

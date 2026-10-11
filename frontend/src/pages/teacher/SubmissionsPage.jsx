@@ -1710,7 +1710,6 @@ const SubmissionsPage = () => {
                                     <PersonNameCell
                                       person={item}
                                       name={studentLabel}
-                                      role={item.group_name ? "" : "student"}
                                       size={28}
                                     />
                                     {canViewMembers ? (
@@ -1851,7 +1850,7 @@ const SubmissionsPage = () => {
                   return (
                     <TableRow key={`${member.id || member.student_id || idx}-dialog`}>
                       <TableCell>
-                        <PersonNameCell person={member} name={member.name} role="student" size={26} />
+                        <PersonNameCell person={member} name={member.name} size={26} />
                       </TableCell>
                       <TableCell>{member.roll_no || "-"}</TableCell>
                       <TableCell>

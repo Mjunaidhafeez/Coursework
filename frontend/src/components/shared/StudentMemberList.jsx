@@ -5,7 +5,7 @@ import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 
 const normalizeMember = (member) => {
   if (typeof member === "string") {
-    return { key: member, name: member, rollNo: "", avatar: null, role: "student" };
+    return { key: member, name: member, rollNo: "", avatar: null };
   }
   const name =
     member?.name ||
@@ -17,7 +17,7 @@ const normalizeMember = (member) => {
   const rollNo = member?.rollNo || member?.roll_no || member?.student_roll_no || member?.student_id || "";
   const avatar = toAbsoluteMediaUrl(member?.avatar || member?.student_avatar || null);
   const key = member?.id || member?.student || `${name}-${rollNo}`;
-  return { key, name, rollNo, avatar, role: member?.role || "student" };
+  return { key, name, rollNo, avatar };
 };
 
 const StudentMemberList = ({ members = [], emptyText = "No members found.", compact = false }) => {
@@ -56,7 +56,7 @@ const StudentMemberList = ({ members = [], emptyText = "No members found.", comp
           >
             <Box sx={{ display: "grid", gridTemplateColumns: "minmax(160px, 2fr) minmax(90px, 1fr)", gap: 0.6, alignItems: "center" }}>
               <Stack direction="row" spacing={0.7} alignItems="center" minWidth={0}>
-                <PersonAvatar person={item} src={item.avatar} name={item.name} role="student" size={compact ? 20 : 26} />
+                <PersonAvatar person={item} src={item.avatar} name={item.name} size={compact ? 20 : 26} />
                 <Typography variant="body2" sx={{ fontWeight: 700, fontSize: compact ? "0.68rem" : "0.8rem" }}>
                   {item.name}
                 </Typography>

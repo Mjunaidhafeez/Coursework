@@ -304,7 +304,7 @@ const CoursesPage = () => {
                         <Chip
                           key={id}
                           size="small"
-                          avatar={<PersonAvatar person={teacher} role="teacher" size={22} />}
+                          avatar={<PersonAvatar person={teacher} size={22} />}
                           label={getUserDisplayName(teacher) || id}
                         />
                       );
