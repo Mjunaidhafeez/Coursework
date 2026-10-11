@@ -49,13 +49,8 @@ const CourseworkFormSection = ({
   })();
 
   return (
-    <Paper variant="outlined" sx={{ p: 0.75, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
-      <Stack spacing={0.65}>
-        <Typography sx={{ fontWeight: 800, color: "#13377a", fontSize: "0.92rem" }}>
-          {editingId ? "Update assessment" : "Create assessment"}
-        </Typography>
-
-        <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="flex-start">
+    <Paper variant="outlined" sx={{ p: 0.55, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
+      <Stack direction="row" spacing={0.55} useFlexGap flexWrap="wrap" alignItems="center">
           <TextField
             required
             select
@@ -147,12 +142,6 @@ const CourseworkFormSection = ({
             onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
             sx={compactFieldSx}
           />
-        </Stack>
-
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
-          <Typography sx={{ fontWeight: 700, fontSize: "0.78rem", color: "#35507c" }}>
-            Submit as
-          </Typography>
           <ToggleButtonGroup
             exclusive
             size="small"
@@ -204,7 +193,7 @@ const CourseworkFormSection = ({
             value={form.topic_source || TOPIC_SOURCE_STUDENT}
             error={Boolean(formErrors.topic_source)}
             helperText={formErrors.topic_source || undefined}
-            sx={{ ...compactFieldSx, width: { sm: 220 }, flex: { sm: "0 0 220px" }, maxWidth: { sm: 260 } }}
+            sx={compactFieldSx}
             onChange={(e) => {
               const value = e.target.value;
               setForm((p) => applyTopicSource(p, value));
@@ -217,9 +206,6 @@ const CourseworkFormSection = ({
               </MenuItem>
             ))}
           </TextField>
-        </Stack>
-
-        <Stack direction="row" spacing={0.4} useFlexGap flexWrap="wrap" alignItems="center">
           <FormControlLabel
             sx={{ mr: 1.2 }}
             control={
@@ -272,19 +258,14 @@ const CourseworkFormSection = ({
               />
             </>
           ) : null}
-        </Stack>
-
-        {datalistId ? <datalist id={datalistId} /> : null}
-
-        <Stack direction="row" spacing={0.8}>
+          {datalistId ? <datalist id={datalistId} /> : null}
           <Button size="small" variant="contained" onClick={onSubmit}>
-            {editingId ? "Update assessment" : "Create assessment"}
+            {editingId ? "Update" : "Add"}
           </Button>
           <Button size="small" variant="outlined" onClick={onClear}>
             Clear
           </Button>
         </Stack>
-      </Stack>
     </Paper>
   );
 };

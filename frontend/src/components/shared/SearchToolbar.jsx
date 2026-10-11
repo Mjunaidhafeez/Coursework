@@ -1,5 +1,3 @@
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import { Button, Stack, TextField } from "@mui/material";
 
 import { filterBarSx } from "./listingStyles";
@@ -26,12 +24,8 @@ const SearchToolbar = ({
       }}
     />
     {filters}
-    <Button size="small" variant="outlined" startIcon={<SearchRoundedIcon fontSize="small" />} onClick={onSearch}>
-      Search
-    </Button>
-    <Button size="small" variant="text" startIcon={<RefreshRoundedIcon fontSize="small" />} onClick={onReset}>
-      Reset
-    </Button>
+    <Button size="small" variant="outlined" onClick={onSearch}>Search</Button>
+    <Button size="small" variant="text" onClick={onReset}>Reset</Button>
     {actions}
   </Stack>
 );

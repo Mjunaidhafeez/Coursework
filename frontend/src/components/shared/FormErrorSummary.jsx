@@ -9,26 +9,13 @@ const normalizeErrors = (errors) => {
   return [...new Set(values)];
 };
 
-const FormErrorSummary = ({ errors, title = "Please fix the following errors:" }) => {
+const FormErrorSummary = ({ errors }) => {
   const items = normalizeErrors(errors);
   if (!items.length) return null;
 
   return (
-    <Alert
-      severity="error"
-      sx={{
-        mb: 1.2,
-        borderRadius: 1.6,
-        border: "1px solid #fecaca",
-        bgcolor: "#fff6f6",
-      }}
-    >
-      <strong>{title}</strong>
-      <ul style={{ margin: "8px 0 0 18px", padding: 0 }}>
-        {items.map((message) => (
-          <li key={message}>{message}</li>
-        ))}
-      </ul>
+    <Alert severity="error" sx={{ py: 0.2, mb: 0.5, "& .MuiAlert-message": { py: 0, fontSize: "0.78rem" } }}>
+      {items.join(" · ")}
     </Alert>
   );
 };

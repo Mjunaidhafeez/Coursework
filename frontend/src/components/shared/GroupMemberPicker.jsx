@@ -107,7 +107,7 @@ const GroupMemberPicker = ({
           label="Search name or roll no"
           value={search}
           onChange={(e) => onSearchChange?.(e.target.value)}
-          sx={{ minWidth: { xs: "47%", sm: 180 }, flex: { xs: "1 1 47%", sm: "0 0 200px" }, maxWidth: { sm: 240 } }}
+          sx={{ minWidth: 140, flex: "1 1 0" }}
         />
         <Chip size="small" color={memberIds.length ? "primary" : "default"} label={`${memberIds.length} selected`} />
         <Button size="small" variant="outlined" disabled={!selectableVisible.length} onClick={toggleVisible}>

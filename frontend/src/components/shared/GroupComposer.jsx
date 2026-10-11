@@ -1,4 +1,4 @@
-import { Alert, Chip, MenuItem, Stack, TextField } from "@mui/material";
+import { Alert, MenuItem, Stack, TextField } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
@@ -11,7 +11,6 @@ import {
   fetchEligibleStudents,
   filtersFromProfile,
   occupancyFromStudents,
-  studentOrgLabel,
   toGroupEditForm,
   toGroupPayload,
 } from "../../utils/groupForm";
@@ -82,38 +81,7 @@ const GroupComposer = ({
     });
   }, [students, studentFilters.search]);
 
-  const selectedCourse = useMemo(
-    () => visibleCourses.find((course) => String(course.id) === String(form.course)),
-    [visibleCourses, form.course]
-  );
-  const selectedCoursework = useMemo(
-    () => courseworks.find((item) => String(item.id) === String(form.coursework)),
-    [courseworks, form.coursework]
-  );
   const assignedMap = useMemo(() => ({ ...assignedGroupByStudentId, ...occupancy }), [assignedGroupByStudentId, occupancy]);
-  const profileLabel = studentOrgLabel({
-    semester_number: lockedProfile?.semester_number,
-    department_name: lockedProfile?.department_name,
-    school_class_name: lockedProfile?.school_class_name,
-    section_name: lockedProfile?.section_name,
-  });
-
-  const formSummary = useMemo(() => {
-    const semester = semesters.find((item) => String(item.id) === String(studentFilters.semester));
-    const department = departments.find((item) => String(item.id) === String(studentFilters.department));
-    if (form.scope === "coursework") {
-      if (!selectedCoursework) return "Choose the course and assessment this group is for.";
-      return `Assessment group: ${selectedCoursework.title}${selectedCourse ? ` · ${selectedCourse.title}` : ""}`;
-    }
-    if (form.scope === "course") {
-      if (!selectedCourse) return "Choose the course this group is for. Students will load from that course.";
-      return `Course group: ${selectedCourse.title}${selectedCourse.semester_number ? ` · Sem ${selectedCourse.semester_number}` : ""}`;
-    }
-    if (isRequest) return `Class group request${profileLabel ? ` · ${profileLabel}` : ""}`;
-    return ["Overall class group", semester ? `Semester ${semester.number}` : "all semesters", department?.name || ""]
-      .filter(Boolean)
-      .join(" · ");
-  }, [form.scope, selectedCourse, selectedCoursework, studentFilters.semester, studentFilters.department, semesters, departments, isRequest, profileLabel]);
 
   const canLoadStudents =
     form.scope === "global" || (form.scope === "course" && form.course) || (form.scope === "coursework" && form.coursework);
@@ -303,7 +271,6 @@ const GroupComposer = ({
   return (
     <CompactAddForm
       layout="stack"
-      title={editingId ? (isRequest ? "Update group request" : "Update Group") : isRequest ? "Request a group" : "Add Group"}
       submitLabel={editingId ? "Update" : isRequest ? "Send request" : "Add"}
       onSubmit={submit}
       onClear={() => {
@@ -312,9 +279,7 @@ const GroupComposer = ({
       }}
       extra={<FormErrorSummary errors={formErrors} />}
     >
-      <Alert severity="info" sx={{ py: 0.25, "& .MuiAlert-message": { py: 0.1, fontSize: "0.78rem" } }}>{formSummary}</Alert>
-      {isRequest && profileLabel ? <Chip size="small" color="primary" variant="outlined" label={`Your class · ${profileLabel}`} /> : null}
-      <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap">
+      <Stack direction="row" spacing={0.55} useFlexGap flexWrap="wrap" sx={{ width: "100%" }}>
         <TextField required size="small" label="Group Name" value={form.name} error={Boolean(formErrors.name)} helperText={formErrors.name || ""} sx={compactFieldSx} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
         <TextField
           select

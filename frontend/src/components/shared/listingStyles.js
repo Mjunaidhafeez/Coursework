@@ -1,39 +1,27 @@
 export const compactFieldSx = {
-  minWidth: { xs: "47%", sm: 132 },
-  width: { sm: 156 },
-  flex: { xs: "1 1 47%", sm: "0 0 156px" },
-  maxWidth: { xs: "100%", sm: 200 },
-  transition: "transform 140ms ease",
-  "& .MuiFormHelperText-root": { mx: 0.2, mt: 0.1, lineHeight: 1.15, minHeight: 0 },
+  minWidth: { xs: "47%", sm: 112 },
+  flex: { xs: "1 1 47%", sm: "1 1 0" },
+  "& .MuiInputBase-root": { bgcolor: "#fff" },
+  "& .MuiFormHelperText-root": { mx: 0.2, mt: 0.05, lineHeight: 1.1, minHeight: 0 },
   "& .MuiFormHelperText-root:empty": { display: "none", m: 0 },
-  "&:focus-within": { transform: "translateY(-1px)" },
+  "& .MuiFormHelperText-root:not(.Mui-error)": { display: "none" },
 };
 
-export const compactSelectSx = {
-  ...compactFieldSx,
-  maxWidth: { xs: "100%", sm: 180 },
-};
+export const compactSelectSx = compactFieldSx;
 
 export const compactFilterSx = {
-  minWidth: { xs: "47%", sm: 118 },
-  width: { sm: 136 },
-  flex: { xs: "1 1 47%", sm: "0 0 136px" },
-  maxWidth: { xs: "100%", sm: 168 },
+  minWidth: { xs: "47%", sm: 108 },
+  flex: { xs: "1 1 47%", sm: "1 1 0" },
   "& .MuiFormHelperText-root": { display: "none" },
 };
 
 export const filterBarSx = {
   alignItems: "center",
+  width: "100%",
   "& > .MuiTextField-root, & > .MuiFormControl-root": {
-    minWidth: { xs: "47% !important", sm: "118px !important" },
-    width: { sm: "136px !important" },
-    maxWidth: { xs: "100% !important", sm: "168px !important" },
-    flex: { xs: "1 1 47% !important", sm: "0 0 136px !important" },
-  },
-  "& > .MuiTextField-root:first-of-type": {
-    minWidth: { xs: "47% !important", sm: "160px !important" },
-    width: { sm: "176px !important" },
-    maxWidth: { xs: "100% !important", sm: "200px !important" },
-    flex: { xs: "1 1 47% !important", sm: "0 0 176px !important" },
+    minWidth: { xs: "47% !important", sm: "108px !important" },
+    width: "auto !important",
+    maxWidth: "none !important",
+    flex: { xs: "1 1 47% !important", sm: "1 1 0 !important" },
   },
 };

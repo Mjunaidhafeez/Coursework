@@ -1,9 +1,6 @@
-import { Box, Paper, Stack, Typography } from "@mui/material";
+import { Box, Paper, Stack } from "@mui/material";
 
 const ListingPage = ({
-  title,
-  subtitle = null,
-  icon = null,
   actions = null,
   addForm = null,
   tabs = null,
@@ -11,11 +8,11 @@ const ListingPage = ({
   toolbar = null,
   footer = null,
   fill = false,
-  addFormMaxHeight = { xs: "28vh", md: "30vh" },
+  addFormMaxHeight = { xs: "28vh", md: "32vh" },
   children,
 }) => (
   <Stack
-    spacing={0.75}
+    spacing={0.55}
     sx={{
       flex: 1,
       height: fill ? "100%" : { xs: "auto", md: "100%" },
@@ -23,45 +20,6 @@ const ListingPage = ({
       overflow: fill ? "hidden" : { xs: "visible", md: "hidden" },
     }}
   >
-    <Stack
-      direction="row"
-      spacing={1}
-      alignItems="center"
-      justifyContent="space-between"
-      sx={{ flexShrink: 0 }}
-    >
-      <Stack direction="row" spacing={1} alignItems="center" minWidth={0}>
-        {icon ? (
-          <Box
-            sx={{
-              width: 32,
-              height: 32,
-              borderRadius: 1.4,
-              display: "grid",
-              placeItems: "center",
-              bgcolor: "#e8effc",
-              color: "var(--portal-ink)",
-              flexShrink: 0,
-              "& svg": { fontSize: 18 },
-            }}
-          >
-            {icon}
-          </Box>
-        ) : null}
-        <Box minWidth={0}>
-          <Typography sx={{ fontWeight: 800, fontSize: "1.02rem", color: "var(--portal-ink)", lineHeight: 1.2 }}>
-            {title}
-          </Typography>
-          {subtitle ? (
-            <Typography variant="body2" sx={{ color: "#4b5d7a", mt: 0.15, maxWidth: 720, display: { xs: "none", md: "block" } }}>
-              {subtitle}
-            </Typography>
-          ) : null}
-        </Box>
-      </Stack>
-      {actions}
-    </Stack>
-
     {addForm ? (
       <Box
         id="assessment-create-form"
@@ -74,22 +32,25 @@ const ListingPage = ({
     <Paper
       variant="outlined"
       sx={{
-        p: { xs: 0.75, md: 1 },
+        p: 0.65,
         borderColor: "#dbeafe",
         bgcolor: "#fff",
-        transition: "box-shadow 200ms ease",
-        "&:hover": { boxShadow: "0 16px 32px rgba(15, 33, 75, 0.08)" },
         flex: fill ? 1 : { xs: "none", md: 1 },
-        minHeight: fill ? 0 : { xs: 240, md: 0 },
+        minHeight: fill ? 0 : { xs: 220, md: 0 },
         display: "flex",
         flexDirection: "column",
         overflow: fill ? "hidden" : { xs: "visible", md: "hidden" },
       }}
     >
-      {tabs ? <Box sx={{ flexShrink: 0, mb: filters || toolbar ? 0.7 : 0.4 }}>{tabs}</Box> : null}
-      {filters ? <Box sx={{ flexShrink: 0, mb: 0.8, overflowX: "auto" }}>{filters}</Box> : null}
+      {actions || tabs ? (
+        <Stack direction="row" spacing={0.6} alignItems="center" justifyContent="space-between" sx={{ flexShrink: 0, mb: 0.5 }}>
+          <Box sx={{ minWidth: 0, flex: 1 }}>{tabs}</Box>
+          {actions}
+        </Stack>
+      ) : null}
+      {filters ? <Box sx={{ flexShrink: 0, mb: 0.55 }}>{filters}</Box> : null}
       {toolbar ? (
-        <Box sx={{ flexShrink: 0, mb: 0.8, maxHeight: { xs: "22vh", md: "24vh" }, overflow: "auto" }}>
+        <Box sx={{ flexShrink: 0, mb: 0.55, maxHeight: { xs: "22vh", md: "24vh" }, overflow: "auto" }}>
           {toolbar}
         </Box>
       ) : null}
@@ -113,8 +74,8 @@ const ListingPage = ({
             bottom: 0,
             zIndex: 3,
             bgcolor: "#fff",
-            pt: 1,
-            mt: 1,
+            pt: 0.7,
+            mt: 0.7,
             borderTop: "1px solid #e8eef8",
           },
         }}
