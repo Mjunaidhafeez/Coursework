@@ -33,7 +33,7 @@ urlpatterns = [
     path("audit/", audit_logs, name="audit-logs"),
     path("backup/", backup_export, name="backup-export"),
     path("search/", global_search, name="global-search"),
+    path("recycle/purge/", recycle_bin_purge, name="campus-recycle-purge"),
     path("recycle/", recycle_bin, name="recycle-bin"),
-    path("recycle/purge/", recycle_bin_purge, name="recycle-bin-purge"),
     path("", include(router.urls)),
 ]

@@ -682,6 +682,13 @@ def _recycle_ids(data):
     return user_ids, notice_ids
 
 
+def _is_purge_request(data):
+    action = str(data.get("action") or "").strip().lower()
+    if action in {"purge", "delete", "permanent"}:
+        return True
+    return bool(data.get("permanent") or data.get("purge"))
+
+
 def _restore_recycle(user_ids, notice_ids):
     restored = {"users": 0, "notices": 0}
     if notice_ids:
@@ -720,6 +727,8 @@ def recycle_bin(request):
         user_ids, notice_ids = _recycle_ids(request.data)
         if not notice_ids and not user_ids:
             return Response({"detail": "Nothing selected."}, status=status.HTTP_400_BAD_REQUEST)
+        if _is_purge_request(request.data):
+            return _purge_recycle(request, user_ids, notice_ids)
         return _restore_recycle(user_ids, notice_ids)
     inactive = User.objects.filter(is_active=False).exclude(role=User.Role.SUPER_ADMIN).order_by("-id")[:200]
     notices = Notice.objects.filter(is_deleted=True).order_by("-updated_at")[:100]

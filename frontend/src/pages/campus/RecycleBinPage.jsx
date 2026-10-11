@@ -105,10 +105,28 @@ const RecycleBinPage = () => {
     }
   };
 
+  const recycleIds = (payload, field) =>
+    [payload[`${field}_id`], ...(payload[`${field}_ids`] || [])].filter((id) => id != null);
+
+  const undoAccidentalRestore = async (payload) => {
+    await Promise.all(recycleIds(payload, "user").map((id) => api.delete(`${ENDPOINTS.users}${id}/`)));
+    await Promise.all(recycleIds(payload, "notice").map((id) => api.delete(`${ENDPOINTS.campusNotices}${id}/`)));
+  };
+
   const purge = async (payload, entityLabel, count = 1) => {
     if (!confirmPermanentDelete(entityLabel, count)) return;
     try {
-      await api.post(ENDPOINTS.campusRecyclePurge, payload);
+      const { data: result } = await api.post(ENDPOINTS.campusRecycle, {
+        ...payload,
+        action: "purge",
+        permanent: true,
+      });
+      if (result?.restored && !result?.deleted) {
+        await undoAccidentalRestore(payload);
+        notify("Server restored instead of deleting. Reload the PythonAnywhere web app after git pull, then try again.", "error");
+        await load();
+        return;
+      }
       notify(
         payload.user_id || payload.user_ids?.length
           ? "Permanently deleted. Username and roll no can be used again."

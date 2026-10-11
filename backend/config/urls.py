@@ -10,6 +10,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.accounts.views import CustomTokenObtainPairView
+from apps.campus.views import recycle_bin_purge
 
 
 def serve_spa(dist_dir):
@@ -46,6 +47,7 @@ urlpatterns = [
     path("api/academics/", include("apps.academics.urls")),
     path("api/groups/", include("apps.groups.urls")),
     path("api/coursework/", include("apps.coursework.urls")),
+    path("api/campus/recycle/purge/", recycle_bin_purge, name="recycle-bin-purge"),
     path("api/campus/", include("apps.campus.urls")),
     path("api/website/", include("apps.website.urls")),
 ]

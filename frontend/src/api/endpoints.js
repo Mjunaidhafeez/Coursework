@@ -45,7 +45,6 @@ export const ENDPOINTS = {
   campusBackup: "/campus/backup/",
   campusSearch: "/campus/search/",
   campusRecycle: "/campus/recycle/",
-  campusRecyclePurge: "/campus/recycle/purge/",
   websitePublic: "/website/public/",
   websiteSettings: "/website/settings/",
   websiteUpload: "/website/upload/",
