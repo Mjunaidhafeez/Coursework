@@ -1,22 +1,43 @@
 from django.core.management.base import BaseCommand
 
 from apps.academics.models import Course, Enrollment, Semester
-from apps.accounts.data.mba_f25_students import DEFAULT_PASSWORD, student_records
+from apps.accounts.data.mba_f25_students import student_records as f25_records
+from apps.accounts.data.mba_s25_students import student_records as s25_records
+from apps.accounts.data.student_rolls import DEFAULT_PASSWORD
 from apps.accounts.models import StudentProfile, User
+
+COHORTS = {
+    "f25": {"records": f25_records, "semester": 3},
+    "s25": {"records": s25_records, "semester": 4},
+}
 
 
 class Command(BaseCommand):
-    help = "Seed MBA F25 students from the class roll list."
+    help = "Seed MBA class-roll students (F25 semester 3, S25 semester 4)."
 
     def add_arguments(self, parser):
-        parser.add_argument("--semester", type=int, default=3)
+        parser.add_argument("--cohort", choices=["f25", "s25", "all"], default="f25")
+        parser.add_argument("--semester", type=int, default=None)
 
     def handle(self, *args, **options):
-        semester, _ = Semester.objects.get_or_create(number=options["semester"])
+        selected = COHORTS if options["cohort"] == "all" else {options["cohort"]: COHORTS[options["cohort"]]}
+        for name, spec in selected.items():
+            semester_number = options["semester"] or spec["semester"]
+            created, updated = self._seed_cohort(spec["records"](), semester_number)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"{name}: seeded {created + updated} students ({created} created, {updated} updated) "
+                    f"into semester {semester_number}."
+                )
+            )
+        self.stdout.write(self.style.SUCCESS(f"Password = {DEFAULT_PASSWORD}."))
+
+    def _seed_cohort(self, records, semester_number):
+        semester, _ = Semester.objects.get_or_create(number=semester_number)
         created = 0
         updated = 0
 
-        for row in student_records():
+        for row in records:
             user, was_created = User.objects.get_or_create(
                 username=row["username"],
                 defaults={
@@ -53,10 +74,4 @@ class Command(BaseCommand):
         ]
         if enrollments:
             Enrollment.objects.bulk_create(enrollments, ignore_conflicts=True)
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Seeded {created + updated} students ({created} created, {updated} updated). "
-                f"Username = padded roll no. Password = {DEFAULT_PASSWORD}."
-            )
-        )
+        return created, updated

@@ -1,3 +1,5 @@
+from apps.accounts.data.student_rolls import records_from_rows
+
 STUDENTS = [
     ("Fasi Saad", "02"),
     ("Muhammad Haseeb Jawad", "03"),
@@ -50,37 +52,7 @@ STUDENTS = [
 ]
 
 ROLL_PREFIX = "SU92-MBATW-F25"
-EMAIL_DOMAIN = "superior.edu.com"
-DEFAULT_PASSWORD = "12345678"
-
-
-def pad_roll(number):
-    return f"{ROLL_PREFIX}-{int(str(number).strip()):03d}"
-
-
-def split_name(full_name):
-    parts = " ".join(full_name.split()).split(" ")
-    if not parts:
-        return "", ""
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], " ".join(parts[1:])
 
 
 def student_records():
-    records = []
-    for full_name, number in STUDENTS:
-        roll = pad_roll(number)
-        first_name, last_name = split_name(full_name)
-        records.append(
-            {
-                "name": " ".join(full_name.split()),
-                "first_name": first_name,
-                "last_name": last_name,
-                "roll_no": roll,
-                "username": roll,
-                "email": f"{roll}@{EMAIL_DOMAIN}",
-                "password": DEFAULT_PASSWORD,
-            }
-        )
-    return records
+    return records_from_rows(STUDENTS, ROLL_PREFIX)
