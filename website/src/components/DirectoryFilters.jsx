@@ -1,36 +1,41 @@
-const unique = (rows, key) => [
-  "All",
-  ...new Set(
-    rows.flatMap((item) => {
-      const value = item[key];
-      return Array.isArray(value) ? value : [value];
-    }).filter(Boolean)
-  ),
-];
+const unique = (rows, key) =>
+  [
+    ...new Set(
+      rows.flatMap((item) => {
+        const value = item[key];
+        return Array.isArray(value) ? value : [value];
+      }).filter(Boolean)
+    ),
+  ].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" }));
 
-const ChipRow = ({ values, selected, onSelect, allLabel }) => (
-  <div className="album-row">
-    {values.map((name) => (
-      <button key={name} type="button" className={selected === name ? "chip is-on" : "chip"} onClick={() => onSelect(name)}>
-        {name === "All" ? allLabel : name}
-      </button>
-    ))}
-  </div>
-);
+const fieldLabel = (allLabel) => String(allLabel || "").replace(/^All\s+/i, "");
 
-const DirectoryFilters = ({ rows, fields, values, onChange }) => (
-  <>
-    {fields.map((field) => (
-      <ChipRow
-        key={field.key}
-        values={unique(rows, field.key)}
-        selected={values[field.key] || "All"}
-        onSelect={(name) => onChange(field.key, name)}
-        allLabel={field.allLabel}
-      />
-    ))}
-  </>
-);
+const DirectoryFilters = ({ rows, fields, values, onChange, onReset }) => {
+  const active = fields.some((field) => values[field.key] && values[field.key] !== "All");
+  return (
+    <div className="filter-bar">
+      <p className="filter-bar-label">Filter</p>
+      <div className="filter-bar-fields">
+        {fields.map((field) => (
+          <label key={field.key} className="filter-field">
+            <span>{fieldLabel(field.allLabel)}</span>
+            <select value={values[field.key] || "All"} onChange={(e) => onChange(field.key, e.target.value)}>
+              <option value="All">{field.allLabel}</option>
+              {unique(rows, field.key).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </label>
+        ))}
+        {active && onReset ? (
+          <button type="button" className="filter-reset" onClick={onReset}>
+            Clear
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+};
 
 export const matchesFilters = (item, values) =>
   Object.entries(values).every(([key, selected]) => {

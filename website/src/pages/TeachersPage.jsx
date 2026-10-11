@@ -28,6 +28,7 @@ const TeachersPage = () => {
           fields={FILTERS}
           values={filters}
           onChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
+          onReset={() => setFilters(emptyFilters)}
         />
         <p className="meta">{visible.length} teacher{visible.length === 1 ? "" : "s"}</p>
         <div className="people-grid">
