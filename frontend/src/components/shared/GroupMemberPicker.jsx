@@ -80,7 +80,7 @@ const GroupMemberPicker = ({
         onClick={() => toggle(student.id)}
       >
         <Checkbox size="small" checked={checked} disabled={blocked || locked} sx={{ mt: -0.3 }} />
-        <PersonAvatar person={student} size={26} />
+        <PersonAvatar person={student} size={32} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography sx={{ fontWeight: 700, fontSize: "0.82rem", color: "#13377a" }}>
             {getUserDisplayName(student, { includeUsername: true })}
@@ -102,8 +102,8 @@ const GroupMemberPicker = ({
   };
 
   return (
-    <Box sx={{ width: "100%", minWidth: 0 }}>
-      <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mb: 0.5 }}>
+    <Box className="group-member-picker" sx={{ width: "100%", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mb: 0.5, flexShrink: 0 }}>
         <TextField
           size="small"
           label="Search name or roll no"
@@ -117,7 +117,7 @@ const GroupMemberPicker = ({
         </Button>
       </Stack>
       {error ? <Typography variant="caption" color="error" sx={{ display: "block", mb: 0.4 }}>{error}</Typography> : null}
-      <Box sx={{ maxHeight: 132, overflow: "auto", border: "1px solid #dbeafe", borderRadius: 1.2, bgcolor: "#fbfdff" }}>
+      <Box sx={{ flex: 1, minHeight: 180, overflow: "auto", border: "1px solid #dbeafe", borderRadius: 1.2, bgcolor: "#fbfdff" }}>
         {hiddenSelected.map((student) => renderRow(student, "Selected · hidden by filters"))}
         {visible.map((student) => renderRow(student))}
         {loading ? (

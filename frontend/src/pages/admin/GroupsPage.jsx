@@ -186,6 +186,7 @@ const GroupsPage = () => {
 
   return (
     <ListingPage
+      split
       title="Group Management & Approvals"
       subtitle="Create a group for a course or class, or approve student requests. A student already in a group or on a pending request cannot join another."
       addForm={(

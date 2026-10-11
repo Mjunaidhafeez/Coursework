@@ -271,6 +271,7 @@ const GroupComposer = ({
   return (
     <CompactAddForm
       layout="stack"
+      fill
       submitLabel={editingId ? "Update" : isRequest ? "Send request" : "Add"}
       onSubmit={submit}
       onClear={() => {

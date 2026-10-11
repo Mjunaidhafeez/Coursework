@@ -3,6 +3,7 @@ from rest_framework import serializers
 from apps.accounts.models import User
 from apps.academics.models import Enrollment
 from apps.common.notify import push_notifications
+from apps.common.uploads import media_field_url
 
 from .models import GroupMember, StudentGroup
 
@@ -18,8 +19,7 @@ class GroupMemberSerializer(serializers.ModelSerializer):
         return getattr(getattr(obj.student, "student_profile", None), "student_id", "") or ""
 
     def get_student_avatar(self, obj):
-        avatar = getattr(obj.student, "avatar", None)
-        return avatar.url if avatar else None
+        return media_field_url(getattr(obj.student, "avatar", None), self.context.get("request"))
 
     class Meta:
         model = GroupMember

@@ -8,6 +8,7 @@ from apps.accounts.models import User
 from apps.academics.models import Course, Enrollment
 from apps.common.mixins import BulkActionMixin
 from apps.common.notify import push_notifications
+from apps.common.uploads import media_field_url
 from apps.coursework.models import Coursework
 
 from .models import GroupMember, StudentGroup
@@ -134,6 +135,7 @@ class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
             "last_name": student.last_name,
             "full_name": student.get_full_name().strip(),
             "student_id": getattr(profile, "student_id", "") or "",
+            "avatar": media_field_url(getattr(student, "avatar", None), self.request),
             "semester": getattr(semester, "id", None),
             "semester_number": getattr(semester, "number", None),
             "department": getattr(department, "id", None),

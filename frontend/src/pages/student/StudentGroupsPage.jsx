@@ -83,6 +83,7 @@ const StudentGroupsPage = () => {
 
   return (
     <ListingPage
+      split
       title="Groups"
       subtitle="Request a group with classmates from your own semester, class and section. Admin or a teacher will approve or reject it."
       addForm={(
