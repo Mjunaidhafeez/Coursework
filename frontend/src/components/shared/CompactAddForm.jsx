@@ -10,7 +10,6 @@ const CompactAddForm = ({
   clearLabel = "Clear",
   extra = null,
   layout = "row",
-  fill = false,
 }) => (
   <Paper
     variant="outlined"
@@ -18,10 +17,6 @@ const CompactAddForm = ({
       p: 0.55,
       borderColor: "#dbeafe",
       bgcolor: "#f8fbff",
-      height: fill ? "100%" : "auto",
-      minHeight: 0,
-      display: fill ? "flex" : "block",
-      flexDirection: fill ? "column" : undefined,
     }}
   >
     {extra}
@@ -32,14 +27,9 @@ const CompactAddForm = ({
       flexWrap="wrap"
       alignItems={layout === "stack" ? "stretch" : "center"}
       sx={{
-        flex: fill ? 1 : undefined,
-        minHeight: 0,
         "& .MuiTextField-root": compactFieldSx,
-        "& .group-member-picker": {
-          width: "100%",
-          flex: fill ? "1 1 auto" : undefined,
-          minHeight: fill ? 0 : undefined,
-        },
+        "& .group-member-picker": { width: "100%", flex: "1 1 100%", minWidth: 220 },
+        "& .group-member-picker .MuiTextField-root": { maxWidth: "none", flex: "1 1 100%", minWidth: 220 },
       }}
     >
       {children}

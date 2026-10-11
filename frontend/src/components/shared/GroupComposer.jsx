@@ -69,18 +69,6 @@ const GroupComposer = ({
     () => sectionsForClass(sections, studentFilters.school_class),
     [sections, studentFilters.school_class]
   );
-  const pickerStudents = useMemo(() => {
-    const q = studentFilters.search.trim().toLowerCase();
-    if (!q) return students;
-    return students.filter((student) => {
-      const haystack = [student.full_name, student.first_name, student.last_name, student.username, student.student_id]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [students, studentFilters.search]);
-
   const assignedMap = useMemo(() => ({ ...assignedGroupByStudentId, ...occupancy }), [assignedGroupByStudentId, occupancy]);
 
   const canLoadStudents =
@@ -125,7 +113,6 @@ const GroupComposer = ({
       ...(isRequest ? filtersFromProfile(lockedProfile) : emptyStudentFilters),
       semester: course?.semester ? String(course.semester) : prev.semester,
       department: course?.department ? String(course.department) : prev.department,
-      search: "",
     }));
     (editingGroup.members || []).forEach((member) => {
       const studentId = Number(member.student);
@@ -271,7 +258,6 @@ const GroupComposer = ({
   return (
     <CompactAddForm
       layout="stack"
-      fill
       submitLabel={editingId ? "Update" : isRequest ? "Send request" : "Add"}
       onSubmit={submit}
       onClear={() => {
@@ -360,7 +346,7 @@ const GroupComposer = ({
         )}
       </Stack>
       <GroupMemberPicker
-        students={pickerStudents}
+        students={students}
         knownStudents={knownStudents}
         memberIds={form.member_ids}
         onChange={(member_ids) => setForm((prev) => ({ ...prev, member_ids: [...new Set([...lockedIds, ...member_ids.map(Number)])] }))}
@@ -369,8 +355,6 @@ const GroupComposer = ({
         lockedIds={lockedIds}
         error={formErrors.member_ids || ""}
         loading={studentsLoading}
-        search={studentFilters.search}
-        onSearchChange={(value) => setStudentFilters((prev) => ({ ...prev, search: value }))}
         emptyHint={canLoadStudents ? "No classmates match these filters." : form.scope === "coursework" ? "Choose a course and assessment to load students." : "Choose a course to load students."}
       />
     </CompactAddForm>

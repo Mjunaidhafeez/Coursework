@@ -1,3 +1,5 @@
+import { getUserDisplayName } from "./userDisplay";
+
 export const emptyGroupForm = {
   name: "",
   scope: "course",
@@ -11,7 +13,6 @@ export const emptyStudentFilters = {
   department: "",
   school_class: "",
   section: "",
-  search: "",
 };
 
 export const sortStudentsByRollOrUsername = (students = []) =>
@@ -50,22 +51,17 @@ export const fetchEligibleStudents = async (api, endpoints, filters = {}) => {
   return data || [];
 };
 
-export const studentOrgLabel = (student) =>
-  [
-    student.semester_number ? `Sem ${student.semester_number}` : "",
-    student.department_name || "",
-    student.school_class_name || "",
-    student.section_name || "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+export const studentNameRollLabel = (student) => {
+  const name = getUserDisplayName(student) || `#${student.id}`;
+  const roll = student.student_id || student.username || "No roll no";
+  return `${name} · ${roll}`;
+};
 
 export const filtersFromProfile = (profile) => ({
   semester: profile?.semester ? String(profile.semester) : "",
   department: profile?.department ? String(profile.department) : "",
   school_class: profile?.school_class ? String(profile.school_class) : "",
   section: profile?.section ? String(profile.section) : "",
-  search: "",
 });
 
 export const occupancyFromGroups = (groups = [], ignoreGroupId = null) => {

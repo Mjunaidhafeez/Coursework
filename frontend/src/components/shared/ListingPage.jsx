@@ -8,7 +8,6 @@ const ListingPage = ({
   toolbar = null,
   footer = null,
   fill = false,
-  split = false,
   addFormMaxHeight = { xs: "28vh", md: "32vh" },
   children,
 }) => (
@@ -16,19 +15,19 @@ const ListingPage = ({
     spacing={0.55}
     sx={{
       flex: 1,
-      height: fill || split ? "100%" : { xs: "auto", md: "100%" },
+      height: fill ? "100%" : { xs: "auto", md: "100%" },
       minHeight: 0,
-      overflow: fill || split ? "hidden" : { xs: "visible", md: "hidden" },
+      overflow: fill ? "hidden" : { xs: "visible", md: "hidden" },
     }}
   >
     {addForm ? (
       <Box
         id="assessment-create-form"
         sx={{
-          flex: split ? "1 1 0" : "0 1 auto",
-          maxHeight: split ? "none" : addFormMaxHeight,
+          flex: "0 1 auto",
+          maxHeight: addFormMaxHeight,
           minHeight: 0,
-          overflow: split ? "hidden" : "auto",
+          overflow: "auto",
           display: "flex",
           flexDirection: "column",
         }}
@@ -43,11 +42,11 @@ const ListingPage = ({
         p: 0.65,
         borderColor: "#dbeafe",
         bgcolor: "#fff",
-        flex: split || fill ? "1 1 0" : { xs: "none", md: 1 },
-        minHeight: split || fill ? 0 : { xs: 220, md: 0 },
+        flex: fill ? "1 1 0" : { xs: "none", md: 1 },
+        minHeight: fill ? 0 : { xs: 220, md: 0 },
         display: "flex",
         flexDirection: "column",
-        overflow: split || fill ? "hidden" : { xs: "visible", md: "hidden" },
+        overflow: fill ? "hidden" : { xs: "visible", md: "hidden" },
       }}
     >
       {actions || tabs ? (
