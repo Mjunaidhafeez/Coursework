@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
-import PaginationControls from "../../components/PaginationControls";
+import PaginationControls, { DEFAULT_PAGE_SIZE } from "../../components/PaginationControls";
 import AssessmentList from "../../components/shared/AssessmentList";
 import CompactTabs from "../../components/shared/CompactTabs";
 import CourseworkFormSection from "../../components/shared/CourseworkFormSection";
@@ -64,7 +64,7 @@ const TeacherCourseworkPage = () => {
   const selection = useRowSelection();
   const topicAllot = useTopicAllot();
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [form, setForm] = useState(emptyCourseworkForm);
   const [formErrors, setFormErrors] = useState({});
   const [editingId, setEditingId] = useState(null);

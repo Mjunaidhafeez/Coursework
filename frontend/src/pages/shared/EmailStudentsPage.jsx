@@ -180,13 +180,9 @@ const EmailStudentsPage = () => {
   const canSend = Boolean(senderEmail && subject.trim() && message.trim() && !sending);
 
   const toggleAll = () => {
-    const nextOn = !allChecked;
-    const next = {};
-    if (nextOn) {
-      recipients.forEach((item) => {
-        next[item.id] = true;
-      });
-    }
+    const next = { ...selectedIds };
+    if (allChecked) recipients.forEach((item) => { delete next[item.id]; });
+    else recipients.forEach((item) => { next[item.id] = true; });
     setSelectedIds(next);
   };
 

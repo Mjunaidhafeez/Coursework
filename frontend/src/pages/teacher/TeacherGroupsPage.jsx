@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
-import PaginationControls from "../../components/PaginationControls";
+import PaginationControls, { DEFAULT_PAGE_SIZE } from "../../components/PaginationControls";
 import GroupCard from "../../components/shared/GroupCard";
 import GroupReviewActions from "../../components/shared/GroupReviewActions";
 import ListingPage from "../../components/shared/ListingPage";
@@ -24,7 +24,7 @@ const TeacherGroupsPage = () => {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);

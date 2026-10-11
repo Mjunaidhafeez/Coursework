@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
-import PaginationControls from "../../components/PaginationControls";
+import PaginationControls, { DEFAULT_PAGE_SIZE } from "../../components/PaginationControls";
 import GroupCard from "../../components/shared/GroupCard";
 import GroupComposer from "../../components/shared/GroupComposer";
 import ListingPage from "../../components/shared/ListingPage";
@@ -24,7 +24,7 @@ const StudentGroupsPage = () => {
   const [allGroups, setAllGroups] = useState([]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(false);
 
   const loadData = async () => {

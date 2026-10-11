@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { DEFAULT_PAGE_SIZE } from "../components/PaginationControls";
+
 const usePaginatedQuery = ({ queryFn, dependencies = [] }) => {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(

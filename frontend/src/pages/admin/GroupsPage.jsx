@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
-import PaginationControls from "../../components/PaginationControls";
+import PaginationControls, { DEFAULT_PAGE_SIZE } from "../../components/PaginationControls";
 import BulkActionBar from "../../components/shared/BulkActionBar";
 import GroupCard from "../../components/shared/GroupCard";
 import GroupComposer from "../../components/shared/GroupComposer";
@@ -45,7 +45,7 @@ const GroupsPage = () => {
   const [bulkStatus, setBulkStatus] = useState("");
   const selection = useRowSelection();
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [editingGroup, setEditingGroup] = useState(null);
   const [loading, setLoading] = useState(false);
   const [assignedGroupByStudentId, setAssignedGroupByStudentId] = useState({});

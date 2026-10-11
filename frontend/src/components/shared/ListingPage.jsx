@@ -60,8 +60,8 @@ const ListingPage = ({
           flex: 1,
           minHeight: 0,
           overflow: fill ? "hidden" : "auto",
-          display: fill ? "flex" : "block",
-          flexDirection: fill ? "column" : undefined,
+          display: "flex",
+          flexDirection: "column",
           "& thead th": {
             position: "sticky",
             top: 0,

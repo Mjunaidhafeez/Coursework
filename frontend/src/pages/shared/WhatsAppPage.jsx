@@ -126,9 +126,9 @@ const WhatsAppPage = () => {
   const withPhone = recipients.filter((item) => item.has_phone || item.phone).length;
 
   const toggleAll = () => {
-    const nextOn = !allChecked;
-    const next = {};
-    if (nextOn) recipients.forEach((item) => { next[item.id] = true; });
+    const next = { ...selectedIds };
+    if (allChecked) recipients.forEach((item) => { delete next[item.id]; });
+    else recipients.forEach((item) => { next[item.id] = true; });
     setSelectedIds(next);
   };
 

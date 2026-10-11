@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import api from "../../api/client";
-import PaginationControls from "../../components/PaginationControls";
+import PaginationControls, { DEFAULT_PAGE_SIZE } from "../../components/PaginationControls";
 import CompactAddForm from "../../components/shared/CompactAddForm";
 import FormErrorSummary from "../../components/shared/FormErrorSummary";
 import ListingPage from "../../components/shared/ListingPage";
@@ -75,7 +75,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const selection = useRowSelection();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [form, setForm] = useState({ ...emptyForm, role: urlRole || "student" });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
