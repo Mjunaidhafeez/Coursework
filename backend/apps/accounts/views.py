@@ -50,8 +50,12 @@ class UserViewSet(viewsets.ModelViewSet):
             "student_profile__section",
         ).prefetch_related("teaching_courses", "enrollments__course")
         params = self.request.query_params
-        if self.action == "list" and params.get("is_active") is None:
-            qs = qs.filter(is_active=True)
+        if self.action == "list":
+            active_flag = str(params.get("is_active") or "").lower()
+            if active_flag in ("false", "0", "no"):
+                qs = qs.filter(is_active=False)
+            elif active_flag != "all":
+                qs = qs.filter(is_active=True)
         department = params.get("department")
         if department:
             qs = qs.filter(Q(teacher_profile__department_ref_id=department) | Q(student_profile__department_id=department))

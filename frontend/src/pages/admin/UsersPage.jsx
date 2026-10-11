@@ -30,7 +30,7 @@ import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
-import { ENDPOINTS } from "../../api/endpoints";
+import { ENDPOINTS, usersListPath } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import { downloadCsvFile, printTablePdf } from "../../utils/export";
 import { getUserDisplayName } from "../../utils/userDisplay";
@@ -99,6 +99,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     params.append("page_size", String(pageSizeValue));
     return params;
   };
+  const activeUsers = (payload) => (payload.results || []).filter((user) => user.is_active !== false);
   const isVisibleInUserCenter = (user) => !["student", "teacher"].includes(String(user?.role || "").toLowerCase());
   const applyLocalSearch = (rows, searchValue) => {
     const q = String(searchValue || "").trim().toLowerCase();
@@ -144,9 +145,9 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           sortByValue,
           sortOrderValue,
         });
-        const { data } = await api.get(`${ENDPOINTS.users}?${params.toString()}`);
+        const { data } = await api.get(usersListPath(params));
         const visibleRows = applyLocalSort(
-          applyLocalSearch((data.results || []).filter(isVisibleInUserCenter), searchValue),
+          applyLocalSearch(activeUsers(data).filter(isVisibleInUserCenter), searchValue),
           sortByValue,
           sortOrderValue
         );
@@ -156,9 +157,10 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
         return;
       }
       const params = buildUsersParams({ searchValue, pageValue, pageSizeValue, sortByValue, sortOrderValue });
-      const { data } = await api.get(`${ENDPOINTS.users}?${params.toString()}`);
-      setUsers(data.results || []);
-      setTotal(data.count || 0);
+      const { data } = await api.get(usersListPath(params));
+      const rows = activeUsers(data);
+      setUsers(rows);
+      setTotal(data.count || rows.length);
     } finally {
       setLoading(false);
     }
@@ -318,20 +320,23 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       return;
     }
     const prev = users;
+    const prevTotal = total;
     setUsers((curr) => curr.filter((u) => u.id !== id));
+    setTotal((n) => Math.max(0, n - 1));
     try {
       await api.delete(`${ENDPOINTS.users}${id}/`);
       notify("User moved to Recycle bin");
       await loadUsers();
     } catch {
       setUsers(prev);
+      setTotal(prevTotal);
       notify("Delete failed", "error");
     }
   };
   const getStudentExportRows = async () => {
     const params = buildUsersParams({ pageValue: 1, pageSizeValue: 4000 });
-    const { data } = await api.get(`${ENDPOINTS.users}?${params.toString()}`);
-    return (data.results || []).map((user) => [
+    const { data } = await api.get(usersListPath(params));
+    return activeUsers(data).map((user) => [
       user.username || "-",
       getUserDisplayName(user) || "-",
       user.student_profile?.student_id || "-",
@@ -401,7 +406,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             </>
           )}
         >
-          <TextField required size="small" label="Username" value={form.username} disabled={Boolean(editingId)} error={showValidation && Boolean(formErrors.username)} helperText={editingId ? "Locked" : (showValidation ? formErrors.username || "" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, username: e.target.value }))} />
+          <TextField required size="small" label="Username" value={form.username} error={showValidation && Boolean(formErrors.username)} helperText={showValidation ? formErrors.username || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, username: e.target.value }))} />
           <TextField required size="small" label="Email" type="email" value={form.email} error={showValidation && Boolean(formErrors.email)} helperText={showValidation ? formErrors.email || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, email: e.target.value }))} />
           <TextField size="small" label="Phone / WhatsApp" value={form.phone} helperText="Optional" sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, phone: e.target.value }))} />
           <TextField required={!editingId} size="small" label={editingId ? "Password (optional)" : "Password"} type="password" value={form.password} error={showValidation && Boolean(formErrors.password)} helperText={showValidation ? formErrors.password || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, password: e.target.value }))} />

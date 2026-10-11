@@ -1,3 +1,9 @@
+export const usersListPath = (query) => {
+  const params = query instanceof URLSearchParams ? query : new URLSearchParams(query || "");
+  if (!params.has("is_active")) params.set("is_active", "true");
+  return `/accounts/users/?${params.toString()}`;
+};
+
 export const ENDPOINTS = {
   auth: {
     login: "/auth/login/",

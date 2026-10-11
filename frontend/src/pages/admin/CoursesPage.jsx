@@ -25,7 +25,7 @@ import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
-import { ENDPOINTS } from "../../api/endpoints";
+import { ENDPOINTS, usersListPath } from "../../api/endpoints";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import { getUserDisplayName } from "../../utils/userDisplay";
 import { confirmDelete } from "../../utils/confirm";
@@ -64,7 +64,7 @@ const CoursesPage = () => {
         api.get(`${ENDPOINTS.courses}?${params.toString()}`),
         api.get(`${ENDPOINTS.semesters}?ordering=number&page_size=100`),
         api.get(`${ENDPOINTS.departments}?page_size=200`),
-        api.get(`${ENDPOINTS.users}?role=teacher&page_size=200`),
+        api.get(usersListPath("role=teacher&page_size=200")),
       ]);
 
       setCourses(coursesRes.data.results || []);

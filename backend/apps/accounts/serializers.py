@@ -184,9 +184,18 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
             "student_profile",
         ]
 
+    def validate_username(self, value):
+        username = (value or "").strip()
+        if not username:
+            raise serializers.ValidationError("Username is required.")
+        qs = User.objects.filter(username__iexact=username)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This username is already in use.")
+        return username
+
     def validate(self, attrs):
-        if self.instance and "username" in attrs and attrs["username"] != self.instance.username:
-            raise serializers.ValidationError({"username": "Username cannot be changed."})
         role = attrs.get("role", getattr(self.instance, "role", User.Role.STUDENT))
         if "phone" in attrs:
             attrs["phone"] = normalize_phone(attrs.get("phone"))

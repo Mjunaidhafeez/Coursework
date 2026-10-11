@@ -2,7 +2,7 @@ import { Box, Paper, Stack, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 
 import api from "../../api/client";
-import { ENDPOINTS } from "../../api/endpoints";
+import { ENDPOINTS, usersListPath } from "../../api/endpoints";
 import DashboardFrame from "../../components/shared/DashboardFrame";
 import DashboardMetricGrid from "../../components/shared/DashboardMetricGrid";
 import OpeningAssessmentsCard from "../../components/shared/OpeningAssessmentsCard";
@@ -15,7 +15,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     const load = async () => {
       const [studentsRes, coursesRes, openCourseworksRes, pendingApprovalsRes, allGroupsRes, openingListRes] = await Promise.all([
-        api.get(`${ENDPOINTS.users}?role=student&page_size=1`),
+        api.get(usersListPath("role=student&page_size=1")),
         api.get(ENDPOINTS.courses),
         api.get(`${ENDPOINTS.courseworks}?deadline_state=open&page_size=1`),
         api.get(`${ENDPOINTS.submissions}?workflow_state=request_pending&page_size=1`),
