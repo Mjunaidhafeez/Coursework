@@ -19,7 +19,21 @@ router.register("semesters", SemesterViewSet, basename="semester")
 router.register("courses", CourseViewSet, basename="course")
 router.register("enrollments", EnrollmentViewSet, basename="enrollment")
 
+
+def crud_paths(prefix, viewset):
+    return [
+        path(f"{prefix}/", viewset.as_view({"get": "list", "post": "create"})),
+        path(
+            f"{prefix}/<int:pk>/",
+            viewset.as_view({"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}),
+        ),
+    ]
+
+
 urlpatterns = [
     path("study-files/public/", public_study_file, name="study-file-public"),
+    *crud_paths("departments", DepartmentViewSet),
+    *crud_paths("classes", SchoolClassViewSet),
+    *crud_paths("sections", SectionViewSet),
     path("", include(router.urls)),
 ]

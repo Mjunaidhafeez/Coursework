@@ -1,6 +1,6 @@
 # Paste this into the PythonAnywhere WSGI file.
 # Change only the username on the next line.
-USERNAME = "YOUR_USERNAME"
+USERNAME = "MBA"
 
 import os
 import sys

@@ -3,7 +3,7 @@ from pathlib import Path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.urls import include, path, re_path
 from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
@@ -21,6 +21,18 @@ def serve_spa(dist_dir):
 
     return _view
 
+
+def org_routes_ping(_request):
+    return JsonResponse(
+        {
+            "ok": True,
+            "departments": "/api/academics/departments/",
+            "classes": "/api/academics/classes/",
+            "sections": "/api/academics/sections/",
+        }
+    )
+
+
 urlpatterns = [
     path("django-admin/", admin.site.urls),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
@@ -30,6 +42,7 @@ urlpatterns = [
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/accounts/", include("apps.accounts.urls")),
     path("api/common/", include("apps.common.urls")),
+    path("api/academics/org-ping/", org_routes_ping, name="academics-org-ping"),
     path("api/academics/", include("apps.academics.urls")),
     path("api/groups/", include("apps.groups.urls")),
     path("api/coursework/", include("apps.coursework.urls")),

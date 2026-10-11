@@ -14,6 +14,7 @@ import BulkActionBar from "../../components/shared/BulkActionBar";
 import useRowSelection from "../../hooks/useRowSelection";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { confirmDelete } from "../../utils/confirm";
+import { extractApiErrorMessage } from "../../utils/apiErrors";
 import { fetchOrgCatalog } from "../campus/listRows";
 
 const TABS = [
@@ -43,8 +44,13 @@ const OrgUnitsPage = () => {
     if (tab === "sections" && filters.school_class) params.append("school_class", filters.school_class);
     params.append("page", String(page));
     params.append("page_size", String(pageSize));
-    const { data } = await api.get(`${current.endpoint}?${params.toString()}`);
-    return data;
+    try {
+      const { data } = await api.get(`${current.endpoint}?${params.toString()}`);
+      return data;
+    } catch (err) {
+      notify(extractApiErrorMessage(err), "error");
+      throw err;
+    }
   };
 
   const { rows, total, search, setSearch, page, pageSize, runSearch, resetSearch, changePage, changePageSize, loadData } =
@@ -100,8 +106,8 @@ const OrgUnitsPage = () => {
       clearForm();
       await loadData();
       await loadCatalogs();
-    } catch {
-      notify("Could not save", "error");
+    } catch (err) {
+      notify(extractApiErrorMessage(err), "error");
     }
   };
 
@@ -121,8 +127,8 @@ const OrgUnitsPage = () => {
       await api.delete(`${current.endpoint}${id}/`);
       notify("Deleted");
       await loadData();
-    } catch {
-      notify("Delete failed", "error");
+    } catch (err) {
+      notify(extractApiErrorMessage(err), "error");
     }
   };
 

@@ -32,5 +32,8 @@ export const extractApiErrorMessage = (error) => {
   if (data?.detail) return String(data.detail);
   if (data?.message) return String(data.message);
   if (typeof data === "string" && data.trim()) return data;
+  if (error?.response?.status === 404) {
+    return "This API is not loaded on the server. On PythonAnywhere run git pull, then click Reload on the Web tab.";
+  }
   return "Request failed. Please check your input and try again.";
 };
