@@ -11,6 +11,7 @@ import {
   fetchEligibleStudents,
   filtersFromProfile,
   occupancyFromStudents,
+  orgFiltersFromGroup,
   toGroupEditForm,
   toGroupPayload,
 } from "../../utils/groupForm";
@@ -108,12 +109,15 @@ const GroupComposer = ({
     }
     setForm(toGroupEditForm(editingGroup));
     setFormErrors({});
+    const savedOrg = orgFiltersFromGroup(editingGroup);
     const course = courses.find((row) => Number(row.id) === Number(editingGroup.course));
-    setStudentFilters((prev) => ({
+    setStudentFilters({
       ...(isRequest ? filtersFromProfile(lockedProfile) : emptyStudentFilters),
-      semester: course?.semester ? String(course.semester) : prev.semester,
-      department: course?.department ? String(course.department) : prev.department,
-    }));
+      semester: savedOrg.semester || (course?.semester ? String(course.semester) : ""),
+      department: savedOrg.department || (course?.department ? String(course.department) : ""),
+      school_class: savedOrg.school_class,
+      section: savedOrg.section,
+    });
     (editingGroup.members || []).forEach((member) => {
       const studentId = Number(member.student);
       if (!studentId) return;
@@ -221,10 +225,13 @@ const GroupComposer = ({
       return;
     }
     try {
-      const payload = toGroupPayload({
-        ...form,
-        member_ids: [...new Set([...(form.member_ids || []).map(Number), ...lockedIds])],
-      });
+      const payload = toGroupPayload(
+        {
+          ...form,
+          member_ids: [...new Set([...(form.member_ids || []).map(Number), ...lockedIds])],
+        },
+        studentFilters
+      );
       if (editingId) {
         await api.patch(`${ENDPOINTS.groups}${editingId}/`, payload);
         notify(isRequest ? "Group request updated" : "Group updated");

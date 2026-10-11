@@ -26,22 +26,24 @@ import { useUi } from "../../context/UiContext";
 import useRowSelection from "../../hooks/useRowSelection";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { confirmDelete } from "../../utils/confirm";
-import { uniqueCourseSemesters } from "../../utils/courseworkOptions";
 import { downloadCsvFile, printTablePdf } from "../../utils/export";
 import { occupancyFromGroups } from "../../utils/groupForm";
 import { GROUP_STATUS_OPTIONS } from "../../utils/groupOptions";
 import { describeGroupScope } from "../../utils/groupScopeOptions";
-import { fetchOrgCatalog } from "../campus/listRows";
+import { classesForDepartment, fetchOrgCatalog, sectionsForClass } from "../campus/listRows";
 
 const GroupsPage = () => {
   const { notify, isGlobalLoading } = useUi();
   const [groups, setGroups] = useState([]);
   const [total, setTotal] = useState(0);
-  const [courses, setCourses] = useState([]);
+  const [catalog, setCatalog] = useState({ semesters: [], departments: [], classes: [], sections: [], courses: [] });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("");
   const [semesterFilter, setSemesterFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
   const [bulkStatus, setBulkStatus] = useState("");
   const selection = useRowSelection();
   const [page, setPage] = useState(1);
@@ -57,12 +59,18 @@ const GroupsPage = () => {
     statusValue = statusFilter,
     courseValue = courseFilter,
     semesterValue = semesterFilter,
+    departmentValue = departmentFilter,
+    classValue = classFilter,
+    sectionValue = sectionFilter,
   } = {}) => {
     const params = new URLSearchParams();
     if (searchValue) params.append("search", searchValue);
     if (statusValue) params.append("status", statusValue);
     if (courseValue) params.append("course", courseValue);
     if (semesterValue) params.append("semester", semesterValue);
+    if (departmentValue) params.append("department", departmentValue);
+    if (classValue) params.append("school_class", classValue);
+    if (sectionValue) params.append("section", sectionValue);
     params.append("ordering", "name");
     params.append("page", String(pageValue));
     params.append("page_size", String(pageSizeValue));
@@ -81,8 +89,21 @@ const GroupsPage = () => {
     statusValue = statusFilter,
     courseValue = courseFilter,
     semesterValue = semesterFilter,
+    departmentValue = departmentFilter,
+    classValue = classFilter,
+    sectionValue = sectionFilter,
   } = {}) => {
-    const params = buildGroupsParams({ searchValue, pageValue, pageSizeValue, statusValue, courseValue, semesterValue });
+    const params = buildGroupsParams({
+      searchValue,
+      pageValue,
+      pageSizeValue,
+      statusValue,
+      courseValue,
+      semesterValue,
+      departmentValue,
+      classValue,
+      sectionValue,
+    });
     setLoading(true);
     try {
       const { data } = await api.get(`${ENDPOINTS.groups}?${params.toString()}`);
@@ -99,7 +120,7 @@ const GroupsPage = () => {
 
   useEffect(() => {
     loadData({ searchValue: "", pageValue: 1 });
-    fetchOrgCatalog(api, ENDPOINTS).then((catalog) => setCourses(catalog.courses));
+    fetchOrgCatalog(api, ENDPOINTS).then(setCatalog);
     loadAssignedGroupMap();
   }, []);
 
@@ -216,8 +237,20 @@ const GroupsPage = () => {
             setStatusFilter("");
             setCourseFilter("");
             setSemesterFilter("");
+            setDepartmentFilter("");
+            setClassFilter("");
+            setSectionFilter("");
             setPage(1);
-            loadData({ searchValue: "", pageValue: 1, statusValue: "", courseValue: "", semesterValue: "" });
+            loadData({
+              searchValue: "",
+              pageValue: 1,
+              statusValue: "",
+              courseValue: "",
+              semesterValue: "",
+              departmentValue: "",
+              classValue: "",
+              sectionValue: "",
+            });
           }}
           filters={(
             <>
@@ -227,11 +260,23 @@ const GroupsPage = () => {
               </TextField>
               <TextField select size="small" label="Semester" value={semesterFilter} onChange={(e) => { setSemesterFilter(e.target.value); setPage(1); loadData({ pageValue: 1, semesterValue: e.target.value }); }} sx={{ minWidth: 120 }}>
                 <MenuItem value="">All</MenuItem>
-                {uniqueCourseSemesters(courses).map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+                {catalog.semesters.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.number}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Department" value={departmentFilter} onChange={(e) => { setDepartmentFilter(e.target.value); setClassFilter(""); setSectionFilter(""); setPage(1); loadData({ pageValue: 1, departmentValue: e.target.value, classValue: "", sectionValue: "" }); }} sx={{ minWidth: 150 }}>
+                <MenuItem value="">All</MenuItem>
+                {catalog.departments.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Class" value={classFilter} onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(""); setPage(1); loadData({ pageValue: 1, classValue: e.target.value, sectionValue: "" }); }} sx={{ minWidth: 140 }}>
+                <MenuItem value="">All</MenuItem>
+                {classesForDepartment(catalog.classes, departmentFilter).map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Section" value={sectionFilter} onChange={(e) => { setSectionFilter(e.target.value); setPage(1); loadData({ pageValue: 1, sectionValue: e.target.value }); }} sx={{ minWidth: 120 }}>
+                <MenuItem value="">All</MenuItem>
+                {sectionsForClass(catalog.sections, classFilter).map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
               </TextField>
               <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); loadData({ pageValue: 1, courseValue: e.target.value }); }} sx={{ minWidth: 160 }}>
                 <MenuItem value="">All Courses</MenuItem>
-                {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
+                {catalog.courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
               </TextField>
             </>
           )}

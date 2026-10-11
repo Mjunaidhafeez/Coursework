@@ -21,6 +21,10 @@ class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
         "course__semester",
         "course__department",
         "coursework",
+        "semester",
+        "department",
+        "school_class",
+        "section",
         "creator",
     ).prefetch_related("members", "members__student", "members__student__student_profile")
     serializer_class = StudentGroupSerializer
@@ -62,8 +66,19 @@ class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
         semester = self.request.query_params.get("semester")
         if semester:
             queryset = queryset.filter(
-                Q(course__semester_id=semester) | Q(coursework__course__semester_id=semester)
+                Q(semester_id=semester)
+                | Q(course__semester_id=semester)
+                | Q(coursework__course__semester_id=semester)
             )
+        department = self.request.query_params.get("department")
+        if department:
+            queryset = queryset.filter(Q(department_id=department) | Q(course__department_id=department))
+        school_class = self.request.query_params.get("school_class") or self.request.query_params.get("class")
+        if school_class:
+            queryset = queryset.filter(school_class_id=school_class)
+        section = self.request.query_params.get("section")
+        if section:
+            queryset = queryset.filter(section_id=section)
         return queryset
 
     def _can_review_group(self, user, group):

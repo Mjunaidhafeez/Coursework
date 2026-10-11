@@ -22,13 +22,27 @@ export const sortStudentsByRollOrUsername = (students = []) =>
     return aKey.localeCompare(bKey, undefined, { numeric: true, sensitivity: "base" });
   });
 
-export const toGroupPayload = (form) => {
+const orgIdOrNull = (value) => (value ? value : null);
+
+export const orgFiltersFromGroup = (group = {}) => ({
+  semester: group.semester ? String(group.semester) : "",
+  department: group.department ? String(group.department) : "",
+  school_class: group.school_class ? String(group.school_class) : "",
+  section: group.section ? String(group.section) : "",
+});
+
+export const toGroupPayload = (form, filters = {}) => {
   const scope = form.scope || "global";
+  const org = { ...emptyStudentFilters, ...filters };
   return {
     name: (form.name || "").trim(),
     scope,
     course: scope === "global" ? null : form.course || null,
     coursework: scope === "coursework" ? form.coursework || null : null,
+    semester: orgIdOrNull(org.semester),
+    department: orgIdOrNull(org.department),
+    school_class: orgIdOrNull(org.school_class),
+    section: orgIdOrNull(org.section),
     member_ids: (form.member_ids || []).map(Number),
   };
 };

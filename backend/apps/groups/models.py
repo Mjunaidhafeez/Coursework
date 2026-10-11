@@ -36,6 +36,18 @@ class StudentGroup(TimeStampedModel):
     coursework = models.ForeignKey(
         "coursework.Coursework", on_delete=models.CASCADE, related_name="student_groups", null=True, blank=True
     )
+    semester = models.ForeignKey(
+        "academics.Semester", on_delete=models.SET_NULL, null=True, blank=True, related_name="student_groups"
+    )
+    department = models.ForeignKey(
+        "academics.Department", on_delete=models.SET_NULL, null=True, blank=True, related_name="student_groups"
+    )
+    school_class = models.ForeignKey(
+        "academics.SchoolClass", on_delete=models.SET_NULL, null=True, blank=True, related_name="student_groups"
+    )
+    section = models.ForeignKey(
+        "academics.Section", on_delete=models.SET_NULL, null=True, blank=True, related_name="student_groups"
+    )
     creator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="created_groups")
     coursework_type = models.CharField(max_length=20, choices=CourseworkType.choices, default=CourseworkType.PROJECT)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)

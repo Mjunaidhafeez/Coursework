@@ -46,6 +46,10 @@ class StudentGroupSerializer(serializers.ModelSerializer):
     course_semester = serializers.IntegerField(source="course.semester.number", read_only=True, allow_null=True)
     course_department = serializers.CharField(source="course.department.name", read_only=True, allow_null=True, default="")
     coursework_title = serializers.CharField(source="coursework.title", read_only=True)
+    semester_number = serializers.IntegerField(source="semester.number", read_only=True, allow_null=True)
+    department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True, default="")
+    school_class_name = serializers.CharField(source="school_class.name", read_only=True, allow_null=True, default="")
+    section_name = serializers.CharField(source="section.name", read_only=True, allow_null=True, default="")
 
     class Meta:
         model = StudentGroup
@@ -61,6 +65,14 @@ class StudentGroupSerializer(serializers.ModelSerializer):
             "course_department",
             "coursework",
             "coursework_title",
+            "semester",
+            "semester_number",
+            "department",
+            "department_name",
+            "school_class",
+            "school_class_name",
+            "section",
+            "section_name",
             "creator",
             "creator_name",
             "coursework_type",
@@ -71,6 +83,51 @@ class StudentGroupSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["creator"]
+        extra_kwargs = {
+            "semester": {"required": False, "allow_null": True},
+            "department": {"required": False, "allow_null": True},
+            "school_class": {"required": False, "allow_null": True},
+            "section": {"required": False, "allow_null": True},
+        }
+
+    def to_internal_value(self, data):
+        payload = data.copy() if hasattr(data, "copy") else dict(data)
+        for key in ("semester", "department", "school_class", "section", "course", "coursework"):
+            if payload.get(key) in ("", "null", "undefined"):
+                payload[key] = None
+        return super().to_internal_value(payload)
+
+    def _apply_org_defaults(self, group, member_ids=None):
+        fields = []
+        course = group.course
+        if course:
+            if not group.semester_id and course.semester_id:
+                group.semester_id = course.semester_id
+                fields.append("semester")
+            if not group.department_id and getattr(course, "department_id", None):
+                group.department_id = course.department_id
+                fields.append("department")
+        if not all([group.semester_id, group.department_id, group.school_class_id, group.section_id]):
+            profile = None
+            if member_ids:
+                user = User.objects.filter(id__in=member_ids).select_related("student_profile").first()
+                profile = getattr(user, "student_profile", None)
+            if profile is None and group.pk:
+                member = group.members.select_related("student__student_profile").first()
+                profile = getattr(getattr(member, "student", None), "student_profile", None)
+            if profile:
+                for attr, value in (
+                    ("semester_id", profile.semester_id),
+                    ("department_id", profile.department_id),
+                    ("school_class_id", profile.school_class_id),
+                    ("section_id", profile.section_id),
+                ):
+                    if value and not getattr(group, attr):
+                        setattr(group, attr, value)
+                        fields.append(attr[:-3] if attr.endswith("_id") else attr)
+        if fields:
+            group.save(update_fields=list(dict.fromkeys(fields)))
+        return group
 
     def validate_member_ids(self, value):
         if not value:
@@ -234,7 +291,7 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                 "New group request submitted",
                 f"{request.user.get_full_name().strip() or request.user.username} requested group '{group.name}' for {target_label}.",
             )
-        return group
+        return self._apply_org_defaults(group, member_set)
 
     def update(self, instance, validated_data):
         member_ids = validated_data.pop("member_ids", None)
@@ -271,4 +328,4 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                     )
             instance.members.exclude(student_id__in=desired_ids).delete()
 
-        return instance
+        return self._apply_org_defaults(instance, member_ids)
