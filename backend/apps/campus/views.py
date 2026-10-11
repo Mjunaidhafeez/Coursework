@@ -682,39 +682,48 @@ def _recycle_ids(data):
     return user_ids, notice_ids
 
 
-@api_view(["GET", "POST", "DELETE"])
+def _restore_recycle(user_ids, notice_ids):
+    restored = {"users": 0, "notices": 0}
+    if notice_ids:
+        notices = Notice.objects.filter(id__in=notice_ids, is_deleted=True)
+        restored["notices"] = notices.update(is_deleted=False)
+    if user_ids:
+        people = User.objects.filter(id__in=user_ids, is_active=False).exclude(role=User.Role.SUPER_ADMIN)
+        restored["users"] = people.update(is_active=True)
+    return Response({"detail": "Restored.", "restored": restored})
+
+
+def _purge_recycle(request, user_ids, notice_ids):
+    people = User.objects.filter(id__in=user_ids, is_active=False).exclude(role=User.Role.SUPER_ADMIN)
+    if people.filter(id=request.user.id).exists():
+        return Response({"detail": "You cannot permanently delete your own account."}, status=status.HTTP_400_BAD_REQUEST)
+    notices = Notice.objects.filter(id__in=notice_ids, is_deleted=True)
+    try:
+        with transaction.atomic():
+            deleted = {"users": people.count(), "notices": notices.count()}
+            if notice_ids:
+                notices.delete()
+            if user_ids:
+                people.delete()
+    except ProtectedError:
+        return Response(
+            {"detail": "Some records are still linked and cannot be permanently deleted."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return Response({"detail": "Permanently deleted.", "deleted": deleted})
+
+
+@api_view(["GET", "POST"])
 @permission_classes([IsSuperAdmin])
 def recycle_bin(request):
-    if request.method in ("POST", "DELETE"):
+    if request.method == "POST":
         user_ids, notice_ids = _recycle_ids(request.data)
         if not notice_ids and not user_ids:
             return Response({"detail": "Nothing selected."}, status=status.HTTP_400_BAD_REQUEST)
-        if request.method == "POST":
-            restored = {"users": 0, "notices": 0}
-            if notice_ids:
-                notices = Notice.objects.filter(id__in=notice_ids, is_deleted=True)
-                restored["notices"] = notices.update(is_deleted=False)
-            if user_ids:
-                people = User.objects.filter(id__in=user_ids, is_active=False).exclude(role=User.Role.SUPER_ADMIN)
-                restored["users"] = people.update(is_active=True)
-            return Response({"detail": "Restored.", "restored": restored})
-        people = User.objects.filter(id__in=user_ids, is_active=False).exclude(role=User.Role.SUPER_ADMIN)
-        if people.filter(id=request.user.id).exists():
-            return Response({"detail": "You cannot permanently delete your own account."}, status=status.HTTP_400_BAD_REQUEST)
-        notices = Notice.objects.filter(id__in=notice_ids, is_deleted=True)
-        try:
-            with transaction.atomic():
-                deleted = {"users": people.count(), "notices": notices.count()}
-                if notice_ids:
-                    notices.delete()
-                if user_ids:
-                    people.delete()
-        except ProtectedError:
-            return Response(
-                {"detail": "Some records are still linked and cannot be permanently deleted."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return Response({"detail": "Permanently deleted.", "deleted": deleted})
+        action = str(request.data.get("action") or "restore").strip().lower()
+        if action in {"purge", "delete", "permanent"}:
+            return _purge_recycle(request, user_ids, notice_ids)
+        return _restore_recycle(user_ids, notice_ids)
     inactive = User.objects.filter(is_active=False).exclude(role=User.Role.SUPER_ADMIN).order_by("-id")[:200]
     notices = Notice.objects.filter(is_deleted=True).order_by("-updated_at")[:100]
     return Response(
