@@ -17,6 +17,7 @@ import { ENDPOINTS } from "../../api/endpoints";
 import { useUi } from "../../context/UiContext";
 import { extractApiErrorMessage } from "../../utils/apiErrors";
 import { TOPIC_SOURCE_TEACHER_GROUP, topicSourceLabel } from "../../utils/courseworkForm";
+import { PersonNameCell } from "./PersonAvatar";
 
 const TopicAllotDialog = ({ coursework, onClose, onSaved }) => {
   const { notify } = useUi();
@@ -124,14 +125,14 @@ const TopicAllotDialog = ({ coursework, onClose, onSaved }) => {
           ) : null}
           {targets.map((row) => (
             <Stack key={row.id} spacing={0.3}>
-              <Typography sx={{ fontWeight: 700, fontSize: "0.86rem", color: "#122a57" }}>
-                {row.name}
+              <Stack direction="row" spacing={0.8} alignItems="center">
+                <PersonNameCell person={{ ...row, role: perGroup ? "" : "student" }} name={row.name} size={28} />
                 {row.roll_no ? (
-                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.8 }}>
+                  <Typography variant="caption" color="text.secondary">
                     {row.roll_no}
                   </Typography>
                 ) : null}
-              </Typography>
+              </Stack>
               {perGroup && row.members?.length ? (
                 <Typography variant="caption" color="text.secondary">
                   {row.members.map((member) => member.name).join(", ")}

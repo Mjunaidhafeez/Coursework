@@ -32,6 +32,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import ListingPage from "../../components/shared/ListingPage";
+import { PersonNameCell } from "../../components/shared/PersonAvatar";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { COMMS, CommsSection } from "../../components/shared/commsUi";
 import { useAuth } from "../../context/AuthContext";
@@ -376,7 +377,9 @@ const WhatsAppPage = () => {
                 <TableCell padding="checkbox">
                   <Checkbox checked={Boolean(selectedIds[item.id])} onChange={() => setSelectedIds((prev) => ({ ...prev, [item.id]: !prev[item.id] }))} />
                 </TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>{item.name}</TableCell>
+                <TableCell>
+                  <PersonNameCell person={item} name={item.name} />
+                </TableCell>
                 <TableCell>{item.role === "teacher" ? "Teacher" : "Student"}</TableCell>
                 <TableCell>
                   {item.phone ? item.phone : <Chip size="small" label="No phone" />}

@@ -2,7 +2,6 @@ import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import FactCheckRoundedIcon from "@mui/icons-material/FactCheckRounded";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import {
-  Avatar,
   Box,
   Button,
   Checkbox,
@@ -29,11 +28,11 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import ListingPage from "../../components/shared/ListingPage";
+import PersonAvatar from "../../components/shared/PersonAvatar";
 import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import { exportTable } from "../../utils/export";
-import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 import { listRows } from "./listRows";
 
 const STATUSES = [
@@ -460,9 +459,7 @@ const AttendancePage = () => {
                 <TableRow key={row.id || row.student} hover>
                   <TableCell>{index + 1}</TableCell>
                   <TableCell>
-                    <Avatar src={toAbsoluteMediaUrl(row.student_avatar)} sx={{ width: 32, height: 32, bgcolor: "#1d4fbf", fontSize: "0.78rem" }}>
-                      {(row.student_name || "S").slice(0, 1).toUpperCase()}
-                    </Avatar>
+                    <PersonAvatar person={row} src={row.student_avatar} name={row.student_name} role="student" size={32} />
                   </TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{row.student_roll_no || "-"}</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{row.student_name || row.student}</TableCell>
@@ -545,9 +542,7 @@ const AttendancePage = () => {
               <TableRow key={row.student_id} hover>
                 <TableCell>{index + 1}</TableCell>
                 <TableCell>
-                  <Avatar src={toAbsoluteMediaUrl(row.avatar)} sx={{ width: 30, height: 30, bgcolor: "#1d4fbf", fontSize: "0.75rem" }}>
-                    {(row.name || "S").slice(0, 1).toUpperCase()}
-                  </Avatar>
+                  <PersonAvatar person={row} name={row.name} role="student" size={30} />
                 </TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>{row.roll_no || "-"}</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>{row.name}</TableCell>
@@ -672,7 +667,10 @@ const AttendancePage = () => {
       {isStudent ? studentView : tab === "mark" ? markTable : reportTable}
       <Dialog open={Boolean(studentDialog)} onClose={() => setStudentDialog(null)} fullWidth maxWidth="sm">
         <DialogTitle>
-          {studentDialog?.name} · {studentDialog?.roll_no || "-"} · {studentDialog?.percent}%
+          <Stack direction="row" spacing={1} alignItems="center">
+            <PersonAvatar person={studentDialog} name={studentDialog?.name} role="student" size={36} />
+            <span>{studentDialog?.name} · {studentDialog?.roll_no || "-"} · {studentDialog?.percent}%</span>
+          </Stack>
         </DialogTitle>
         <DialogContent>
           <Table size="small">

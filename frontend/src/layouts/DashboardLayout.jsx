@@ -3,7 +3,6 @@ import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import NotificationsNoneRoundedIcon from "@mui/icons-material/NotificationsNoneRounded";
 import { Suspense, useEffect, useRef, useState } from "react";
 import {
-  Avatar,
   Badge,
   Box,
   Button,
@@ -30,6 +29,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 import Sidebar from "../components/Sidebar";
+import PersonAvatar from "../components/shared/PersonAvatar";
 import RouteFallback from "../components/shared/RouteFallback";
 import { useAuth } from "../context/AuthContext";
 import { usePortalSettings } from "../context/PortalSettingsContext";
@@ -390,9 +390,7 @@ const DashboardLayout = () => {
                 </Menu>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <IconButton onClick={openProfile} sx={{ p: 0.15 }}>
-                    <Avatar src={avatarSrc} sx={{ width: 34, height: 34, bgcolor: "#11357f" }}>
-                      {(fullName || "U").slice(0, 1).toUpperCase()}
-                    </Avatar>
+                    <PersonAvatar src={avatarSrc} person={user} name={fullName} size={34} sx={{ bgcolor: "#11357f" }} />
                   </IconButton>
                   <Box sx={{ display: { xs: "none", md: "block" } }}>
                     <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mb: 0.15 }}>
@@ -444,9 +442,7 @@ const DashboardLayout = () => {
         <DialogContent dividers>
           <Stack spacing={1.1} sx={{ mt: 0.6 }}>
             <Stack direction="row" spacing={1.2} alignItems="center">
-              <Avatar src={avatarSrc} sx={{ width: 52, height: 52 }}>
-                {(fullName || "U").slice(0, 1).toUpperCase()}
-              </Avatar>
+              <PersonAvatar src={avatarSrc} person={user} name={fullName} size={52} />
               <Button variant="outlined" component="label">
                 Upload Avatar
                 <input

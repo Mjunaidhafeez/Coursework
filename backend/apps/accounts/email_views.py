@@ -11,6 +11,7 @@ from apps.academics.models import Enrollment
 from apps.accounts.models import User
 from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.common.mailer import default_email_template, send_student_emails
+from apps.common.uploads import media_field_url
 
 MAX_EMAIL_FILES = 5
 MAX_EMAIL_FILE_BYTES = 25 * 1024 * 1024
@@ -195,7 +196,7 @@ def _email_template_from_request(data, sender):
     }
 
 
-def _serialize_recipient(person):
+def _serialize_recipient(person, request=None):
     profile = getattr(person, "student_profile", None)
     courses = []
     if getattr(person, "role", "") == User.Role.TEACHER:
@@ -209,6 +210,7 @@ def _serialize_recipient(person):
         "email": person.email or "",
         "phone": person.phone or "",
         "role": person.role,
+        "avatar": media_field_url(getattr(person, "avatar", None), request),
         "roll_no": getattr(profile, "student_id", "") or "",
         "semester": getattr(getattr(profile, "semester", None), "number", None),
         "courses": courses,
@@ -228,7 +230,7 @@ def email_recipients(request):
         semester=request.query_params.get("semester") or None,
         search=request.query_params.get("search") or "",
     )
-    rows = [_serialize_recipient(person) for person in people]
+    rows = [_serialize_recipient(person, request) for person in people]
     return Response(
         {
             "count": len(rows),

@@ -1,5 +1,6 @@
 import { Box, Button, Checkbox, Chip, Stack, TextField, Typography } from "@mui/material";
 
+import PersonAvatar from "./PersonAvatar";
 import { getUserDisplayName } from "../../utils/userDisplay";
 import { sortStudentsByRollOrUsername, studentOrgLabel } from "../../utils/groupForm";
 
@@ -79,6 +80,7 @@ const GroupMemberPicker = ({
         onClick={() => toggle(student.id)}
       >
         <Checkbox size="small" checked={checked} disabled={blocked || locked} sx={{ mt: -0.3 }} />
+        <PersonAvatar person={student} role="student" size={26} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography sx={{ fontWeight: 700, fontSize: "0.82rem", color: "#13377a" }}>
             {getUserDisplayName(student, { includeUsername: true })}

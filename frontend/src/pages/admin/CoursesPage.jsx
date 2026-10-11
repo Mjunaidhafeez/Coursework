@@ -31,6 +31,7 @@ import useRowSelection from "../../hooks/useRowSelection";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { getUserDisplayName } from "../../utils/userDisplay";
+import PersonAvatar from "../../components/shared/PersonAvatar";
 import SelectPlaceholder from "../../components/shared/SelectPlaceholder";
 import { confirmDelete } from "../../utils/confirm";
 import CourseStudyFilesCell from "../../components/shared/CourseStudyFiles";
@@ -299,7 +300,14 @@ const CoursesPage = () => {
                   <Stack direction="row" spacing={0.5} flexWrap="wrap">
                     {(course.teachers || []).map((id) => {
                       const teacher = teachers.find((t) => t.id === id);
-                      return <Chip key={id} size="small" label={getUserDisplayName(teacher) || id} />;
+                      return (
+                        <Chip
+                          key={id}
+                          size="small"
+                          avatar={<PersonAvatar person={teacher} role="teacher" size={22} />}
+                          label={getUserDisplayName(teacher) || id}
+                        />
+                      );
                     })}
                   </Stack>
                 </TableCell>

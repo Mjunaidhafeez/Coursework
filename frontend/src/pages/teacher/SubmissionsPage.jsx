@@ -34,6 +34,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../../api/client";
 import CompactTabs from "../../components/shared/CompactTabs";
 import ListingPage from "../../components/shared/ListingPage";
+import { PersonNameCell } from "../../components/shared/PersonAvatar";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
@@ -1706,9 +1707,12 @@ const SubmissionsPage = () => {
                                 <TableCell>{idx + 1}</TableCell>
                                 <TableCell>
                                   <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
-                                    <Typography sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-                                      {studentLabel}
-                                    </Typography>
+                                    <PersonNameCell
+                                      person={item}
+                                      name={studentLabel}
+                                      role={item.group_name ? "" : "student"}
+                                      size={28}
+                                    />
                                     {canViewMembers ? (
                                           <Chip
                                             size="small"
@@ -1846,7 +1850,9 @@ const SubmissionsPage = () => {
                     : "-";
                   return (
                     <TableRow key={`${member.id || member.student_id || idx}-dialog`}>
-                      <TableCell>{member.name || "-"}</TableCell>
+                      <TableCell>
+                        <PersonNameCell person={member} name={member.name} role="student" size={26} />
+                      </TableCell>
                       <TableCell>{member.roll_no || "-"}</TableCell>
                       <TableCell>
                         {memberSubmission ? (

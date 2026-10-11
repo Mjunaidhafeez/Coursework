@@ -31,6 +31,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
 import ListingPage from "../../components/shared/ListingPage";
+import { PersonNameCell } from "../../components/shared/PersonAvatar";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { COMMS, CommsSection } from "../../components/shared/commsUi";
 import { useAuth } from "../../context/AuthContext";
@@ -511,7 +512,9 @@ const EmailStudentsPage = () => {
                       onChange={() => setSelectedIds((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
                     />
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>{item.name}</TableCell>
+                  <TableCell>
+                    <PersonNameCell person={item} name={item.name} />
+                  </TableCell>
                   <TableCell>
                     <Chip size="small" color={item.role === "teacher" ? "info" : "default"} label={recipientType(item)} />
                   </TableCell>

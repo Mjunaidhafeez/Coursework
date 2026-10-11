@@ -168,6 +168,7 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
     teacher_profile = TeacherProfileSerializer(required=False)
     student_profile = StudentProfileSerializer(required=False)
     password = serializers.CharField(write_only=True, required=False, min_length=8)
+    avatar = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -180,6 +181,7 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
             "phone",
             "role",
             "password",
+            "avatar",
             "teacher_profile",
             "student_profile",
         ]

@@ -16,6 +16,7 @@ from apps.common.uploads import (
     apply_file_display_name,
     delete_stored_file,
     file_response_for_instance,
+    media_field_url,
     store_upload,
     validate_upload,
 )
@@ -131,10 +132,16 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
         if request.user.role == User.Role.TEACHER and not coursework.course.teachers.filter(id=request.user.id).exists():
             raise PermissionDenied("You can only allot topics for your courses.")
 
-    def _student_label(self, user):
+    def _student_label(self, user, request=None):
         name = (user.get_full_name() or "").strip() or user.username
         roll = getattr(getattr(user, "student_profile", None), "student_id", "") or ""
-        return {"id": user.id, "name": name, "roll_no": roll}
+        return {
+            "id": user.id,
+            "name": name,
+            "roll_no": roll,
+            "avatar": media_field_url(getattr(user, "avatar", None), request),
+            "role": "student",
+        }
 
     def _course_students(self, coursework):
         ids = list(
@@ -180,7 +187,7 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
             targets = []
             for group in self._course_groups(coursework):
                 members = [
-                    self._student_label(member.student)
+                    self._student_label(member.student, request)
                     for member in group.members.all()
                     if member.invitation_status != GroupMember.InvitationStatus.REJECTED
                 ]
@@ -199,7 +206,7 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
             if submission.student_id and submission.topic:
                 topic_by_student.setdefault(submission.student_id, submission.topic)
         targets = [
-            {**self._student_label(student), "topic": topic_by_student.get(student.id, "")}
+            {**self._student_label(student, request), "topic": topic_by_student.get(student.id, "")}
             for student in self._course_students(coursework)
         ]
         return Response({"topic_source": source, "targets": targets})

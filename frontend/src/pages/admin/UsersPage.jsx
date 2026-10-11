@@ -37,6 +37,7 @@ import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiError
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { downloadCsvFile, printTablePdf } from "../../utils/export";
 import { getUserDisplayName } from "../../utils/userDisplay";
+import { PersonNameCell, PersonPhotoField } from "../../components/shared/PersonAvatar";
 import SelectPlaceholder from "../../components/shared/SelectPlaceholder";
 import { confirmDelete } from "../../utils/confirm";
 import { fetchOrgCatalog } from "../campus/listRows";
@@ -56,6 +57,8 @@ const emptyForm = {
   semester: "",
   mailing_address: "",
   show_on_website: true,
+  avatar: null,
+  avatarUrl: "",
 };
 
 const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
@@ -271,12 +274,21 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
         };
       }
 
+      const saveAvatar = async (userId) => {
+        if (!(form.avatar instanceof File) || !userId) return;
+        const photo = new FormData();
+        photo.append("avatar", form.avatar);
+        await api.patch(`${ENDPOINTS.users}${userId}/`, photo);
+      };
+
       if (editingId) {
         setUsers((prev) => prev.map((u) => (u.id === editingId ? { ...u, ...payload } : u)));
         await api.patch(`${ENDPOINTS.users}${editingId}/`, payload);
+        await saveAvatar(editingId);
         notify("User updated");
       } else {
-        await api.post(ENDPOINTS.users, payload);
+        const { data } = await api.post(ENDPOINTS.users, payload);
+        await saveAvatar(data?.id);
         notify("User added");
       }
 
@@ -321,6 +333,8 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       semester: String(user.student_profile?.semester || ""),
       mailing_address: user.mailing_address || user.student_profile?.mailing_address || "",
       show_on_website: user.teacher_profile?.show_on_website !== false && user.student_profile?.show_on_website !== false,
+      avatar: null,
+      avatarUrl: user.avatar || "",
     });
     setFormErrors({});
   };
@@ -465,6 +479,13 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             </>
           )}
         >
+          <PersonPhotoField
+            src={form.avatarUrl}
+            file={form.avatar}
+            name={`${form.first_name} ${form.last_name}`.trim() || form.username}
+            role={form.role}
+            onChange={(file) => updateForm((p) => ({ ...p, avatar: file }))}
+          />
           <TextField required size="small" label="Username" value={form.username} error={showValidation && Boolean(formErrors.username)} helperText={showValidation ? formErrors.username || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, username: e.target.value }))} />
           <TextField required size="small" label="Email" type="email" value={form.email} error={showValidation && Boolean(formErrors.email)} helperText={showValidation ? formErrors.email || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, email: e.target.value }))} />
           <TextField size="small" label="Phone / WhatsApp" value={form.phone} helperText="Optional" sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, phone: e.target.value }))} />
@@ -655,7 +676,9 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                   <Checkbox size="small" checked={selection.isSelected(user.id)} onChange={() => selection.toggle(user.id)} />
                 </TableCell>
                 <TableCell>{user.username}</TableCell>
-                <TableCell>{getUserDisplayName(user)}</TableCell>
+                <TableCell>
+                  <PersonNameCell person={user} />
+                </TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{String(user.role || "").replace("_", " ")}</TableCell>
                 <TableCell>{user.student_profile?.department_name || user.teacher_profile?.department_name || user.teacher_profile?.department || "-"}</TableCell>
