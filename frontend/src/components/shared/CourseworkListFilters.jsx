@@ -1,6 +1,7 @@
 import { MenuItem, TextField } from "@mui/material";
 
 import { SUBMISSION_TYPE_OPTIONS, uniqueCourseSemesters } from "../../utils/courseworkOptions";
+import { compactFilterSx } from "./listingStyles";
 
 const CourseworkListFilters = ({
   courses,
@@ -15,21 +16,21 @@ const CourseworkListFilters = ({
   typeOptions,
 }) => (
   <>
-    <TextField select size="small" label="Semester" value={semesterFilter} onChange={(e) => onSemester(e.target.value)} sx={{ minWidth: 120 }}>
+    <TextField select size="small" label="Semester" value={semesterFilter} onChange={(e) => onSemester(e.target.value)} sx={compactFilterSx}>
       <MenuItem value="">All</MenuItem>
       {uniqueCourseSemesters(courses).map((item) => (
         <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>
       ))}
     </TextField>
-    <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => onCourse(e.target.value)} sx={{ minWidth: 150 }}>
+    <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => onCourse(e.target.value)} sx={compactFilterSx}>
       <MenuItem value="">All courses</MenuItem>
       {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
     </TextField>
-    <TextField select size="small" label="Type" value={typeFilter} onChange={(e) => onType(e.target.value)} sx={{ minWidth: 130 }}>
+    <TextField select size="small" label="Type" value={typeFilter} onChange={(e) => onType(e.target.value)} sx={compactFilterSx}>
       <MenuItem value="">All types</MenuItem>
       {typeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
     </TextField>
-    <TextField select size="small" label="Submission" value={submissionFilter} onChange={(e) => onSubmission(e.target.value)} sx={{ minWidth: 140 }}>
+    <TextField select size="small" label="Submission" value={submissionFilter} onChange={(e) => onSubmission(e.target.value)} sx={compactFilterSx}>
       <MenuItem value="">All modes</MenuItem>
       {SUBMISSION_TYPE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
     </TextField>

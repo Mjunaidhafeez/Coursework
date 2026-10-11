@@ -1,4 +1,4 @@
-import { Alert, Chip, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Chip, MenuItem, Stack, TextField } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
@@ -312,9 +312,9 @@ const GroupComposer = ({
       }}
       extra={<FormErrorSummary errors={formErrors} />}
     >
-      <Alert severity="info" sx={{ py: 0.4 }}>{formSummary}</Alert>
+      <Alert severity="info" sx={{ py: 0.25, "& .MuiAlert-message": { py: 0.1, fontSize: "0.78rem" } }}>{formSummary}</Alert>
       {isRequest && profileLabel ? <Chip size="small" color="primary" variant="outlined" label={`Your class · ${profileLabel}`} /> : null}
-      <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
+      <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap">
         <TextField required size="small" label="Group Name" value={form.name} error={Boolean(formErrors.name)} helperText={formErrors.name || ""} sx={compactFieldSx} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
         <TextField
           select
@@ -344,7 +344,7 @@ const GroupComposer = ({
             value={String(form.course || "")}
             error={Boolean(formErrors.course)}
             helperText={formErrors.course || ""}
-            sx={{ ...compactFieldSx, minWidth: { sm: 220 }, flex: { sm: "1 1 220px" } }}
+            sx={compactFieldSx}
             onChange={(e) => applyCourseContext(e.target.value)}
           >
             <SelectPlaceholder items={visibleCourses} readyText="Select course" emptyText="No courses yet" />
@@ -365,18 +365,15 @@ const GroupComposer = ({
             value={String(form.coursework || "")}
             error={Boolean(formErrors.coursework)}
             helperText={formErrors.coursework || (!form.course ? "Choose a course first" : "")}
-            sx={{ ...compactFieldSx, minWidth: { sm: 220 }, flex: { sm: "1 1 220px" } }}
+            sx={compactFieldSx}
             onChange={(e) => setForm((prev) => ({ ...prev, coursework: e.target.value }))}
           >
             <SelectPlaceholder items={courseworks} readyText="Select assessment" emptyText="No assessments for this course" />
             {courseworks.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.title}</MenuItem>)}
           </TextField>
         ) : null}
-      </Stack>
-      {isRequest ? null : (
-        <>
-          <Typography sx={{ fontWeight: 800, fontSize: "0.78rem", color: "#13377a" }}>Filter students</Typography>
-          <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
+        {isRequest ? null : (
+          <>
             <TextField select size="small" label="Semester" value={studentFilters.semester} sx={compactFieldSx} onChange={(e) => setStudentFilters((prev) => ({ ...prev, semester: e.target.value }))}>
               <SelectPlaceholder items={semesters} readyText="All semesters" emptyText="No semesters yet" />
               {semesters.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.number}</MenuItem>)}
@@ -393,9 +390,9 @@ const GroupComposer = ({
               <SelectPlaceholder items={sectionOptions} readyText="All sections" emptyText="No sections yet" />
               {sectionOptions.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
             </TextField>
-          </Stack>
-        </>
-      )}
+          </>
+        )}
+      </Stack>
       <GroupMemberPicker
         students={pickerStudents}
         knownStudents={knownStudents}

@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import BulkActionBar from "../../components/shared/BulkActionBar";
+import CompactAddForm from "../../components/shared/CompactAddForm";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
+import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import useRowSelection from "../../hooks/useRowSelection";
@@ -113,37 +115,30 @@ const CalendarNoticesPage = () => {
       title="Calendar & notices"
       icon={<EventNoteRoundedIcon />}
       subtitle="Events and notices for the campus. New items notify the chosen audience."
-    >
-      <Stack spacing={1.2}>
-        {canWrite ? (
-          <Stack spacing={1} sx={{ p: 1.1, border: "1px solid #dbeafe", borderRadius: 2, bgcolor: "#f8fbff" }}>
-            <Typography sx={{ fontWeight: 800 }}>Publish</Typography>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-              <TextField size="small" select label="Type" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} sx={{ minWidth: 140 }}>
-                <MenuItem value="notice">Notice</MenuItem>
-                <MenuItem value="event">Calendar event</MenuItem>
-              </TextField>
-              <TextField size="small" select label="Audience" value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} sx={{ minWidth: 140 }}>
-                <MenuItem value="all">Everyone</MenuItem>
-                <MenuItem value="students">Students</MenuItem>
-                <MenuItem value="teachers">Teachers</MenuItem>
-              </TextField>
-              <TextField size="small" select label="Course (optional)" value={form.course} onChange={(e) => setForm({ ...form, course: e.target.value })} sx={{ minWidth: 180 }}>
-                <MenuItem value="">All courses</MenuItem>
-                {courses.map((course) => (
-                  <MenuItem key={course.id} value={course.id}>{course.code} — {course.title}</MenuItem>
-                ))}
-              </TextField>
-            </Stack>
-            <TextField size="small" label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <TextField size="small" multiline minRows={2} label="Details" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-              <TextField size="small" type="datetime-local" label="Starts" InputLabelProps={{ shrink: true }} value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} />
-              <TextField size="small" type="datetime-local" label="Ends" InputLabelProps={{ shrink: true }} value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} />
-              <Button variant="contained" onClick={save}>Publish</Button>
-            </Stack>
-          </Stack>
-        ) : null}
+      addForm={canWrite ? (
+        <CompactAddForm title="Publish notice" submitLabel="Publish" onSubmit={save} onClear={() => setForm(emptyForm)}>
+          <TextField size="small" select label="Type" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} sx={compactFieldSx}>
+            <MenuItem value="notice">Notice</MenuItem>
+            <MenuItem value="event">Calendar event</MenuItem>
+          </TextField>
+          <TextField size="small" select label="Audience" value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} sx={compactFieldSx}>
+            <MenuItem value="all">Everyone</MenuItem>
+            <MenuItem value="students">Students</MenuItem>
+            <MenuItem value="teachers">Teachers</MenuItem>
+          </TextField>
+          <TextField size="small" select label="Course" value={form.course} onChange={(e) => setForm({ ...form, course: e.target.value })} sx={compactFieldSx}>
+            <MenuItem value="">All courses</MenuItem>
+            {courses.map((course) => (
+              <MenuItem key={course.id} value={course.id}>{course.code} — {course.title}</MenuItem>
+            ))}
+          </TextField>
+          <TextField size="small" label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} sx={compactFieldSx} />
+          <TextField size="small" label="Details" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} sx={compactFieldSx} />
+          <TextField size="small" type="datetime-local" label="Starts" InputLabelProps={{ shrink: true }} value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} sx={compactFieldSx} />
+          <TextField size="small" type="datetime-local" label="Ends" InputLabelProps={{ shrink: true }} value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} sx={compactFieldSx} />
+        </CompactAddForm>
+      ) : null}
+      filters={(
         <SearchToolbar
           search={search}
           onSearchChange={setSearch}
@@ -155,24 +150,27 @@ const CalendarNoticesPage = () => {
           }}
           filters={(
             <>
-              <TextField size="small" select label="Type" value={filters.kind} sx={{ minWidth: 120 }} onChange={(e) => setFilters((prev) => ({ ...prev, kind: e.target.value }))}>
+              <TextField size="small" select label="Type" value={filters.kind} onChange={(e) => setFilters((prev) => ({ ...prev, kind: e.target.value }))}>
                 <MenuItem value="">All</MenuItem>
                 <MenuItem value="notice">Notice</MenuItem>
                 <MenuItem value="event">Event</MenuItem>
               </TextField>
-              <TextField size="small" select label="Audience" value={filters.audience} sx={{ minWidth: 130 }} onChange={(e) => setFilters((prev) => ({ ...prev, audience: e.target.value }))}>
+              <TextField size="small" select label="Audience" value={filters.audience} onChange={(e) => setFilters((prev) => ({ ...prev, audience: e.target.value }))}>
                 <MenuItem value="">All</MenuItem>
                 <MenuItem value="all">Everyone</MenuItem>
                 <MenuItem value="students">Students</MenuItem>
                 <MenuItem value="teachers">Teachers</MenuItem>
               </TextField>
-              <TextField size="small" select label="Course" value={filters.course} sx={{ minWidth: 160 }} onChange={(e) => setFilters((prev) => ({ ...prev, course: e.target.value }))}>
+              <TextField size="small" select label="Course" value={filters.course} onChange={(e) => setFilters((prev) => ({ ...prev, course: e.target.value }))}>
                 <MenuItem value="">All</MenuItem>
                 {courses.map((course) => <MenuItem key={course.id} value={course.id}>{course.code}</MenuItem>)}
               </TextField>
             </>
           )}
         />
+      )}
+    >
+      <Stack spacing={1.2}>
         {canWrite ? (
           <BulkActionBar
             count={selection.count}

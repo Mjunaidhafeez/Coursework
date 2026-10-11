@@ -100,22 +100,22 @@ const GroupMemberPicker = ({
   };
 
   return (
-    <Box sx={{ width: "100%", minWidth: { xs: "100%", md: 420 }, flex: "1 1 100%" }}>
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }} sx={{ mb: 0.7 }}>
+    <Box sx={{ width: "100%", minWidth: 0 }}>
+      <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mb: 0.5 }}>
         <TextField
           size="small"
           label="Search name or roll no"
           value={search}
           onChange={(e) => onSearchChange?.(e.target.value)}
-          sx={{ minWidth: { xs: "100%", sm: 220 }, flex: 1 }}
+          sx={{ minWidth: { xs: "47%", sm: 180 }, flex: { xs: "1 1 47%", sm: "0 0 200px" }, maxWidth: { sm: 240 } }}
         />
         <Chip size="small" color={memberIds.length ? "primary" : "default"} label={`${memberIds.length} selected`} />
         <Button size="small" variant="outlined" disabled={!selectableVisible.length} onClick={toggleVisible}>
           {allVisibleSelected ? "Clear visible" : "Select visible"}
         </Button>
       </Stack>
-      {error ? <Typography variant="caption" color="error" sx={{ display: "block", mb: 0.5 }}>{error}</Typography> : null}
-      <Box sx={{ maxHeight: 280, overflow: "auto", border: "1px solid #dbeafe", borderRadius: 1.2, bgcolor: "#fbfdff" }}>
+      {error ? <Typography variant="caption" color="error" sx={{ display: "block", mb: 0.4 }}>{error}</Typography> : null}
+      <Box sx={{ maxHeight: 132, overflow: "auto", border: "1px solid #dbeafe", borderRadius: 1.2, bgcolor: "#fbfdff" }}>
         {hiddenSelected.map((student) => renderRow(student, "Selected · hidden by filters"))}
         {visible.map((student) => renderRow(student))}
         {loading ? (

@@ -2,6 +2,8 @@ import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import { Button, Stack, TextField } from "@mui/material";
 
+import { filterBarSx } from "./listingStyles";
+
 const SearchToolbar = ({
   search,
   onSearchChange,
@@ -12,7 +14,7 @@ const SearchToolbar = ({
   filters = null,
   actions = null,
 }) => (
-  <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center">
+  <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap" sx={filterBarSx}>
     <TextField
       size="small"
       label={label}
@@ -22,7 +24,6 @@ const SearchToolbar = ({
       onKeyDown={(e) => {
         if (e.key === "Enter") onSearch?.();
       }}
-      sx={{ minWidth: { xs: "100%", sm: 180 }, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
     />
     {filters}
     <Button size="small" variant="outlined" startIcon={<SearchRoundedIcon fontSize="small" />} onClick={onSearch}>

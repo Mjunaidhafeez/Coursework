@@ -85,7 +85,6 @@ const StudentGroupsPage = () => {
     <ListingPage
       title="Groups"
       subtitle="Request a group with classmates from your own semester, class and section. Admin or a teacher will approve or reject it."
-      addFormMaxHeight={{ xs: "70vh", md: "62vh" }}
       addForm={(
         <GroupComposer
           mode="request"

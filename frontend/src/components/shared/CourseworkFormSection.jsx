@@ -2,12 +2,7 @@ import { Button, Checkbox, FormControlLabel, MenuItem, Paper, Stack, TextField, 
 
 import { applyTopicSource, topicSourceOptionsFor, TOPIC_SOURCE_STUDENT, TOPIC_SOURCE_TEACHER_GROUP } from "../../utils/courseworkForm";
 import { humanizeCourseworkType, normalizeCourseworkType } from "../../utils/courseworkOptions";
-
-const fieldSx = {
-  minWidth: { xs: "100%", sm: 150 },
-  flex: { xs: "1 1 100%", sm: "0 1 168px" },
-  "& .MuiFormHelperText-root": { mx: 0.2, mt: 0.15, minHeight: 0 },
-};
+import { compactFieldSx } from "./listingStyles";
 
 const ruleCheckboxSx = {
   py: 0,
@@ -54,8 +49,8 @@ const CourseworkFormSection = ({
   })();
 
   return (
-    <Paper variant="outlined" sx={{ p: 1, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
-      <Stack spacing={0.85}>
+    <Paper variant="outlined" sx={{ p: 0.75, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
+      <Stack spacing={0.65}>
         <Typography sx={{ fontWeight: 800, color: "#13377a", fontSize: "0.92rem" }}>
           {editingId ? "Update assessment" : "Create assessment"}
         </Typography>
@@ -69,7 +64,7 @@ const CourseworkFormSection = ({
             value={form.course === "" || form.course == null ? "" : String(form.course)}
             error={Boolean(formErrors.course)}
             helperText={formErrors.course || undefined}
-            sx={{ ...fieldSx, flex: { sm: "1 1 200px" }, minWidth: { sm: 200 } }}
+            sx={compactFieldSx}
             onChange={(e) => {
               const value = e.target.value;
               setForm((p) => ({ ...p, course: value }));
@@ -91,7 +86,7 @@ const CourseworkFormSection = ({
             value={form.title}
             error={Boolean(formErrors.title)}
             helperText={formErrors.title || undefined}
-            sx={{ ...fieldSx, flex: { sm: "1 1 200px" }, minWidth: { sm: 200 } }}
+            sx={compactFieldSx}
             onChange={(e) => {
               const value = e.target.value;
               setForm((p) => ({ ...p, title: value }));
@@ -103,7 +98,7 @@ const CourseworkFormSection = ({
             size="small"
             label="Type"
             value={selectedType}
-            sx={fieldSx}
+            sx={compactFieldSx}
             onChange={(e) => setForm((p) => ({ ...p, coursework_type: e.target.value }))}
           >
             {typeOptions.map((option) => (
@@ -126,7 +121,7 @@ const CourseworkFormSection = ({
               clearFieldErrorIfValid("deadline", Boolean(value));
             }}
             InputLabelProps={{ shrink: true }}
-            sx={{ ...fieldSx, minWidth: { sm: 210 }, flex: { sm: "0 1 210px" } }}
+            sx={compactFieldSx}
           />
           <TextField
             required
@@ -142,7 +137,7 @@ const CourseworkFormSection = ({
               clearFieldErrorIfValid("max_marks", Boolean(String(value || "").trim()));
             }}
             inputProps={{ min: 1 }}
-            sx={{ ...fieldSx, minWidth: { sm: 110 }, flex: { sm: "0 1 110px" } }}
+            sx={compactFieldSx}
           />
           <TextField
             size="small"
@@ -150,7 +145,7 @@ const CourseworkFormSection = ({
             placeholder="Optional instructions"
             value={form.description}
             onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-            sx={{ ...fieldSx, flex: { sm: "1 1 240px" }, minWidth: { sm: 220 } }}
+            sx={compactFieldSx}
           />
         </Stack>
 
@@ -196,34 +191,33 @@ const CourseworkFormSection = ({
               label="Max members"
               value={form.max_group_members}
               error={Boolean(formErrors.max_group_members)}
-              helperText={formErrors.max_group_members || ""}
+              helperText={formErrors.max_group_members || undefined}
               onChange={(e) => setForm((p) => ({ ...p, max_group_members: e.target.value }))}
               inputProps={{ min: 2 }}
-              sx={{ width: 130 }}
+              sx={compactFieldSx}
             />
           )}
+          <TextField
+            select
+            size="small"
+            label="Who sets the topic?"
+            value={form.topic_source || TOPIC_SOURCE_STUDENT}
+            error={Boolean(formErrors.topic_source)}
+            helperText={formErrors.topic_source || undefined}
+            sx={{ ...compactFieldSx, width: { sm: 220 }, flex: { sm: "0 0 220px" }, maxWidth: { sm: 260 } }}
+            onChange={(e) => {
+              const value = e.target.value;
+              setForm((p) => applyTopicSource(p, value));
+              clearFieldErrorIfValid("topic_source", Boolean(value));
+            }}
+          >
+            {topicOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
         </Stack>
-
-        <TextField
-          select
-          size="small"
-          label="Who sets the topic?"
-          value={form.topic_source || TOPIC_SOURCE_STUDENT}
-          error={Boolean(formErrors.topic_source)}
-          helperText={formErrors.topic_source || "Choose this if you will give each student or each group a different topic."}
-          sx={{ ...fieldSx, flex: { sm: "1 1 280px" }, minWidth: { sm: 260 } }}
-          onChange={(e) => {
-            const value = e.target.value;
-            setForm((p) => applyTopicSource(p, value));
-            clearFieldErrorIfValid("topic_source", Boolean(value));
-          }}
-        >
-          {topicOptions.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </TextField>
 
         <Stack direction="row" spacing={0.4} useFlexGap flexWrap="wrap" alignItems="center">
           <FormControlLabel

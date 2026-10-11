@@ -188,7 +188,6 @@ const GroupsPage = () => {
     <ListingPage
       title="Group Management & Approvals"
       subtitle="Create a group for a course or class, or approve student requests. A student already in a group or on a pending request cannot join another."
-      addFormMaxHeight={{ xs: "70vh", md: "62vh" }}
       addForm={(
         <GroupComposer
           mode="manage"

@@ -29,6 +29,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import ListingPage from "../../components/shared/ListingPage";
+import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useAuth } from "../../context/AuthContext";
 import { useUi } from "../../context/UiContext";
 import { exportTable } from "../../utils/export";
@@ -376,7 +377,7 @@ const AttendancePage = () => {
   const toolbar = !isStudent ? (
     <Stack spacing={1}>
       <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }}>
-        <TextField size="small" select label="Course" value={form.course} onChange={(e) => changeCourse(e.target.value)} sx={{ minWidth: 240 }}>
+        <TextField size="small" select label="Course" value={form.course} onChange={(e) => changeCourse(e.target.value)} sx={compactFieldSx}>
           {courses.map((course) => (
             <MenuItem key={course.id} value={course.id}>
               {course.code} — {course.title}
@@ -386,7 +387,7 @@ const AttendancePage = () => {
         {tab === "mark" ? (
           <>
             <TextField size="small" type="date" label="Date" InputLabelProps={{ shrink: true }} value={form.session_date} onChange={(e) => changeDate(e.target.value)} />
-            <TextField size="small" label="Topic / lecture" value={form.topic} onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))} sx={{ minWidth: 200, flex: 1 }} />
+            <TextField size="small" label="Topic / lecture" value={form.topic} onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))} sx={compactFieldSx} />
             <Button variant="contained" onClick={saveSession} disabled={saving || !students.length}>
               {saving ? "Saving..." : activeSession ? "Update attendance" : "Save attendance"}
             </Button>
@@ -410,7 +411,7 @@ const AttendancePage = () => {
     </Stack>
   ) : (
     <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
-      <TextField size="small" select label="Course" value={form.course} onChange={(e) => setForm((prev) => ({ ...prev, course: e.target.value }))} sx={{ minWidth: 220 }}>
+      <TextField size="small" select label="Course" value={form.course} onChange={(e) => setForm((prev) => ({ ...prev, course: e.target.value }))} sx={compactFieldSx}>
         <MenuItem value="">All courses</MenuItem>
         {courses.map((course) => (
           <MenuItem key={course.id} value={course.id}>
