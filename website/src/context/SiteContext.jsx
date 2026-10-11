@@ -35,6 +35,7 @@ const FALLBACK = {
   alumni: [],
   results: [],
   students: [],
+  groups: [],
   activities: [],
 };
 

@@ -19,6 +19,7 @@ from apps.common.notify import push_notifications
 from apps.common.uploads import cloudinary_enabled, media_field_url, upload_to_cloudinary, validate_upload
 
 from .defaults import DEFAULT_PAGES, PAGE_CATALOG, default_page_flags
+from .directory import merged_directory
 from .models import (
     WebsiteActivity,
     WebsiteAlumnus,
@@ -65,10 +66,11 @@ def build_nav(pages, flags):
     return items
 
 
-def _public_payload():
+def _public_payload(request=None):
     row = WebsiteSettings.load()
     pages = merge_pages(row.pages)
     flags = merge_flags(row.page_flags)
+    directory = merged_directory(request)
     return {
         "site_name": row.site_name,
         "tagline": row.tagline,
@@ -119,18 +121,7 @@ def _public_payload():
             }
             for item in WebsiteDownload.objects.filter(published=True)[:40]
         ],
-        "teachers": [
-            {
-                "id": item.id,
-                "name": item.name,
-                "designation": item.designation,
-                "department": item.department,
-                "degrees": item.degrees,
-                "bio": item.bio,
-                "photo_url": item.photo_url,
-            }
-            for item in WebsiteTeacher.objects.filter(published=True)
-        ],
+        "teachers": directory["teachers"],
         "alumni": [
             {
                 "id": item.id,
@@ -158,18 +149,8 @@ def _public_payload():
             }
             for item in WebsiteResult.objects.filter(published=True)
         ],
-        "students": [
-            {
-                "id": item.id,
-                "name": item.name,
-                "roll_no": item.roll_no,
-                "semester": item.semester,
-                "class_name": item.class_name,
-                "note": item.note,
-                "photo_url": item.photo_url,
-            }
-            for item in WebsiteStudent.objects.filter(published=True)[:400]
-        ],
+        "students": directory["students"][:400],
+        "groups": directory["groups"],
         "activities": [
             {
                 "id": item.id,
@@ -188,7 +169,7 @@ def _public_payload():
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def website_public(request):
-    return Response(_public_payload())
+    return Response(_public_payload(request))
 
 
 @api_view(["GET", "PATCH"])
@@ -196,7 +177,7 @@ def website_public(request):
 def website_settings(request):
     row = WebsiteSettings.load()
     if request.method == "GET":
-        return Response(_public_payload())
+        return Response(_public_payload(request))
     fields = [
         "site_name",
         "tagline",

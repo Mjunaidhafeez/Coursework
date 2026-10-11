@@ -141,7 +141,7 @@ const getStudentStatus = (row) => {
   if (row?.is_marked) return "marked";
   if (String(row?.approval_status || "").toLowerCase() === "rejected") return "rejected";
   if (String(row?.approval_status || "").toLowerCase() === "approved") {
-    return row?.file ? "file_submitted" : "approved";
+    return hasSubmissionFile(row) || row?.file ? "file_submitted" : "approved";
   }
   return hasSentApprovalRequest(row) ? "pending" : "waiting";
 };
@@ -1043,6 +1043,9 @@ const SubmissionsPage = () => {
   }, [visibleGrouped, courseworkById]);
 
   const displayRows = useMemo(() => {
+    if (selectedAssessmentIds.length || selectedStatusFilters.length) {
+      return filteredRows;
+    }
     const list = [];
     Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
       const titles = Object.keys(courseworkGroup);
@@ -1052,7 +1055,7 @@ const SubmissionsPage = () => {
       (courseworkGroup[selectedTitle] || []).forEach((row) => list.push(row));
     });
     return list;
-  }, [visibleGrouped, selectedCourseworkByCourse, courseworkById]);
+  }, [visibleGrouped, selectedCourseworkByCourse, courseworkById, selectedAssessmentIds, selectedStatusFilters, filteredRows]);
 
   const statusFilterOptions = STUDENT_STATUS_OPTIONS;
 

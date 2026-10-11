@@ -16,6 +16,7 @@ export const NAV_ITEMS = {
     { key: "users", label: "User Center", path: "/admin/user-center" },
     { key: "super_admins", label: "Manage Super Admins", path: "/admin/super-admins" },
     { key: "semesters", label: "Semesters", path: "/admin/semesters" },
+    { key: "org", label: "Classes & Depts", path: "/admin/org" },
     { key: "students", label: "Manage Students", path: "/admin/students" },
     { key: "teachers", label: "Manage Teachers", path: "/admin/teachers" },
     { key: "courses", label: "Manage Courses", path: "/admin/courses" },

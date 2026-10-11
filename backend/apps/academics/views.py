@@ -19,12 +19,58 @@ from apps.common.uploads import (
 )
 from apps.common.whatsapp import notify_event
 
-from .models import Course, CourseStudyFile, Enrollment, Semester
-from .serializers import CourseSerializer, CourseStudyFileSerializer, EnrollmentSerializer, SemesterSerializer
+from .models import Course, CourseStudyFile, Department, Enrollment, SchoolClass, Section, Semester
+from .serializers import (
+    CourseSerializer,
+    CourseStudyFileSerializer,
+    DepartmentSerializer,
+    EnrollmentSerializer,
+    SchoolClassSerializer,
+    SectionSerializer,
+    SemesterSerializer,
+)
 
 STUDY_FILE_SIGNER = TimestampSigner(salt="mba-course-study-file")
 STUDY_FILE_TOKEN_MAX_AGE = 2 * 60 * 60
 OFFICE_PREVIEW_EXT = {"doc", "docx", "ppt", "pptx", "xls", "xlsx"}
+
+
+class DepartmentViewSet(viewsets.ModelViewSet):
+    queryset = Department.objects.all()
+    serializer_class = DepartmentSerializer
+    search_fields = ["name", "code"]
+    ordering_fields = ["name", "created_at"]
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsSuperAdmin()]
+        return [permissions.IsAuthenticated()]
+
+
+class SchoolClassViewSet(viewsets.ModelViewSet):
+    queryset = SchoolClass.objects.select_related("department")
+    serializer_class = SchoolClassSerializer
+    filterset_fields = ["department"]
+    search_fields = ["name"]
+    ordering_fields = ["name", "created_at"]
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsSuperAdmin()]
+        return [permissions.IsAuthenticated()]
+
+
+class SectionViewSet(viewsets.ModelViewSet):
+    queryset = Section.objects.select_related("school_class", "school_class__department")
+    serializer_class = SectionSerializer
+    filterset_fields = ["school_class"]
+    search_fields = ["name"]
+    ordering_fields = ["name", "created_at"]
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsSuperAdmin()]
+        return [permissions.IsAuthenticated()]
 
 
 class SemesterViewSet(viewsets.ModelViewSet):
@@ -49,9 +95,9 @@ class SemesterViewSet(viewsets.ModelViewSet):
 
 
 class CourseViewSet(viewsets.ModelViewSet):
-    queryset = Course.objects.select_related("semester").prefetch_related("teachers", "study_files")
+    queryset = Course.objects.select_related("semester", "department").prefetch_related("teachers", "study_files")
     serializer_class = CourseSerializer
-    filterset_fields = ["semester", "teachers"]
+    filterset_fields = ["semester", "teachers", "department"]
     search_fields = ["title", "code"]
     ordering_fields = ["code", "title", "created_at"]
 

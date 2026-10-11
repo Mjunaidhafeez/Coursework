@@ -42,6 +42,7 @@ DEFAULT_LABELS = {
         "users": "User Center",
         "super_admins": "Manage Super Admins",
         "semesters": "Semesters",
+        "org": "Classes & Depts",
         "students": "Manage Students",
         "teachers": "Manage Teachers",
         "courses": "Manage Courses",

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.academics.models import Department
 from apps.common.uploads import media_field_url, normalize_phone
 
 from .models import StudentProfile, TeacherProfile, User
@@ -40,19 +41,47 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 
 class TeacherProfileSerializer(serializers.ModelSerializer):
+    department_id = serializers.IntegerField(source="department_ref_id", required=False, allow_null=True)
+    department_name = serializers.CharField(source="department_ref.name", read_only=True)
+
     class Meta:
         model = TeacherProfile
-        fields = ["id", "department"]
+        fields = ["id", "department", "department_id", "department_name", "show_on_website"]
+
+    def validate(self, attrs):
+        raw = attrs.pop("department_ref_id", serializers.empty)
+        if raw is serializers.empty:
+            raw = attrs.get("department")
+        dept = Department.resolve(None if raw is serializers.empty else raw)
+        if dept:
+            attrs["department_ref"] = dept
+            attrs["department"] = dept.name
+        return attrs
 
 
 class StudentProfileSerializer(serializers.ModelSerializer):
     semester_number = serializers.IntegerField(source="semester.number", read_only=True)
+    department_name = serializers.CharField(source="department.name", read_only=True)
+    school_class_name = serializers.CharField(source="school_class.name", read_only=True)
+    section_name = serializers.CharField(source="section.name", read_only=True)
 
     class Meta:
         model = StudentProfile
-        fields = ["id", "student_id", "semester", "semester_number", "mailing_address"]
+        fields = [
+            "id",
+            "student_id",
+            "semester",
+            "semester_number",
+            "department",
+            "department_name",
+            "school_class",
+            "school_class_name",
+            "section",
+            "section_name",
+            "mailing_address",
+            "show_on_website",
+        ]
         extra_kwargs = {
-            # Handled in parent serializer to support update-on-self without false duplicate error.
             "student_id": {"validators": []},
         }
 
@@ -79,6 +108,7 @@ class UserSerializer(serializers.ModelSerializer):
             "avatar",
             "teacher_profile",
             "student_profile",
+            "is_active",
         ]
 
     def get_full_name(self, obj):
@@ -176,7 +206,7 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
         if role == User.Role.TEACHER:
             if teacher_profile_data is None:
                 raise serializers.ValidationError({"teacher_profile": "Teacher profile is required for teacher role."})
-            if not (teacher_profile_data.get("department") or "").strip():
+            if not (teacher_profile_data.get("department") or teacher_profile_data.get("department_id")):
                 raise serializers.ValidationError({"teacher_profile": {"department": "Department is required."}})
 
         if role == User.Role.STUDENT:

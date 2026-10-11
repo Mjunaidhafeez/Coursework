@@ -2,7 +2,30 @@ from rest_framework import serializers
 
 from apps.common.uploads import media_field_url, public_file_url
 
-from .models import Course, CourseStudyFile, Enrollment, Semester
+from .models import Course, CourseStudyFile, Department, Enrollment, SchoolClass, Section, Semester
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Department
+        fields = ["id", "name", "code", "created_at"]
+
+
+class SchoolClassSerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(source="department.name", read_only=True)
+
+    class Meta:
+        model = SchoolClass
+        fields = ["id", "name", "department", "department_name", "created_at"]
+
+
+class SectionSerializer(serializers.ModelSerializer):
+    school_class_name = serializers.CharField(source="school_class.name", read_only=True)
+    department = serializers.IntegerField(source="school_class.department_id", read_only=True)
+
+    class Meta:
+        model = Section
+        fields = ["id", "name", "school_class", "school_class_name", "department", "created_at"]
 
 
 class SemesterSerializer(serializers.ModelSerializer):
@@ -55,6 +78,7 @@ class CourseStudyFileSerializer(serializers.ModelSerializer):
 class CourseSerializer(serializers.ModelSerializer):
     semester_number = serializers.IntegerField(source="semester.number", read_only=True)
     semester_name = serializers.SerializerMethodField()
+    department_name = serializers.CharField(source="department.name", read_only=True)
     teacher_names = serializers.SerializerMethodField()
     study_files = CourseStudyFileSerializer(many=True, read_only=True)
     study_file_count = serializers.SerializerMethodField()
@@ -68,6 +92,8 @@ class CourseSerializer(serializers.ModelSerializer):
             "semester",
             "semester_number",
             "semester_name",
+            "department",
+            "department_name",
             "teachers",
             "teacher_names",
             "study_files",

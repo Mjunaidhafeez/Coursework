@@ -5,6 +5,55 @@ from django.db import models
 from apps.common.models import TimeStampedModel
 
 
+class Department(TimeStampedModel):
+    name = models.CharField(max_length=120, unique=True)
+    code = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def resolve(cls, value):
+        if value in (None, ""):
+            return None
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, int) or str(value).isdigit():
+            return cls.objects.filter(pk=int(value)).first()
+        name = str(value).strip()[:120]
+        if not name:
+            return None
+        obj, _ = cls.objects.get_or_create(name=name)
+        return obj
+
+
+class SchoolClass(TimeStampedModel):
+    name = models.CharField(max_length=80)
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name="classes")
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("name", "department")
+
+    def __str__(self):
+        return self.name
+
+
+class Section(TimeStampedModel):
+    name = models.CharField(max_length=40)
+    school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, related_name="sections")
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("name", "school_class")
+
+    def __str__(self):
+        return self.name
+
+
 class Semester(TimeStampedModel):
     number = models.PositiveSmallIntegerField(unique=True)
 
@@ -19,6 +68,7 @@ class Course(TimeStampedModel):
     code = models.CharField(max_length=30, unique=True)
     title = models.CharField(max_length=200)
     semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name="courses")
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name="courses")
     teachers = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teaching_courses", blank=True)
 
     class Meta:

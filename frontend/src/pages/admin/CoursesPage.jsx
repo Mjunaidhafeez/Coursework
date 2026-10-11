@@ -31,14 +31,16 @@ import { getUserDisplayName } from "../../utils/userDisplay";
 import { confirmDelete } from "../../utils/confirm";
 import CourseStudyFilesCell from "../../components/shared/CourseStudyFiles";
 
-const emptyForm = { code: "", title: "", semester: "", teachers: [] };
+const emptyForm = { code: "", title: "", semester: "", department: "", teachers: [] };
 
 const CoursesPage = () => {
   const { notify, isGlobalLoading } = useUi();
   const [courses, setCourses] = useState([]);
   const [total, setTotal] = useState(0);
   const [semesters, setSemesters] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [filters, setFilters] = useState({ semester: "", department: "" });
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -48,24 +50,28 @@ const CoursesPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const loadData = async ({ searchValue = search, pageValue = page, pageSizeValue = pageSize } = {}) => {
+  const loadData = async ({ searchValue = search, pageValue = page, pageSizeValue = pageSize, semester = filters.semester, department = filters.department } = {}) => {
     const params = new URLSearchParams();
     if (searchValue) params.append("search", searchValue);
+    if (semester) params.append("semester", semester);
+    if (department) params.append("department", department);
     params.append("page", String(pageValue));
     params.append("page_size", String(pageSizeValue));
 
     setLoading(true);
     try {
-      const [coursesRes, semesterRes, teacherRes] = await Promise.all([
+      const [coursesRes, semesterRes, deptRes, teacherRes] = await Promise.all([
         api.get(`${ENDPOINTS.courses}?${params.toString()}`),
         api.get(`${ENDPOINTS.semesters}?ordering=number&page_size=100`),
-        api.get(`${ENDPOINTS.users}?role=teacher`),
+        api.get(`${ENDPOINTS.departments}?page_size=200`),
+        api.get(`${ENDPOINTS.users}?role=teacher&page_size=200`),
       ]);
 
       setCourses(coursesRes.data.results || []);
       setTotal(coursesRes.data.count || 0);
       const semesterRows = semesterRes.data.results || [];
       setSemesters(semesterRows);
+      setDepartments(deptRes.data.results || []);
       setSemesterAlert(semesterRows.length ? "" : "No semesters found. Add semesters from Admin > Semesters.");
       setTeachers(teacherRes.data.results || []);
     } finally {
@@ -93,7 +99,7 @@ const CoursesPage = () => {
       return;
     }
     try {
-      const payload = { code: form.code, title: form.title, semester: Number(form.semester), teachers: form.teachers.map(Number) };
+      const payload = { code: form.code, title: form.title, semester: Number(form.semester), department: form.department || null, teachers: form.teachers.map(Number) };
       if (editingId) {
         setCourses((prev) => prev.map((c) => (c.id === editingId ? { ...c, ...payload } : c)));
         await api.patch(`${ENDPOINTS.courses}${editingId}/`, payload);
@@ -115,7 +121,7 @@ const CoursesPage = () => {
 
   const edit = (row) => {
     setEditingId(row.id);
-    setForm({ code: row.code, title: row.title, semester: row.semester, teachers: row.teachers || [] });
+    setForm({ code: row.code, title: row.title, semester: row.semester, department: row.department || "", teachers: row.teachers || [] });
     setFormErrors({});
   };
 
@@ -156,6 +162,10 @@ const CoursesPage = () => {
           <TextField required select size="small" label="Semester" value={form.semester} error={Boolean(formErrors.semester)} helperText={formErrors.semester || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, semester: e.target.value }))}>
             {semesters.map((s) => <MenuItem key={s.id} value={s.id}>{s.number}</MenuItem>)}
           </TextField>
+          <TextField select size="small" label="Department" value={form.department} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))}>
+            <MenuItem value="">None</MenuItem>
+            {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+          </TextField>
           <TextField required select size="small" label="Teachers" error={Boolean(formErrors.teachers)} helperText={formErrors.teachers || ""} SelectProps={{ multiple: true }} value={form.teachers} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, teachers: e.target.value }))}>
             {teachers.map((teacher) => <MenuItem key={teacher.id} value={teacher.id}>{getUserDisplayName(teacher, { includeUsername: true })}</MenuItem>)}
           </TextField>
@@ -171,9 +181,22 @@ const CoursesPage = () => {
           }}
           onReset={() => {
             setSearch("");
+            setFilters({ semester: "", department: "" });
             setPage(1);
-            loadData({ searchValue: "", pageValue: 1 });
+            loadData({ searchValue: "", pageValue: 1, semester: "", department: "" });
           }}
+          filters={(
+            <>
+              <TextField size="small" select label="Semester" value={filters.semester} sx={{ minWidth: 120 }} onChange={(e) => setFilters((prev) => ({ ...prev, semester: e.target.value }))}>
+                <MenuItem value="">All</MenuItem>
+                {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+              </TextField>
+              <TextField size="small" select label="Department" value={filters.department} sx={{ minWidth: 150 }} onChange={(e) => setFilters((prev) => ({ ...prev, department: e.target.value }))}>
+                <MenuItem value="">All</MenuItem>
+                {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+              </TextField>
+            </>
+          )}
         />
       )}
     >
@@ -187,6 +210,7 @@ const CoursesPage = () => {
               <TableCell>Code</TableCell>
               <TableCell>Title</TableCell>
               <TableCell>Semester</TableCell>
+              <TableCell>Department</TableCell>
               <TableCell>Teachers</TableCell>
               <TableCell>Files</TableCell>
               <TableCell align="right">Actions</TableCell>
@@ -198,6 +222,7 @@ const CoursesPage = () => {
                 <TableCell>{course.code}</TableCell>
                 <TableCell>{course.title}</TableCell>
                 <TableCell>{course.semester_number}</TableCell>
+                <TableCell>{course.department_name || "-"}</TableCell>
                 <TableCell>
                   <Stack direction="row" spacing={0.5} flexWrap="wrap">
                     {(course.teachers || []).map((id) => {
@@ -219,7 +244,7 @@ const CoursesPage = () => {
             ))}
             {!courses.length && !loading && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <Typography variant="body2" color="text.secondary">No courses found for this filter/search.</Typography>
                 </TableCell>
               </TableRow>

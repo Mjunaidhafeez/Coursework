@@ -12,6 +12,7 @@ const CourseworkPage = lazy(() => import("./pages/admin/CourseworkPage"));
 const GroupsPage = lazy(() => import("./pages/admin/GroupsPage"));
 const ReportsPage = lazy(() => import("./pages/admin/ReportsPage"));
 const SemestersPage = lazy(() => import("./pages/admin/SemestersPage"));
+const OrgUnitsPage = lazy(() => import("./pages/admin/OrgUnitsPage"));
 const StudentsPage = lazy(() => import("./pages/admin/StudentsPage"));
 const SuperAdminsPage = lazy(() => import("./pages/admin/SuperAdminsPage"));
 const TeachersPage = lazy(() => import("./pages/admin/TeachersPage"));
@@ -80,6 +81,7 @@ function App() {
             <Route path="/admin/user-center" element={<UsersPage pageTitle="Admin User Center" />} />
             <Route path="/admin/super-admins" element={<SuperAdminsPage />} />
             <Route path="/admin/semesters" element={<SemestersPage />} />
+            <Route path="/admin/org" element={<OrgUnitsPage />} />
             <Route path="/admin/users" element={<AdminUsersRedirect />} />
             <Route path="/admin/students" element={<StudentsPage />} />
             <Route path="/admin/teachers" element={<TeachersPage />} />

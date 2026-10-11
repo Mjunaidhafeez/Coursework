@@ -21,6 +21,10 @@ class User(AbstractUser):
 class TeacherProfile(TimeStampedModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="teacher_profile")
     department = models.CharField(max_length=120, blank=True)
+    department_ref = models.ForeignKey(
+        "academics.Department", on_delete=models.SET_NULL, null=True, blank=True, related_name="teachers"
+    )
+    show_on_website = models.BooleanField(default=True)
 
     def __str__(self):
         return self.user.username
@@ -30,7 +34,17 @@ class StudentProfile(TimeStampedModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="student_profile")
     student_id = models.CharField(max_length=40, unique=True)
     semester = models.ForeignKey("academics.Semester", on_delete=models.SET_NULL, null=True, blank=True)
+    department = models.ForeignKey(
+        "academics.Department", on_delete=models.SET_NULL, null=True, blank=True, related_name="students"
+    )
+    school_class = models.ForeignKey(
+        "academics.SchoolClass", on_delete=models.SET_NULL, null=True, blank=True, related_name="students"
+    )
+    section = models.ForeignKey(
+        "academics.Section", on_delete=models.SET_NULL, null=True, blank=True, related_name="students"
+    )
     mailing_address = models.TextField(blank=True)
+    show_on_website = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.student_id}"

@@ -218,6 +218,7 @@ const WebsiteCmsPage = () => {
 
         {tab === "teachers" ? (
           <Stack spacing={1}>
+            <Typography color="text.secondary">Portal teachers with “Show on website” appear automatically. Use this tab for extra faculty only.</Typography>
             <TextField size="small" label="Name" value={teacher.name} onChange={(e) => setTeacher({ ...teacher, name: e.target.value })} />
             <TextField size="small" label="Designation" value={teacher.designation} onChange={(e) => setTeacher({ ...teacher, designation: e.target.value })} />
             <TextField size="small" label="Department" value={teacher.department} onChange={(e) => setTeacher({ ...teacher, department: e.target.value })} />
@@ -278,7 +279,7 @@ const WebsiteCmsPage = () => {
 
         {tab === "students" ? (
           <Stack spacing={1}>
-            <Typography color="text.secondary">Public site shows only name, photo, roll no, semester and class — no email or phone. Import copies active portal students, then you can remove any profile.</Typography>
+            <Typography color="text.secondary">Portal students with “Show on website” appear automatically (name, photo, roll, class, section, department — no email or phone). Use this tab only for extra CMS profiles.</Typography>
             <Button variant="outlined" onClick={importPortalStudents} sx={{ alignSelf: "flex-start" }}>Publish portal students</Button>
             <TextField size="small" label="Name" value={student.name} onChange={(e) => setStudent({ ...student, name: e.target.value })} />
             <TextField size="small" label="Roll no" value={student.roll_no} onChange={(e) => setStudent({ ...student, roll_no: e.target.value })} />

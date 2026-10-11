@@ -4,10 +4,11 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
+  FormControlLabel,
   MenuItem,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -44,9 +45,12 @@ const emptyForm = {
   role: "student",
   password: "",
   department: "",
+  school_class: "",
+  section: "",
   student_id: "",
   semester: "",
   mailing_address: "",
+  show_on_website: true,
 };
 
 const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
@@ -57,6 +61,11 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [semesters, setSemesters] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [filters, setFilters] = useState({ department: "", semester: "", school_class: "", section: "", course: "" });
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -77,10 +86,14 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     pageSizeValue = pageSize,
     sortByValue = sortBy,
     sortOrderValue = sortOrder,
+    filtersValue = filters,
   } = {}) => {
     const params = new URLSearchParams();
     if (searchValue) params.append("search", searchValue);
     if (urlRole) params.append("role", urlRole);
+    Object.entries(filtersValue).forEach(([key, value]) => {
+      if (value) params.append(key, value);
+    });
     params.append("ordering", sortOrderValue === "desc" ? `-${sortByValue}` : sortByValue);
     params.append("page", String(pageValue));
     params.append("page_size", String(pageSizeValue));
@@ -151,20 +164,27 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     }
   };
 
-  const loadSemesters = async () => {
-    const params = new URLSearchParams();
-    params.append("ordering", "number");
-    params.append("page_size", "100");
-    const { data } = await api.get(`${ENDPOINTS.semesters}?${params.toString()}`);
-    const semesterRows = data.results || [];
+  const loadCatalogs = async () => {
+    const [semesterRes, deptRes, classRes, sectionRes, courseRes] = await Promise.all([
+      api.get(`${ENDPOINTS.semesters}?ordering=number&page_size=100`),
+      api.get(`${ENDPOINTS.departments}?page_size=200`),
+      api.get(`${ENDPOINTS.schoolClasses}?page_size=200`),
+      api.get(`${ENDPOINTS.sections}?page_size=200`),
+      api.get(`${ENDPOINTS.courses}?page_size=200`),
+    ]);
+    const semesterRows = semesterRes.data.results || [];
     setSemesters(semesterRows);
+    setDepartments(deptRes.data.results || []);
+    setClasses(classRes.data.results || []);
+    setSections(sectionRes.data.results || []);
+    setCourses(courseRes.data.results || []);
     setSemesterAlert(semesterRows.length ? "" : "No semesters found. Add semesters from Admin > Semesters.");
   };
 
   useEffect(() => {
     setPage(1);
     loadUsers({ searchValue: "", pageValue: 1 });
-    loadSemesters();
+    loadCatalogs();
   }, [urlRole]);
 
   useEffect(() => {
@@ -181,7 +201,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     if (!targetForm.last_name.trim()) nextErrors.last_name = "Last name is required";
     if (!targetForm.role) nextErrors.role = "Role is required";
     if (!editingId && !targetForm.password.trim()) nextErrors.password = "Password is required for new user";
-    if (targetForm.role === "teacher" && !targetForm.department.trim()) nextErrors.department = "Department is required for teacher";
+    if (targetForm.role === "teacher" && !String(targetForm.department).trim()) nextErrors.department = "Department is required for teacher";
     if (targetForm.role === "student") {
       if (!targetForm.student_id.trim()) nextErrors.student_id = "Student ID is required";
       if (!String(targetForm.semester).trim()) nextErrors.semester = "Semester is required";
@@ -212,12 +232,22 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
         role: form.role,
       };
       if (form.password) payload.password = form.password;
-      if (form.role === "teacher") payload.teacher_profile = { department: form.department };
+      if (form.role === "teacher") {
+        payload.teacher_profile = {
+          department: form.department,
+          department_id: form.department || null,
+          show_on_website: Boolean(form.show_on_website),
+        };
+      }
       if (form.role === "student") {
         payload.student_profile = {
           student_id: form.student_id,
           semester: form.semester || null,
+          department: form.department || null,
+          school_class: form.school_class || null,
+          section: form.section || null,
           mailing_address: form.mailing_address || "",
+          show_on_website: Boolean(form.show_on_website),
         };
       }
 
@@ -264,10 +294,13 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       last_name: user.last_name || "",
       role: user.role || "student",
       password: "",
-      department: user.teacher_profile?.department || "",
+      department: user.teacher_profile?.department_id || user.student_profile?.department || user.teacher_profile?.department || "",
+      school_class: user.student_profile?.school_class || "",
+      section: user.student_profile?.section || "",
       student_id: user.student_profile?.student_id || "",
       semester: user.student_profile?.semester || "",
       mailing_address: user.mailing_address || user.student_profile?.mailing_address || "",
+      show_on_website: user.teacher_profile?.show_on_website !== false && user.student_profile?.show_on_website !== false,
     });
     setFormErrors({});
   };
@@ -288,7 +321,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     setUsers((curr) => curr.filter((u) => u.id !== id));
     try {
       await api.delete(`${ENDPOINTS.users}${id}/`);
-      notify("User deleted");
+      notify("User moved to Recycle bin");
       await loadUsers();
     } catch {
       setUsers(prev);
@@ -301,10 +334,11 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     return (data.results || []).map((user) => [
       user.username || "-",
       getUserDisplayName(user) || "-",
-      user.email || "-",
       user.student_profile?.student_id || "-",
+      user.student_profile?.department_name || user.teacher_profile?.department_name || "-",
+      user.student_profile?.school_class_name || "-",
+      user.student_profile?.section_name || "-",
       user.student_profile?.semester_number || user.student_profile?.semester || "-",
-      String(user.role || "").replace("_", " "),
     ]);
   };
   const exportStudentsCsv = async () => {
@@ -312,7 +346,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       const rows = await getStudentExportRows();
       downloadCsvFile({
         filePrefix: "class-students",
-        headers: ["Username", "Student Name", "Email", "Roll No", "Semester", "Role"],
+        headers: ["Username", "Student Name", "Roll No", "Department", "Class", "Section", "Semester"],
         rows,
       });
       notify("Students CSV exported");
@@ -325,7 +359,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       const rows = await getStudentExportRows();
       printTablePdf({
         title: "Class Students",
-        headers: ["Username", "Student Name", "Email", "Roll No", "Semester", "Role"],
+        headers: ["Username", "Student Name", "Roll No", "Department", "Class", "Section", "Semester"],
         rows,
       });
       notify("Students PDF exported");
@@ -380,15 +414,36 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
               <MenuItem value="super_admin">Super Admin</MenuItem>
             </TextField>
           )}
-          {form.role === "teacher" && <TextField required size="small" label="Department" value={form.department} error={showValidation && Boolean(formErrors.department)} helperText={showValidation ? formErrors.department || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, department: e.target.value }))} />}
+          {(form.role === "teacher" || form.role === "student") && (
+            <TextField required={form.role === "teacher"} select size="small" label="Department" value={form.department} error={showValidation && Boolean(formErrors.department)} helperText={showValidation ? formErrors.department || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, department: e.target.value, school_class: "", section: "" }))}>
+              {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+            </TextField>
+          )}
           {form.role === "student" && (
             <>
               <TextField required size="small" label="Student ID" value={form.student_id} error={showValidation && Boolean(formErrors.student_id)} helperText={showValidation ? formErrors.student_id || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, student_id: e.target.value }))} />
               <TextField required select size="small" label="Semester" value={form.semester} error={showValidation && Boolean(formErrors.semester)} helperText={showValidation ? formErrors.semester || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, semester: e.target.value }))}>
                 {semesters.map((semester) => <MenuItem key={semester.id} value={semester.id}>{semester.number}</MenuItem>)}
               </TextField>
+              <TextField select size="small" label="Class" value={form.school_class} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, school_class: e.target.value, section: "" }))}>
+                {classes.filter((item) => !form.department || String(item.department || "") === String(form.department)).map((item) => (
+                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                ))}
+              </TextField>
+              <TextField select size="small" label="Section" value={form.section} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, section: e.target.value }))}>
+                {sections.filter((item) => !form.school_class || String(item.school_class) === String(form.school_class)).map((item) => (
+                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                ))}
+              </TextField>
               <TextField size="small" label="Mailing address" value={form.mailing_address} helperText="Optional" sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, mailing_address: e.target.value }))} />
             </>
+          )}
+          {(form.role === "teacher" || form.role === "student") && (
+            <FormControlLabel
+              sx={{ ml: 0.4 }}
+              control={<Checkbox size="small" checked={Boolean(form.show_on_website)} onChange={(e) => updateForm((p) => ({ ...p, show_on_website: e.target.checked }))} />}
+              label="Show on website"
+            />
           )}
         </CompactAddForm>
       )}
@@ -398,13 +453,47 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           onSearchChange={setSearch}
           onSearch={() => {
             setPage(1);
-            loadUsers({ searchValue: search, pageValue: 1 });
+            loadUsers({ searchValue: search, pageValue: 1, filtersValue: filters });
           }}
           onReset={() => {
+            const cleared = { department: "", semester: "", school_class: "", section: "", course: "" };
             setSearch("");
+            setFilters(cleared);
             setPage(1);
-            loadUsers({ searchValue: "", pageValue: 1 });
+            loadUsers({ searchValue: "", pageValue: 1, filtersValue: cleared });
           }}
+          filters={(
+            <>
+              <TextField size="small" select label="Department" value={filters.department} sx={{ minWidth: 140 }} onChange={(e) => setFilters((prev) => ({ ...prev, department: e.target.value }))}>
+                <MenuItem value="">All</MenuItem>
+                {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+              </TextField>
+              {isStudentAdminPage ? (
+                <>
+                  <TextField size="small" select label="Semester" value={filters.semester} sx={{ minWidth: 120 }} onChange={(e) => setFilters((prev) => ({ ...prev, semester: e.target.value }))}>
+                    <MenuItem value="">All</MenuItem>
+                    {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+                  </TextField>
+                  <TextField size="small" select label="Class" value={filters.school_class} sx={{ minWidth: 120 }} onChange={(e) => setFilters((prev) => ({ ...prev, school_class: e.target.value, section: "" }))}>
+                    <MenuItem value="">All</MenuItem>
+                    {classes.filter((item) => !filters.department || String(item.department || "") === String(filters.department)).map((item) => (
+                      <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField size="small" select label="Section" value={filters.section} sx={{ minWidth: 110 }} onChange={(e) => setFilters((prev) => ({ ...prev, section: e.target.value }))}>
+                    <MenuItem value="">All</MenuItem>
+                    {sections.filter((item) => !filters.school_class || String(item.school_class) === String(filters.school_class)).map((item) => (
+                      <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                    ))}
+                  </TextField>
+                </>
+              ) : null}
+              <TextField size="small" select label="Subject" value={filters.course} sx={{ minWidth: 160 }} onChange={(e) => setFilters((prev) => ({ ...prev, course: e.target.value }))}>
+                <MenuItem value="">All</MenuItem>
+                {courses.map((item) => <MenuItem key={item.id} value={item.id}>{item.code}</MenuItem>)}
+              </TextField>
+            </>
+          )}
           actions={isStudentAdminPage ? (
             <>
               <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportStudentsCsv}>CSV</Button>
@@ -433,6 +522,11 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                   </TableSortLabel>
                 </TableCell>
               ))}
+              <TableCell>Department</TableCell>
+              {isStudentAdminPage ? <TableCell>Class</TableCell> : null}
+              {isStudentAdminPage ? <TableCell>Section</TableCell> : null}
+              {isStudentAdminPage ? <TableCell>Semester</TableCell> : null}
+              <TableCell>Website</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -443,6 +537,11 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                 <TableCell>{getUserDisplayName(user)}</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{String(user.role || "").replace("_", " ")}</TableCell>
+                <TableCell>{user.student_profile?.department_name || user.teacher_profile?.department_name || user.teacher_profile?.department || "-"}</TableCell>
+                {isStudentAdminPage ? <TableCell>{user.student_profile?.school_class_name || "-"}</TableCell> : null}
+                {isStudentAdminPage ? <TableCell>{user.student_profile?.section_name || "-"}</TableCell> : null}
+                {isStudentAdminPage ? <TableCell>{user.student_profile?.semester_number || "-"}</TableCell> : null}
+                <TableCell>{(user.teacher_profile?.show_on_website !== false && user.student_profile?.show_on_website !== false) ? "Yes" : "Hidden"}</TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
                     <Button size="small" onClick={() => editUser(user)}>Edit</Button>
@@ -453,7 +552,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             ))}
             {!users.length && !loading && (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={10}>
                   <Typography variant="body2" color="text.secondary">No users found for this filter/search.</Typography>
                 </TableCell>
               </TableRow>

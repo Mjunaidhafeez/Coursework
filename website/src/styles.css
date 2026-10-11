@@ -88,6 +88,7 @@ a { color: var(--site-primary); }
 .btn-primary { background: var(--site-accent); color: #1b1404; }
 .btn-ghost { border: 1px solid rgba(255,255,255,0.4); color: white; background: transparent; }
 .site-section { padding: 46px 0; }
+.site-section h2 { margin: 28px 0 12px; font-size: 1.2rem; }
 .section-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 18px; }
 .card-grid, .people-grid, .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; }
 .card, .person-card, .result-card {
