@@ -1,27 +1,43 @@
+const labelReadableSx = {
+  "& .MuiInputLabel-root": {
+    maxWidth: "calc(100% - 10px)",
+    overflow: "hidden",
+    textOverflow: "clip",
+    whiteSpace: "nowrap",
+  },
+  "& .MuiInputBase-input": {
+    textOverflow: "clip",
+  },
+};
+
 export const compactFieldSx = {
-  minWidth: { xs: "47%", sm: 112 },
-  flex: { xs: "1 1 47%", sm: "1 1 0" },
+  minWidth: { xs: "47%", sm: 184 },
+  flex: { xs: "1 1 47%", sm: "1 1 184px" },
+  maxWidth: { sm: 240 },
   "& .MuiInputBase-root": { bgcolor: "#fff" },
   "& .MuiFormHelperText-root": { mx: 0.2, mt: 0.05, lineHeight: 1.1, minHeight: 0 },
   "& .MuiFormHelperText-root:empty": { display: "none", m: 0 },
   "& .MuiFormHelperText-root:not(.Mui-error)": { display: "none" },
+  ...labelReadableSx,
 };
 
 export const compactSelectSx = compactFieldSx;
 
 export const compactFilterSx = {
-  minWidth: { xs: "47%", sm: 108 },
-  flex: { xs: "1 1 47%", sm: "1 1 0" },
+  minWidth: { xs: "47%", sm: 150 },
+  flex: { xs: "1 1 47%", sm: "1 1 150px" },
+  maxWidth: { sm: 210 },
   "& .MuiFormHelperText-root": { display: "none" },
+  ...labelReadableSx,
 };
 
 export const filterBarSx = {
   alignItems: "center",
   width: "100%",
   "& > .MuiTextField-root, & > .MuiFormControl-root": {
-    minWidth: { xs: "47% !important", sm: "108px !important" },
+    minWidth: { xs: "47% !important", sm: "150px !important" },
     width: "auto !important",
-    maxWidth: "none !important",
-    flex: { xs: "1 1 47% !important", sm: "1 1 0 !important" },
+    maxWidth: { sm: "210px !important" },
+    flex: { xs: "1 1 47% !important", sm: "1 1 150px !important" },
   },
 };
