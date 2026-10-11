@@ -599,9 +599,15 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       )}
     >
         <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
-          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
-          <Chip size="small" label={`Students: ${users.filter((u) => u.role === "student").length}`} color="info" variant="outlined" />
-          <Chip size="small" label={`Teachers: ${users.filter((u) => u.role === "teacher").length}`} color="success" variant="outlined" />
+          {urlRole === "student" ? (
+            <Chip size="small" label={`Students: ${total}`} color="info" variant="outlined" />
+          ) : urlRole === "teacher" ? (
+            <Chip size="small" label={`Teachers: ${total}`} color="success" variant="outlined" />
+          ) : urlRole === "super_admin" ? (
+            <Chip size="small" label={`Admins: ${total}`} variant="outlined" />
+          ) : (
+            <Chip size="small" label={`Total: ${total}`} variant="outlined" />
+          )}
         </Stack>
         <BulkActionBar
           count={selection.count}

@@ -244,7 +244,7 @@ const CourseworkPage = () => {
               { value: "closed", label: `Closed (${closedCount})` },
             ]}
           />
-          <Chip size="small" label={`Total ${total}`} variant="outlined" />
+          <Chip size="small" label={`Assessments: ${total}`} variant="outlined" />
         </Stack>
       )}
       filters={(

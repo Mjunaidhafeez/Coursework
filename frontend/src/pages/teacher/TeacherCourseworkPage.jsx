@@ -242,7 +242,7 @@ const TeacherCourseworkPage = () => {
               { value: "closed", label: `Closed (${closedRows.length})` },
             ]}
           />
-          <Chip size="small" label={`Total ${total}`} variant="outlined" />
+          <Chip size="small" label={`Assessments: ${total}`} variant="outlined" />
         </Stack>
       )}
       filters={(

@@ -260,7 +260,7 @@ const GroupsPage = () => {
         )}
       />
       <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
-        <Chip size="small" label={`Total: ${total}`} variant="outlined" />
+        <Chip size="small" label={`Groups: ${total}`} variant="outlined" />
         <Chip size="small" label={`Pending: ${groups.filter((group) => group.status === "pending").length}`} color="warning" variant="outlined" />
         <Chip size="small" label={`Approved: ${groups.filter((group) => group.status === "approved").length}`} color="success" variant="outlined" />
       </Stack>

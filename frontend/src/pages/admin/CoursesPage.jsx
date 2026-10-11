@@ -250,8 +250,7 @@ const CoursesPage = () => {
       )}
     >
         <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
-          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
-          <Chip size="small" label={`With Teachers: ${courses.filter((c) => (c.teachers || []).length > 0).length}`} color="success" variant="outlined" />
+          <Chip size="small" label={`Courses: ${total}`} variant="outlined" />
         </Stack>
         <BulkActionBar
           count={selection.count}

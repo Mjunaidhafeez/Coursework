@@ -94,7 +94,7 @@ const TeacherGroupsPage = () => {
       )}
     >
       <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
-        <Chip size="small" label={`Total: ${total}`} variant="outlined" />
+        <Chip size="small" label={`Groups: ${total}`} variant="outlined" />
         <Chip size="small" label={`Pending: ${rows.filter((row) => row.status === "pending").length}`} color="warning" variant="outlined" />
       </Stack>
       {!rows.length && !loading ? (
