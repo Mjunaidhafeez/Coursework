@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from apps.accounts.models import StudentProfile, TeacherProfile, User
 from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
 from apps.academics.models import Course, Enrollment, Semester
+from apps.common.mixins import BulkActionMixin
 from apps.common.models import AuditLog
 from apps.common.notify import push_notifications
 from apps.common.uploads import media_field_url
@@ -49,12 +50,13 @@ def _is_teacher(user):
     return user.role == User.Role.TEACHER
 
 
-class NoticeViewSet(viewsets.ModelViewSet):
+class NoticeViewSet(BulkActionMixin, viewsets.ModelViewSet):
     serializer_class = NoticeSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filterset_fields = ["kind", "audience"]
+    filterset_fields = ["kind", "audience", "course"]
     search_fields = ["title", "body"]
     ordering_fields = ["starts_at", "created_at"]
+    bulk_update_fields = ("kind", "audience")
 
     def get_queryset(self):
         qs = Notice.objects.filter(is_deleted=False).select_related("course", "created_by")
@@ -672,21 +674,22 @@ def global_search(request):
 @permission_classes([IsSuperAdmin])
 def recycle_bin(request):
     if request.method == "POST":
-        notice_id = request.data.get("notice_id")
-        if notice_id:
-            notice = Notice.objects.filter(id=notice_id, is_deleted=True).first()
-            if not notice:
-                return Response({"detail": "Notice not found."}, status=404)
-            notice.is_deleted = False
-            notice.save(update_fields=["is_deleted"])
-            return Response({"detail": "Notice restored."})
-        user_id = request.data.get("user_id")
-        person = User.objects.filter(id=user_id).exclude(role=User.Role.SUPER_ADMIN).first()
-        if not person:
-            return Response({"detail": "User not found."}, status=404)
-        person.is_active = True
-        person.save(update_fields=["is_active"])
-        return Response({"detail": "User restored."})
+        notice_ids = list(request.data.get("notice_ids") or [])
+        user_ids = list(request.data.get("user_ids") or [])
+        if request.data.get("notice_id"):
+            notice_ids.append(request.data.get("notice_id"))
+        if request.data.get("user_id"):
+            user_ids.append(request.data.get("user_id"))
+        restored = {"users": 0, "notices": 0}
+        if notice_ids:
+            notices = Notice.objects.filter(id__in=notice_ids, is_deleted=True)
+            restored["notices"] = notices.update(is_deleted=False)
+        if user_ids:
+            people = User.objects.filter(id__in=user_ids).exclude(role=User.Role.SUPER_ADMIN)
+            restored["users"] = people.update(is_active=True)
+        if not notice_ids and not user_ids:
+            return Response({"detail": "Nothing to restore."}, status=404)
+        return Response({"detail": "Restored.", "restored": restored})
     inactive = User.objects.filter(is_active=False).order_by("-id")[:200]
     notices = Notice.objects.filter(is_deleted=True).order_by("-updated_at")[:100]
     return Response(

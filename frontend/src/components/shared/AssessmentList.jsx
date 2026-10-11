@@ -1,4 +1,4 @@
-import { Box, Button, Chip, Paper, Stack, Typography } from "@mui/material";
+import { Box, Button, Checkbox, Chip, Paper, Stack, Typography } from "@mui/material";
 
 import { humanizeCourseworkType } from "../../utils/courseworkOptions";
 import { formatDate } from "../../utils/format";
@@ -9,7 +9,7 @@ const modeLabel = {
   both: "Individual or group",
 };
 
-const AssessmentList = ({ grouped = [], emptyText = "No assessments found.", onEdit, onDelete }) => {
+const AssessmentList = ({ grouped = [], emptyText = "No assessments found.", onEdit, onDelete, isSelected, onToggle }) => {
   const entries = Array.isArray(grouped) ? grouped : Object.entries(grouped);
 
   if (!entries.length) {
@@ -69,7 +69,10 @@ const AssessmentList = ({ grouped = [], emptyText = "No assessments found.", onE
                       {item.topic_duplication_allowed ? <Chip size="small" variant="outlined" label="Same topic OK" /> : null}
                     </Stack>
                   </Box>
-                  <Stack direction="row" spacing={0.8}>
+                  <Stack direction="row" spacing={0.8} alignItems="center">
+                    {onToggle ? (
+                      <Checkbox size="small" checked={Boolean(isSelected?.(item.id))} onChange={() => onToggle(item.id)} />
+                    ) : null}
                     <Button size="small" variant="outlined" onClick={() => onEdit(item)}>
                       Edit
                     </Button>

@@ -31,7 +31,10 @@ import SearchToolbar from "../../components/shared/SearchToolbar";
 import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS, usersListPath } from "../../api/endpoints";
+import BulkActionBar from "../../components/shared/BulkActionBar";
+import useRowSelection from "../../hooks/useRowSelection";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
+import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { downloadCsvFile, printTablePdf } from "../../utils/export";
 import { getUserDisplayName } from "../../utils/userDisplay";
 import { confirmDelete } from "../../utils/confirm";
@@ -65,7 +68,9 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
   const [courses, setCourses] = useState([]);
-  const [filters, setFilters] = useState({ department: "", semester: "", school_class: "", section: "", course: "" });
+  const [filters, setFilters] = useState({ department: "", semester: "", school_class: "", section: "", course: "", show_on_website: "" });
+  const [bulk, setBulk] = useState({ department: "", semester: "", school_class: "", section: "", show_on_website: "" });
+  const selection = useRowSelection();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -134,6 +139,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     pageSizeValue = pageSize,
     sortByValue = sortBy,
     sortOrderValue = sortOrder,
+    filtersValue = filters,
   } = {}) => {
     setLoading(true);
     try {
@@ -144,6 +150,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           pageSizeValue: 4000,
           sortByValue,
           sortOrderValue,
+          filtersValue,
         });
         const { data } = await api.get(usersListPath(params));
         const visibleRows = applyLocalSort(
@@ -156,7 +163,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
         setTotal(visibleRows.length);
         return;
       }
-      const params = buildUsersParams({ searchValue, pageValue, pageSizeValue, sortByValue, sortOrderValue });
+      const params = buildUsersParams({ searchValue, pageValue, pageSizeValue, sortByValue, sortOrderValue, filtersValue });
       const { data } = await api.get(usersListPath(params));
       const rows = activeUsers(data);
       setUsers(rows);
@@ -333,6 +340,47 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       notify("Delete failed", "error");
     }
   };
+
+  const applyFilters = (nextFilters) => {
+    setFilters(nextFilters);
+    setPage(1);
+    loadUsers({ pageValue: 1, filtersValue: nextFilters });
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      const result = await runBulkDelete({ endpoint: ENDPOINTS.users, ids: selection.selectedIds, label: "users" });
+      if (!result.ok) return;
+      notify("Selected users moved to Recycle bin");
+      selection.clear();
+      await loadUsers();
+    } catch {
+      notify("Bulk delete failed", "error");
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    const fields = {};
+    if (bulk.department) fields.department = bulk.department;
+    if (bulk.semester) fields.semester = bulk.semester;
+    if (bulk.school_class) fields.school_class = bulk.school_class;
+    if (bulk.section) fields.section = bulk.section;
+    if (bulk.show_on_website !== "") fields.show_on_website = bulk.show_on_website === "true";
+    if (!Object.keys(fields).length) {
+      notify("Choose at least one bulk update field", "error");
+      return;
+    }
+    try {
+      const { data } = await postBulkUpdate(ENDPOINTS.users, selection.selectedIds, fields);
+      notify(`Updated ${data.updated_count || 0} users`);
+      selection.clear();
+      setBulk({ department: "", semester: "", school_class: "", section: "", show_on_website: "" });
+      await loadUsers();
+    } catch {
+      notify("Bulk update failed", "error");
+    }
+  };
+
   const getStudentExportRows = async () => {
     const params = buildUsersParams({ pageValue: 1, pageSizeValue: 4000 });
     const { data } = await api.get(usersListPath(params));
@@ -461,7 +509,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             loadUsers({ searchValue: search, pageValue: 1, filtersValue: filters });
           }}
           onReset={() => {
-            const cleared = { department: "", semester: "", school_class: "", section: "", course: "" };
+            const cleared = { department: "", semester: "", school_class: "", section: "", course: "", show_on_website: "" };
             setSearch("");
             setFilters(cleared);
             setPage(1);
@@ -469,23 +517,25 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           }}
           filters={(
             <>
-              <TextField size="small" select label="Department" value={filters.department} sx={{ minWidth: 140 }} onChange={(e) => setFilters((prev) => ({ ...prev, department: e.target.value }))}>
+              <TextField size="small" select label="Department" value={filters.department} sx={{ minWidth: 140 }} onChange={(e) => applyFilters({ ...filters, department: e.target.value })}>
                 <MenuItem value="">All</MenuItem>
                 {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
               </TextField>
+              {isStudentAdminPage || urlRole === "teacher" ? (
+                <TextField size="small" select label="Semester" value={filters.semester} sx={{ minWidth: 120 }} onChange={(e) => applyFilters({ ...filters, semester: e.target.value })}>
+                  <MenuItem value="">All</MenuItem>
+                  {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+                </TextField>
+              ) : null}
               {isStudentAdminPage ? (
                 <>
-                  <TextField size="small" select label="Semester" value={filters.semester} sx={{ minWidth: 120 }} onChange={(e) => setFilters((prev) => ({ ...prev, semester: e.target.value }))}>
-                    <MenuItem value="">All</MenuItem>
-                    {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
-                  </TextField>
-                  <TextField size="small" select label="Class" value={filters.school_class} sx={{ minWidth: 120 }} onChange={(e) => setFilters((prev) => ({ ...prev, school_class: e.target.value, section: "" }))}>
+                  <TextField size="small" select label="Class" value={filters.school_class} sx={{ minWidth: 120 }} onChange={(e) => applyFilters({ ...filters, school_class: e.target.value, section: "" })}>
                     <MenuItem value="">All</MenuItem>
                     {classes.filter((item) => !filters.department || String(item.department || "") === String(filters.department)).map((item) => (
                       <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
                     ))}
                   </TextField>
-                  <TextField size="small" select label="Section" value={filters.section} sx={{ minWidth: 110 }} onChange={(e) => setFilters((prev) => ({ ...prev, section: e.target.value }))}>
+                  <TextField size="small" select label="Section" value={filters.section} sx={{ minWidth: 110 }} onChange={(e) => applyFilters({ ...filters, section: e.target.value })}>
                     <MenuItem value="">All</MenuItem>
                     {sections.filter((item) => !filters.school_class || String(item.school_class) === String(filters.school_class)).map((item) => (
                       <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
@@ -493,9 +543,14 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                   </TextField>
                 </>
               ) : null}
-              <TextField size="small" select label="Subject" value={filters.course} sx={{ minWidth: 160 }} onChange={(e) => setFilters((prev) => ({ ...prev, course: e.target.value }))}>
+              <TextField size="small" select label="Subject" value={filters.course} sx={{ minWidth: 160 }} onChange={(e) => applyFilters({ ...filters, course: e.target.value })}>
                 <MenuItem value="">All</MenuItem>
                 {courses.map((item) => <MenuItem key={item.id} value={item.id}>{item.code}</MenuItem>)}
+              </TextField>
+              <TextField size="small" select label="Website" value={filters.show_on_website} sx={{ minWidth: 120 }} onChange={(e) => applyFilters({ ...filters, show_on_website: e.target.value })}>
+                <MenuItem value="">All</MenuItem>
+                <MenuItem value="true">Visible</MenuItem>
+                <MenuItem value="false">Hidden</MenuItem>
               </TextField>
             </>
           )}
@@ -513,9 +568,52 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           <Chip size="small" label={`Students: ${users.filter((u) => u.role === "student").length}`} color="info" variant="outlined" />
           <Chip size="small" label={`Teachers: ${users.filter((u) => u.role === "teacher").length}`} color="success" variant="outlined" />
         </Stack>
+        <BulkActionBar
+          count={selection.count}
+          onClear={selection.clear}
+          onDelete={handleBulkDelete}
+          deleteLabel="Delete selected"
+          updateSlot={urlRole === "student" || urlRole === "teacher" ? (
+            <>
+              <TextField size="small" select label="Department" value={bulk.department} sx={{ minWidth: 130 }} onChange={(e) => setBulk((prev) => ({ ...prev, department: e.target.value }))}>
+                <MenuItem value="">Keep</MenuItem>
+                {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+              </TextField>
+              {urlRole === "student" ? (
+                <>
+                  <TextField size="small" select label="Semester" value={bulk.semester} sx={{ minWidth: 110 }} onChange={(e) => setBulk((prev) => ({ ...prev, semester: e.target.value }))}>
+                    <MenuItem value="">Keep</MenuItem>
+                    {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+                  </TextField>
+                  <TextField size="small" select label="Class" value={bulk.school_class} sx={{ minWidth: 110 }} onChange={(e) => setBulk((prev) => ({ ...prev, school_class: e.target.value, section: "" }))}>
+                    <MenuItem value="">Keep</MenuItem>
+                    {classes.filter((item) => !bulk.department || String(item.department || "") === String(bulk.department)).map((item) => (
+                      <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField size="small" select label="Section" value={bulk.section} sx={{ minWidth: 110 }} onChange={(e) => setBulk((prev) => ({ ...prev, section: e.target.value }))}>
+                    <MenuItem value="">Keep</MenuItem>
+                    {sections.filter((item) => !bulk.school_class || String(item.school_class) === String(bulk.school_class)).map((item) => (
+                      <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                    ))}
+                  </TextField>
+                </>
+              ) : null}
+              <TextField size="small" select label="Website" value={bulk.show_on_website} sx={{ minWidth: 110 }} onChange={(e) => setBulk((prev) => ({ ...prev, show_on_website: e.target.value }))}>
+                <MenuItem value="">Keep</MenuItem>
+                <MenuItem value="true">Show</MenuItem>
+                <MenuItem value="false">Hide</MenuItem>
+              </TextField>
+              <Button size="small" variant="contained" onClick={handleBulkUpdate}>Update selected</Button>
+            </>
+          ) : null}
+        />
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox size="small" checked={selection.allChecked(users.map((user) => user.id))} onChange={() => selection.toggleAll(users.map((user) => user.id))} />
+              </TableCell>
               {sortableColumns.map((column) => (
                 <TableCell key={column.key} sortDirection={sortBy === column.key ? sortOrder : false}>
                   <TableSortLabel
@@ -538,6 +636,9 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
+                <TableCell padding="checkbox">
+                  <Checkbox size="small" checked={selection.isSelected(user.id)} onChange={() => selection.toggle(user.id)} />
+                </TableCell>
                 <TableCell>{user.username}</TableCell>
                 <TableCell>{getUserDisplayName(user)}</TableCell>
                 <TableCell>{user.email}</TableCell>

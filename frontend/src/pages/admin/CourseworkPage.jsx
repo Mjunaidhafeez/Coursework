@@ -1,4 +1,4 @@
-import { Box, Button, Chip, MenuItem, Stack, TextField } from "@mui/material";
+import { Box, Button, Chip, Stack } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -8,10 +8,14 @@ import AssessmentList from "../../components/shared/AssessmentList";
 import CompactTabs from "../../components/shared/CompactTabs";
 import CourseworkFormSection from "../../components/shared/CourseworkFormSection";
 import ListingPage from "../../components/shared/ListingPage";
+import BulkActionBar from "../../components/shared/BulkActionBar";
+import CourseworkListFilters from "../../components/shared/CourseworkListFilters";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
+import useRowSelection from "../../hooks/useRowSelection";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
+import { runBulkDelete } from "../../utils/bulkApi";
 import { buildCourseworkTypeOptions, SUBMISSION_TYPE_OPTIONS } from "../../utils/courseworkOptions";
 import {
   emptyCourseworkForm,
@@ -54,6 +58,8 @@ const CourseworkPage = () => {
   const [courseFilter, setCourseFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [submissionFilter, setSubmissionFilter] = useState("");
+  const [semesterFilter, setSemesterFilter] = useState("");
+  const selection = useRowSelection();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [form, setForm] = useState(emptyCourseworkForm);
@@ -67,6 +73,7 @@ const CourseworkPage = () => {
     if (courseFilter) params.append("course", courseFilter);
     if (typeFilter) params.append("coursework_type", typeFilter);
     if (submissionFilter) params.append("submission_type", submissionFilter);
+    if (semesterFilter) params.append("semester", semesterFilter);
     params.append("page", String(pageValue));
     params.append("page_size", String(pageSizeValue));
 
@@ -99,7 +106,7 @@ const CourseworkPage = () => {
 
   useEffect(() => {
     loadData({ searchValue: "", pageValue: 1 });
-  }, [courseFilter, typeFilter, submissionFilter]);
+  }, [courseFilter, typeFilter, submissionFilter, semesterFilter]);
 
   const submit = async () => {
     const formValidation = validateCourseworkForm(form);
@@ -156,6 +163,18 @@ const CourseworkPage = () => {
     } catch {
       setCourseworks(prev);
       notify("Delete failed", "error");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      const result = await runBulkDelete({ endpoint: ENDPOINTS.courseworks, ids: selection.selectedIds, label: "assessments" });
+      if (!result.ok) return;
+      notify("Selected assessments deleted");
+      selection.clear();
+      loadData();
+    } catch {
+      notify("Bulk delete failed", "error");
     }
   };
 
@@ -240,28 +259,28 @@ const CourseworkPage = () => {
             setCourseFilter("");
             setTypeFilter("");
             setSubmissionFilter("");
+            setSemesterFilter("");
             setPage(1);
             loadData({ searchValue: "", pageValue: 1 });
           }}
           filters={(
-            <>
-              <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }} sx={{ minWidth: 150 }}>
-                <MenuItem value="">All courses</MenuItem>
-                {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
-              </TextField>
-              <TextField select size="small" label="Type" value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} sx={{ minWidth: 130 }}>
-                <MenuItem value="">All types</MenuItem>
-                {courseworkTypeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-              </TextField>
-              <TextField select size="small" label="Submission" value={submissionFilter} onChange={(e) => { setSubmissionFilter(e.target.value); setPage(1); }} sx={{ minWidth: 140 }}>
-                <MenuItem value="">All modes</MenuItem>
-                {SUBMISSION_TYPE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-              </TextField>
-            </>
+            <CourseworkListFilters
+              courses={courses}
+              courseFilter={courseFilter}
+              onCourse={(value) => { setCourseFilter(value); setPage(1); }}
+              typeFilter={typeFilter}
+              onType={(value) => { setTypeFilter(value); setPage(1); }}
+              submissionFilter={submissionFilter}
+              onSubmission={(value) => { setSubmissionFilter(value); setPage(1); }}
+              semesterFilter={semesterFilter}
+              onSemester={(value) => { setSemesterFilter(value); setPage(1); }}
+              typeOptions={courseworkTypeOptions}
+            />
           )}
         />
       )}
     >
+      <BulkActionBar count={selection.count} onClear={selection.clear} onDelete={handleBulkDelete} deleteLabel="Delete selected" />
       <AssessmentList
         grouped={viewMode === "opening" ? openingGrouped : closedGrouped}
         emptyText={
@@ -271,6 +290,8 @@ const CourseworkPage = () => {
         }
         onEdit={edit}
         onDelete={remove}
+        isSelected={selection.isSelected}
+        onToggle={selection.toggle}
       />
       <Box sx={{ mt: 1.5 }}>
         <PaginationControls

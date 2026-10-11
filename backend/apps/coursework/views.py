@@ -10,7 +10,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.academics.models import Enrollment
-from apps.common.mixins import AuditLogMixin
+from apps.common.mixins import AuditLogMixin, BulkActionMixin
 from apps.common.notify import push_notifications
 from apps.common.uploads import (
     apply_file_display_name,
@@ -26,15 +26,16 @@ from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
 from .serializers import CourseworkSerializer, FeedbackGradeSerializer, SubmissionSerializer
 
 
-class CourseworkViewSet(AuditLogMixin, viewsets.ModelViewSet):
+class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
     queryset = Coursework.objects.select_related("course", "created_by").prefetch_related("course__teachers")
     serializer_class = CourseworkSerializer
     filterset_fields = ["course", "coursework_type", "submission_type"]
     search_fields = ["title", "description"]
     ordering_fields = ["deadline", "created_at"]
+    bulk_update_fields = ("course",)
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.action in ["create", "update", "partial_update", "destroy", "bulk_delete", "bulk_update"]:
             return [IsTeacherOrAdmin()]
         return [permissions.IsAuthenticated()]
 
@@ -47,6 +48,9 @@ class CourseworkViewSet(AuditLogMixin, viewsets.ModelViewSet):
             queryset = queryset.filter(deadline__gte=now)
         elif deadline_state in ["closed", "close"]:
             queryset = queryset.filter(deadline__lt=now)
+        semester = self.request.query_params.get("semester")
+        if semester:
+            queryset = queryset.filter(course__semester_id=semester)
         if user.role == User.Role.TEACHER:
             return queryset.filter(course__teachers=user)
         if user.role == User.Role.STUDENT:

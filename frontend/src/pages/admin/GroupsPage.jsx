@@ -25,6 +25,10 @@ import StudentMemberList from "../../components/shared/StudentMemberList";
 import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
+import BulkActionBar from "../../components/shared/BulkActionBar";
+import useRowSelection from "../../hooks/useRowSelection";
+import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
+import { uniqueCourseSemesters } from "../../utils/courseworkOptions";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import {
   emptyGroupForm,
@@ -47,6 +51,9 @@ const GroupsPage = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("");
+  const [semesterFilter, setSemesterFilter] = useState("");
+  const [bulkStatus, setBulkStatus] = useState("");
+  const selection = useRowSelection();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [form, setForm] = useState(emptyGroupForm);
@@ -55,19 +62,34 @@ const GroupsPage = () => {
   const [loading, setLoading] = useState(false);
   const [assignedGroupByStudentId, setAssignedGroupByStudentId] = useState({});
   const sortedStudents = useMemo(() => sortStudentsByRollOrUsername(students), [students]);
-  const buildGroupsParams = ({ searchValue = search, pageValue = page, pageSizeValue = pageSize } = {}) => {
+  const buildGroupsParams = ({
+    searchValue = search,
+    pageValue = page,
+    pageSizeValue = pageSize,
+    statusValue = statusFilter,
+    courseValue = courseFilter,
+    semesterValue = semesterFilter,
+  } = {}) => {
     const params = new URLSearchParams();
     if (searchValue) params.append("search", searchValue);
-    if (statusFilter) params.append("status", statusFilter);
-    if (courseFilter) params.append("course", courseFilter);
+    if (statusValue) params.append("status", statusValue);
+    if (courseValue) params.append("course", courseValue);
+    if (semesterValue) params.append("semester", semesterValue);
     params.append("ordering", "name");
     params.append("page", String(pageValue));
     params.append("page_size", String(pageSizeValue));
     return params;
   };
 
-  const loadData = async ({ searchValue = search, pageValue = page, pageSizeValue = pageSize } = {}) => {
-    const params = buildGroupsParams({ searchValue, pageValue, pageSizeValue });
+  const loadData = async ({
+    searchValue = search,
+    pageValue = page,
+    pageSizeValue = pageSize,
+    statusValue = statusFilter,
+    courseValue = courseFilter,
+    semesterValue = semesterFilter,
+  } = {}) => {
+    const params = buildGroupsParams({ searchValue, pageValue, pageSizeValue, statusValue, courseValue, semesterValue });
     setLoading(true);
     try {
       const [groupsRes, coursesRes] = await Promise.all([
@@ -198,6 +220,35 @@ const GroupsPage = () => {
       notify("Delete failed", "error");
     }
   };
+
+  const handleBulkDelete = async () => {
+    try {
+      const result = await runBulkDelete({ endpoint: ENDPOINTS.groups, ids: selection.selectedIds, label: "groups" });
+      if (!result.ok) return;
+      notify("Selected groups deleted");
+      selection.clear();
+      await Promise.all([loadData(), loadAssignedGroupMap()]);
+    } catch {
+      notify("Bulk delete failed", "error");
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!bulkStatus) {
+      notify("Choose a status to update", "error");
+      return;
+    }
+    try {
+      const { data } = await postBulkUpdate(ENDPOINTS.groups, selection.selectedIds, { status: bulkStatus });
+      notify(`Updated ${data.updated_count || 0} groups`);
+      selection.clear();
+      setBulkStatus("");
+      await Promise.all([loadData(), loadAssignedGroupMap()]);
+    } catch {
+      notify("Bulk update failed", "error");
+    }
+  };
+
   const getGroupExportRows = async () => {
     const params = buildGroupsParams({ pageValue: 1, pageSizeValue: 4000 });
     const { data } = await api.get(`${ENDPOINTS.groups}?${params.toString()}`);
@@ -315,16 +366,21 @@ const GroupsPage = () => {
             setSearch("");
             setStatusFilter("");
             setCourseFilter("");
+            setSemesterFilter("");
             setPage(1);
-            loadData({ searchValue: "", pageValue: 1 });
+            loadData({ searchValue: "", pageValue: 1, statusValue: "", courseValue: "", semesterValue: "" });
           }}
           filters={(
             <>
-              <TextField select size="small" label="Status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} sx={{ minWidth: 130 }}>
+              <TextField select size="small" label="Status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); loadData({ pageValue: 1, statusValue: e.target.value }); }} sx={{ minWidth: 130 }}>
                 <MenuItem value="">All</MenuItem>
                 {GROUP_STATUS_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
               </TextField>
-              <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }} sx={{ minWidth: 160 }}>
+              <TextField select size="small" label="Semester" value={semesterFilter} onChange={(e) => { setSemesterFilter(e.target.value); setPage(1); loadData({ pageValue: 1, semesterValue: e.target.value }); }} sx={{ minWidth: 120 }}>
+                <MenuItem value="">All</MenuItem>
+                {uniqueCourseSemesters(courses).map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Course" value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setPage(1); loadData({ pageValue: 1, courseValue: e.target.value }); }} sx={{ minWidth: 160 }}>
                 <MenuItem value="">All Courses</MenuItem>
                 {courses.map((course) => <MenuItem key={course.id} value={String(course.id)}>{course.title}</MenuItem>)}
               </TextField>
@@ -340,6 +396,20 @@ const GroupsPage = () => {
         />
       )}
     >
+        <BulkActionBar
+          count={selection.count}
+          onClear={selection.clear}
+          onDelete={handleBulkDelete}
+          updateSlot={(
+            <>
+              <TextField size="small" select label="Status" value={bulkStatus} sx={{ minWidth: 130 }} onChange={(e) => setBulkStatus(e.target.value)}>
+                <MenuItem value="">Keep</MenuItem>
+                {GROUP_STATUS_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+              </TextField>
+              <Button size="small" variant="contained" onClick={handleBulkUpdate}>Update selected</Button>
+            </>
+          )}
+        />
         <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
           <Chip size="small" label={`Total: ${total}`} variant="outlined" />
           <Chip size="small" label={`Pending: ${groups.filter((g) => g.status === "pending").length}`} color="warning" variant="outlined" />
@@ -358,7 +428,10 @@ const GroupsPage = () => {
             {groups.map((group) => (
               <Paper key={group.id} variant="outlined" sx={{ p: 1, borderColor: "#dbeafe", borderRadius: 1.5, bgcolor: "#fafcff" }}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.7 }}>
-                  <Typography sx={{ fontWeight: 800 }}>{group.name}</Typography>
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <Checkbox size="small" checked={selection.isSelected(group.id)} onChange={() => selection.toggle(group.id)} />
+                    <Typography sx={{ fontWeight: 800 }}>{group.name}</Typography>
+                  </Stack>
                   <Chip
                     size="small"
                     label={group.status || "pending"}

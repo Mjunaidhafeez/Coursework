@@ -1,4 +1,4 @@
-import { Box, Button, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField } from "@mui/material";
+import { Box, Button, Checkbox, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField } from "@mui/material";
 import { useState } from "react";
 
 import api from "../../api/client";
@@ -10,6 +10,9 @@ import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import usePaginatedQuery from "../../hooks/usePaginatedQuery";
+import BulkActionBar from "../../components/shared/BulkActionBar";
+import useRowSelection from "../../hooks/useRowSelection";
+import { runBulkDelete } from "../../utils/bulkApi";
 import { confirmDelete } from "../../utils/confirm";
 
 const SemestersPage = () => {
@@ -17,6 +20,7 @@ const SemestersPage = () => {
   const [number, setNumber] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [numberError, setNumberError] = useState("");
+  const selection = useRowSelection();
 
   const queryFn = async ({ search, page, pageSize }) => {
     const params = new URLSearchParams();
@@ -90,6 +94,18 @@ const SemestersPage = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    try {
+      const result = await runBulkDelete({ endpoint: ENDPOINTS.semesters, ids: selection.selectedIds, label: "semesters" });
+      if (!result.ok) return;
+      notify("Selected semesters deleted");
+      selection.clear();
+      await loadData();
+    } catch {
+      notify("Bulk delete failed", "error");
+    }
+  };
+
   return (
     <ListingPage
       title="Semesters"
@@ -120,9 +136,13 @@ const SemestersPage = () => {
       )}
       filters={<SearchToolbar label="Search number" search={search} onSearchChange={setSearch} onSearch={runSearch} onReset={resetSearch} />}
     >
+        <BulkActionBar count={selection.count} onClear={selection.clear} onDelete={handleBulkDelete} />
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox size="small" checked={selection.allChecked(rows.map((item) => item.id))} onChange={() => selection.toggleAll(rows.map((item) => item.id))} />
+              </TableCell>
               <TableCell>Semester</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -130,6 +150,9 @@ const SemestersPage = () => {
           <TableBody>
             {rows.map((item) => (
               <TableRow key={item.id}>
+                <TableCell padding="checkbox">
+                  <Checkbox size="small" checked={selection.isSelected(item.id)} onChange={() => selection.toggle(item.id)} />
+                </TableCell>
                 <TableCell>{item.number}</TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">

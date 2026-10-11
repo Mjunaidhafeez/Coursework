@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from apps.accounts.models import User
 from apps.accounts.permissions import IsTeacherOrAdmin
 from apps.academics.models import Course, Enrollment
+from apps.common.mixins import BulkActionMixin
 from apps.common.notify import push_notifications
 from apps.coursework.models import Coursework
 
@@ -14,12 +15,13 @@ from .models import GroupMember, StudentGroup
 from .serializers import GroupMemberSerializer, StudentGroupSerializer
 
 
-class StudentGroupViewSet(viewsets.ModelViewSet):
+class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
     queryset = StudentGroup.objects.select_related("course", "coursework", "creator").prefetch_related("members")
     serializer_class = StudentGroupSerializer
     filterset_fields = ["course", "status", "scope", "coursework"]
     search_fields = ["name", "description"]
     ordering_fields = ["name", "created_at"]
+    bulk_update_fields = ("status",)
 
     def get_permissions(self):
         return [permissions.IsAuthenticated()]
@@ -45,11 +47,16 @@ class StudentGroupViewSet(viewsets.ModelViewSet):
             # Students are view-only for groups and can browse all approved groups.
             return queryset.filter(status=StudentGroup.Status.APPROVED).distinct()
         if user.role == User.Role.TEACHER:
-            return queryset.filter(
+            queryset = queryset.filter(
                 Q(scope=StudentGroup.Scope.GLOBAL)
                 | Q(course__teachers=user)
                 | Q(coursework__course__teachers=user)
             ).distinct()
+        semester = self.request.query_params.get("semester")
+        if semester:
+            queryset = queryset.filter(
+                Q(course__semester_id=semester) | Q(coursework__course__semester_id=semester)
+            )
         return queryset
 
     def _validate_student_group_write(self, request, obj):

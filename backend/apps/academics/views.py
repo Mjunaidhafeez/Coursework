@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsSuperAdmin, IsTeacherOrAdmin
+from apps.common.mixins import BulkActionMixin
 from apps.common.uploads import (
     apply_file_display_name,
     delete_stored_file,
@@ -35,52 +36,54 @@ STUDY_FILE_TOKEN_MAX_AGE = 2 * 60 * 60
 OFFICE_PREVIEW_EXT = {"doc", "docx", "ppt", "pptx", "xls", "xlsx"}
 
 
-class DepartmentViewSet(viewsets.ModelViewSet):
+class DepartmentViewSet(BulkActionMixin, viewsets.ModelViewSet):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
     search_fields = ["name", "code"]
     ordering_fields = ["name", "created_at"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.action in ["create", "update", "partial_update", "destroy", "bulk_delete", "bulk_update"]:
             return [IsSuperAdmin()]
         return [permissions.IsAuthenticated()]
 
 
-class SchoolClassViewSet(viewsets.ModelViewSet):
+class SchoolClassViewSet(BulkActionMixin, viewsets.ModelViewSet):
     queryset = SchoolClass.objects.select_related("department")
     serializer_class = SchoolClassSerializer
     filterset_fields = ["department"]
     search_fields = ["name"]
     ordering_fields = ["name", "created_at"]
+    bulk_update_fields = ("department",)
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.action in ["create", "update", "partial_update", "destroy", "bulk_delete", "bulk_update"]:
             return [IsSuperAdmin()]
         return [permissions.IsAuthenticated()]
 
 
-class SectionViewSet(viewsets.ModelViewSet):
+class SectionViewSet(BulkActionMixin, viewsets.ModelViewSet):
     queryset = Section.objects.select_related("school_class", "school_class__department")
     serializer_class = SectionSerializer
     filterset_fields = ["school_class"]
     search_fields = ["name"]
     ordering_fields = ["name", "created_at"]
+    bulk_update_fields = ("school_class",)
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.action in ["create", "update", "partial_update", "destroy", "bulk_delete", "bulk_update"]:
             return [IsSuperAdmin()]
         return [permissions.IsAuthenticated()]
 
 
-class SemesterViewSet(viewsets.ModelViewSet):
+class SemesterViewSet(BulkActionMixin, viewsets.ModelViewSet):
     queryset = Semester.objects.all()
     serializer_class = SemesterSerializer
     filterset_fields = ["number"]
     ordering_fields = ["number", "created_at"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.action in ["create", "update", "partial_update", "destroy", "bulk_delete", "bulk_update"]:
             return [IsSuperAdmin()]
         return [permissions.IsAuthenticated()]
 
@@ -94,12 +97,13 @@ class SemesterViewSet(viewsets.ModelViewSet):
         return Response({"created": created, "total": Semester.objects.count()}, status=status.HTTP_200_OK)
 
 
-class CourseViewSet(viewsets.ModelViewSet):
+class CourseViewSet(BulkActionMixin, viewsets.ModelViewSet):
     queryset = Course.objects.select_related("semester", "department").prefetch_related("teachers", "study_files")
     serializer_class = CourseSerializer
     filterset_fields = ["semester", "teachers", "department"]
     search_fields = ["title", "code"]
     ordering_fields = ["code", "title", "created_at"]
+    bulk_update_fields = ("semester", "department")
 
     def get_permissions(self):
         if self.action in [
@@ -107,6 +111,8 @@ class CourseViewSet(viewsets.ModelViewSet):
             "update",
             "partial_update",
             "destroy",
+            "bulk_delete",
+            "bulk_update",
             "upload_study_file",
             "delete_study_file",
             "rename_study_file",

@@ -2,6 +2,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   MenuItem,
@@ -26,7 +27,10 @@ import SearchToolbar from "../../components/shared/SearchToolbar";
 import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
 import { ENDPOINTS, usersListPath } from "../../api/endpoints";
+import BulkActionBar from "../../components/shared/BulkActionBar";
+import useRowSelection from "../../hooks/useRowSelection";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
+import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { getUserDisplayName } from "../../utils/userDisplay";
 import { confirmDelete } from "../../utils/confirm";
 import CourseStudyFilesCell from "../../components/shared/CourseStudyFiles";
@@ -40,7 +44,9 @@ const CoursesPage = () => {
   const [semesters, setSemesters] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [teachers, setTeachers] = useState([]);
-  const [filters, setFilters] = useState({ semester: "", department: "" });
+  const [filters, setFilters] = useState({ semester: "", department: "", teacher: "" });
+  const [bulk, setBulk] = useState({ semester: "", department: "" });
+  const selection = useRowSelection();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -50,11 +56,12 @@ const CoursesPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const loadData = async ({ searchValue = search, pageValue = page, pageSizeValue = pageSize, semester = filters.semester, department = filters.department } = {}) => {
+  const loadData = async ({ searchValue = search, pageValue = page, pageSizeValue = pageSize, semester = filters.semester, department = filters.department, teacher = filters.teacher } = {}) => {
     const params = new URLSearchParams();
     if (searchValue) params.append("search", searchValue);
     if (semester) params.append("semester", semester);
     if (department) params.append("department", department);
+    if (teacher) params.append("teachers", teacher);
     params.append("page", String(pageValue));
     params.append("page_size", String(pageSizeValue));
 
@@ -141,6 +148,43 @@ const CoursesPage = () => {
     }
   };
 
+  const applyFilters = (next) => {
+    setFilters(next);
+    setPage(1);
+    loadData({ pageValue: 1, semester: next.semester, department: next.department, teacher: next.teacher });
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      const result = await runBulkDelete({ endpoint: ENDPOINTS.courses, ids: selection.selectedIds, label: "courses" });
+      if (!result.ok) return;
+      notify("Selected courses deleted");
+      selection.clear();
+      loadData();
+    } catch {
+      notify("Bulk delete failed", "error");
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    const fields = {};
+    if (bulk.semester) fields.semester = bulk.semester;
+    if (bulk.department) fields.department = bulk.department;
+    if (!Object.keys(fields).length) {
+      notify("Choose a semester or department to update", "error");
+      return;
+    }
+    try {
+      const { data } = await postBulkUpdate(ENDPOINTS.courses, selection.selectedIds, fields);
+      notify(`Updated ${data.updated_count || 0} courses`);
+      selection.clear();
+      setBulk({ semester: "", department: "" });
+      loadData();
+    } catch {
+      notify("Bulk update failed", "error");
+    }
+  };
+
   return (
     <ListingPage
       title="Courses"
@@ -181,19 +225,23 @@ const CoursesPage = () => {
           }}
           onReset={() => {
             setSearch("");
-            setFilters({ semester: "", department: "" });
+            setFilters({ semester: "", department: "", teacher: "" });
             setPage(1);
-            loadData({ searchValue: "", pageValue: 1, semester: "", department: "" });
+            loadData({ searchValue: "", pageValue: 1, semester: "", department: "", teacher: "" });
           }}
           filters={(
             <>
-              <TextField size="small" select label="Semester" value={filters.semester} sx={{ minWidth: 120 }} onChange={(e) => setFilters((prev) => ({ ...prev, semester: e.target.value }))}>
+              <TextField size="small" select label="Semester" value={filters.semester} sx={{ minWidth: 120 }} onChange={(e) => applyFilters({ ...filters, semester: e.target.value })}>
                 <MenuItem value="">All</MenuItem>
                 {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
               </TextField>
-              <TextField size="small" select label="Department" value={filters.department} sx={{ minWidth: 150 }} onChange={(e) => setFilters((prev) => ({ ...prev, department: e.target.value }))}>
+              <TextField size="small" select label="Department" value={filters.department} sx={{ minWidth: 150 }} onChange={(e) => applyFilters({ ...filters, department: e.target.value })}>
                 <MenuItem value="">All</MenuItem>
                 {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+              </TextField>
+              <TextField size="small" select label="Teacher" value={filters.teacher} sx={{ minWidth: 160 }} onChange={(e) => applyFilters({ ...filters, teacher: e.target.value })}>
+                <MenuItem value="">All</MenuItem>
+                {teachers.map((item) => <MenuItem key={item.id} value={item.id}>{getUserDisplayName(item)}</MenuItem>)}
               </TextField>
             </>
           )}
@@ -204,9 +252,30 @@ const CoursesPage = () => {
           <Chip size="small" label={`Total: ${total}`} variant="outlined" />
           <Chip size="small" label={`With Teachers: ${courses.filter((c) => (c.teachers || []).length > 0).length}`} color="success" variant="outlined" />
         </Stack>
+        <BulkActionBar
+          count={selection.count}
+          onClear={selection.clear}
+          onDelete={handleBulkDelete}
+          updateSlot={(
+            <>
+              <TextField size="small" select label="Semester" value={bulk.semester} sx={{ minWidth: 110 }} onChange={(e) => setBulk((prev) => ({ ...prev, semester: e.target.value }))}>
+                <MenuItem value="">Keep</MenuItem>
+                {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+              </TextField>
+              <TextField size="small" select label="Department" value={bulk.department} sx={{ minWidth: 130 }} onChange={(e) => setBulk((prev) => ({ ...prev, department: e.target.value }))}>
+                <MenuItem value="">Keep</MenuItem>
+                {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+              </TextField>
+              <Button size="small" variant="contained" onClick={handleBulkUpdate}>Update selected</Button>
+            </>
+          )}
+        />
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox size="small" checked={selection.allChecked(courses.map((item) => item.id))} onChange={() => selection.toggleAll(courses.map((item) => item.id))} />
+              </TableCell>
               <TableCell>Code</TableCell>
               <TableCell>Title</TableCell>
               <TableCell>Semester</TableCell>
@@ -219,6 +288,9 @@ const CoursesPage = () => {
           <TableBody>
             {courses.map((course) => (
               <TableRow key={course.id}>
+                <TableCell padding="checkbox">
+                  <Checkbox size="small" checked={selection.isSelected(course.id)} onChange={() => selection.toggle(course.id)} />
+                </TableCell>
                 <TableCell>{course.code}</TableCell>
                 <TableCell>{course.title}</TableCell>
                 <TableCell>{course.semester_number}</TableCell>

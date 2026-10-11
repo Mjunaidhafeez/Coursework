@@ -30,6 +30,16 @@ export const humanizeCourseworkType = (value) => {
     .join(" ");
 };
 
+export const uniqueCourseSemesters = (courses = []) => {
+  const map = new Map();
+  courses.forEach((course) => {
+    if (course.semester) map.set(String(course.semester), course.semester_number ?? course.semester);
+  });
+  return [...map.entries()]
+    .map(([id, number]) => ({ id, number }))
+    .sort((a, b) => Number(a.number) - Number(b.number));
+};
+
 export const buildCourseworkTypeOptions = (extraValues = []) => {
   const map = new Map();
   COURSEWORK_TYPE_OPTIONS.forEach((item) => map.set(normalizeCourseworkType(item.value), item.label));
