@@ -64,7 +64,7 @@ const ListingPage = ({
           flexDirection: "column",
           "& thead th": {
             position: "sticky",
-            top: 0,
+            top: "var(--listing-pin-top, 0px)",
             zIndex: 3,
             bgcolor: "#f7faff",
             boxShadow: "inset 0 -1px 0 #e6eefc",
