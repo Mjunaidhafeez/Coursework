@@ -37,7 +37,9 @@ import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiError
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { downloadCsvFile, printTablePdf } from "../../utils/export";
 import { getUserDisplayName } from "../../utils/userDisplay";
+import SelectPlaceholder from "../../components/shared/SelectPlaceholder";
 import { confirmDelete } from "../../utils/confirm";
+import { fetchOrgCatalog } from "../campus/listRows";
 
 const emptyForm = {
   username: "",
@@ -78,6 +80,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [semesterAlert, setSemesterAlert] = useState("");
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [showValidation, setShowValidation] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -174,20 +177,28 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   };
 
   const loadCatalogs = async () => {
-    const [semesterRes, deptRes, classRes, sectionRes, courseRes] = await Promise.all([
-      api.get(`${ENDPOINTS.semesters}?ordering=number&page_size=100`),
-      api.get(`${ENDPOINTS.departments}?page_size=200`),
-      api.get(`${ENDPOINTS.schoolClasses}?page_size=200`),
-      api.get(`${ENDPOINTS.sections}?page_size=200`),
-      api.get(`${ENDPOINTS.courses}?page_size=200`),
-    ]);
-    const semesterRows = semesterRes.data.results || [];
-    setSemesters(semesterRows);
-    setDepartments(deptRes.data.results || []);
-    setClasses(classRes.data.results || []);
-    setSections(sectionRes.data.results || []);
-    setCourses(courseRes.data.results || []);
-    setSemesterAlert(semesterRows.length ? "" : "No semesters found. Add semesters from Admin > Semesters.");
+    setCatalogLoading(true);
+    try {
+      const catalog = await fetchOrgCatalog(api, ENDPOINTS);
+      setSemesters(catalog.semesters);
+      setDepartments(catalog.departments);
+      setClasses(catalog.classes);
+      setSections(catalog.sections);
+      setCourses(catalog.courses);
+      const missing = [
+        !catalog.semesters.length ? "semesters" : "",
+        !catalog.departments.length ? "departments" : "",
+      ].filter(Boolean);
+      setSemesterAlert(
+        missing.length
+          ? `No ${missing.join(" or ")} found. Add them under Admin → Semesters / Classes & Depts.`
+          : ""
+      );
+    } catch {
+      setSemesterAlert("Catalog could not be loaded. Refresh, or add Semesters and Classes & Depts first.");
+    } finally {
+      setCatalogLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -303,11 +314,11 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       last_name: user.last_name || "",
       role: user.role || "student",
       password: "",
-      department: user.teacher_profile?.department_id || user.student_profile?.department || user.teacher_profile?.department || "",
-      school_class: user.student_profile?.school_class || "",
-      section: user.student_profile?.section || "",
+      department: String(user.teacher_profile?.department_id || user.student_profile?.department || ""),
+      school_class: String(user.student_profile?.school_class || ""),
+      section: String(user.student_profile?.section || ""),
       student_id: user.student_profile?.student_id || "",
-      semester: user.student_profile?.semester || "",
+      semester: String(user.student_profile?.semester || ""),
       mailing_address: user.mailing_address || user.student_profile?.mailing_address || "",
       show_on_website: user.teacher_profile?.show_on_website !== false && user.student_profile?.show_on_website !== false,
     });
@@ -450,7 +461,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             <>
               <FormErrorSummary errors={showValidation ? formErrors : {}} />
               {error && <Alert severity="error">{error}</Alert>}
-              {semesterAlert && form.role === "student" && <Alert severity="warning">{semesterAlert}</Alert>}
+              {semesterAlert && (form.role === "student" || form.role === "teacher") && <Alert severity="warning">{semesterAlert}</Alert>}
             </>
           )}
         >
@@ -468,24 +479,28 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             </TextField>
           )}
           {(form.role === "teacher" || form.role === "student") && (
-            <TextField required={form.role === "teacher"} select size="small" label="Department" value={form.department} error={showValidation && Boolean(formErrors.department)} helperText={showValidation ? formErrors.department || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, department: e.target.value, school_class: "", section: "" }))}>
-              {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+            <TextField required={form.role === "teacher"} select size="small" label="Department" value={form.department} error={showValidation && Boolean(formErrors.department)} helperText={showValidation ? formErrors.department || (catalogLoading ? "Loading…" : "") : (catalogLoading ? "Loading…" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, department: e.target.value, school_class: "", section: "" }))}>
+              <SelectPlaceholder items={departments} readyText="Select department" emptyText="None yet — add in Classes & Depts" />
+              {departments.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
             </TextField>
           )}
           {form.role === "student" && (
             <>
               <TextField required size="small" label="Student ID" value={form.student_id} error={showValidation && Boolean(formErrors.student_id)} helperText={showValidation ? formErrors.student_id || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, student_id: e.target.value }))} />
-              <TextField required select size="small" label="Semester" value={form.semester} error={showValidation && Boolean(formErrors.semester)} helperText={showValidation ? formErrors.semester || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, semester: e.target.value }))}>
-                {semesters.map((semester) => <MenuItem key={semester.id} value={semester.id}>{semester.number}</MenuItem>)}
+              <TextField required select size="small" label="Semester" value={form.semester} error={showValidation && Boolean(formErrors.semester)} helperText={showValidation ? formErrors.semester || (catalogLoading ? "Loading…" : "") : (catalogLoading ? "Loading…" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, semester: e.target.value }))}>
+                <SelectPlaceholder items={semesters} readyText="Select semester" emptyText="None yet — add in Semesters" />
+                {semesters.map((semester) => <MenuItem key={semester.id} value={String(semester.id)}>{semester.number}</MenuItem>)}
               </TextField>
               <TextField select size="small" label="Class" value={form.school_class} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, school_class: e.target.value, section: "" }))}>
+                <SelectPlaceholder items={classes} readyText="Select class" emptyText="None yet — add in Classes & Depts" />
                 {classes.filter((item) => !form.department || String(item.department || "") === String(form.department)).map((item) => (
-                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                  <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>
                 ))}
               </TextField>
               <TextField select size="small" label="Section" value={form.section} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, section: e.target.value }))}>
+                <SelectPlaceholder items={sections} readyText="Select section" emptyText="None yet — add in Classes & Depts" />
                 {sections.filter((item) => !form.school_class || String(item.school_class) === String(form.school_class)).map((item) => (
-                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                  <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>
                 ))}
               </TextField>
               <TextField size="small" label="Mailing address" value={form.mailing_address} helperText="Optional" sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, mailing_address: e.target.value }))} />
@@ -519,12 +534,12 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             <>
               <TextField size="small" select label="Department" value={filters.department} sx={{ minWidth: 140 }} onChange={(e) => applyFilters({ ...filters, department: e.target.value })}>
                 <MenuItem value="">All</MenuItem>
-                {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+                {departments.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
               </TextField>
               {isStudentAdminPage || urlRole === "teacher" ? (
                 <TextField size="small" select label="Semester" value={filters.semester} sx={{ minWidth: 120 }} onChange={(e) => applyFilters({ ...filters, semester: e.target.value })}>
                   <MenuItem value="">All</MenuItem>
-                  {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+                  {semesters.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.number}</MenuItem>)}
                 </TextField>
               ) : null}
               {isStudentAdminPage ? (
@@ -532,20 +547,20 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                   <TextField size="small" select label="Class" value={filters.school_class} sx={{ minWidth: 120 }} onChange={(e) => applyFilters({ ...filters, school_class: e.target.value, section: "" })}>
                     <MenuItem value="">All</MenuItem>
                     {classes.filter((item) => !filters.department || String(item.department || "") === String(filters.department)).map((item) => (
-                      <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                      <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>
                     ))}
                   </TextField>
                   <TextField size="small" select label="Section" value={filters.section} sx={{ minWidth: 110 }} onChange={(e) => applyFilters({ ...filters, section: e.target.value })}>
                     <MenuItem value="">All</MenuItem>
                     {sections.filter((item) => !filters.school_class || String(item.school_class) === String(filters.school_class)).map((item) => (
-                      <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                      <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>
                     ))}
                   </TextField>
                 </>
               ) : null}
               <TextField size="small" select label="Subject" value={filters.course} sx={{ minWidth: 160 }} onChange={(e) => applyFilters({ ...filters, course: e.target.value })}>
                 <MenuItem value="">All</MenuItem>
-                {courses.map((item) => <MenuItem key={item.id} value={item.id}>{item.code}</MenuItem>)}
+                {courses.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.code}</MenuItem>)}
               </TextField>
               <TextField size="small" select label="Website" value={filters.show_on_website} sx={{ minWidth: 120 }} onChange={(e) => applyFilters({ ...filters, show_on_website: e.target.value })}>
                 <MenuItem value="">All</MenuItem>
@@ -577,24 +592,24 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             <>
               <TextField size="small" select label="Department" value={bulk.department} sx={{ minWidth: 130 }} onChange={(e) => setBulk((prev) => ({ ...prev, department: e.target.value }))}>
                 <MenuItem value="">Keep</MenuItem>
-                {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+                {departments.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
               </TextField>
               {urlRole === "student" ? (
                 <>
                   <TextField size="small" select label="Semester" value={bulk.semester} sx={{ minWidth: 110 }} onChange={(e) => setBulk((prev) => ({ ...prev, semester: e.target.value }))}>
                     <MenuItem value="">Keep</MenuItem>
-                    {semesters.map((item) => <MenuItem key={item.id} value={item.id}>{item.number}</MenuItem>)}
+                    {semesters.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.number}</MenuItem>)}
                   </TextField>
                   <TextField size="small" select label="Class" value={bulk.school_class} sx={{ minWidth: 110 }} onChange={(e) => setBulk((prev) => ({ ...prev, school_class: e.target.value, section: "" }))}>
                     <MenuItem value="">Keep</MenuItem>
                     {classes.filter((item) => !bulk.department || String(item.department || "") === String(bulk.department)).map((item) => (
-                      <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                      <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>
                     ))}
                   </TextField>
                   <TextField size="small" select label="Section" value={bulk.section} sx={{ minWidth: 110 }} onChange={(e) => setBulk((prev) => ({ ...prev, section: e.target.value }))}>
                     <MenuItem value="">Keep</MenuItem>
                     {sections.filter((item) => !bulk.school_class || String(item.school_class) === String(bulk.school_class)).map((item) => (
-                      <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                      <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>
                     ))}
                   </TextField>
                 </>

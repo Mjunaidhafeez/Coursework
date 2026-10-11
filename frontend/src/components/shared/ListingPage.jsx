@@ -76,6 +76,8 @@ const ListingPage = ({
         p: { xs: 0.8, md: 1 },
         borderColor: "#dbeafe",
         bgcolor: "#fff",
+        transition: "box-shadow 200ms ease",
+        "&:hover": { boxShadow: "0 16px 32px rgba(15, 33, 75, 0.08)" },
         flex: fill ? 1 : { xs: "none", md: 1 },
         minHeight: fill ? 0 : { xs: "auto", md: 0 },
         display: "flex",

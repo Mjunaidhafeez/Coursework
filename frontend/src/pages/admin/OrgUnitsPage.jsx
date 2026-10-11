@@ -14,7 +14,7 @@ import BulkActionBar from "../../components/shared/BulkActionBar";
 import useRowSelection from "../../hooks/useRowSelection";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { confirmDelete } from "../../utils/confirm";
-import { listRows } from "../campus/listRows";
+import { fetchOrgCatalog } from "../campus/listRows";
 
 const TABS = [
   { key: "departments", label: "Departments", endpoint: ENDPOINTS.departments },
@@ -51,12 +51,9 @@ const OrgUnitsPage = () => {
     usePaginatedQuery({ queryFn, dependencies: [tab, filters.department, filters.school_class] });
 
   const loadCatalogs = async () => {
-    const [deptRes, classRes] = await Promise.all([
-      api.get(`${ENDPOINTS.departments}?page_size=200`),
-      api.get(`${ENDPOINTS.schoolClasses}?page_size=200`),
-    ]);
-    setDepartments(listRows(deptRes.data));
-    setClasses(listRows(classRes.data));
+    const catalog = await fetchOrgCatalog(api, ENDPOINTS);
+    setDepartments(catalog.departments);
+    setClasses(catalog.classes);
   };
 
   useEffect(() => {

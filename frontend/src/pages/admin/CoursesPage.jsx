@@ -6,7 +6,6 @@ import {
   Chip,
   CircularProgress,
   MenuItem,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -32,8 +31,10 @@ import useRowSelection from "../../hooks/useRowSelection";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { getUserDisplayName } from "../../utils/userDisplay";
+import SelectPlaceholder from "../../components/shared/SelectPlaceholder";
 import { confirmDelete } from "../../utils/confirm";
 import CourseStudyFilesCell from "../../components/shared/CourseStudyFiles";
+import { fetchOrgCatalog, listRows } from "../campus/listRows";
 
 const emptyForm = { code: "", title: "", semester: "", department: "", teachers: [] };
 
@@ -67,20 +68,18 @@ const CoursesPage = () => {
 
     setLoading(true);
     try {
-      const [coursesRes, semesterRes, deptRes, teacherRes] = await Promise.all([
-        api.get(`${ENDPOINTS.courses}?${params.toString()}`),
-        api.get(`${ENDPOINTS.semesters}?ordering=number&page_size=100`),
-        api.get(`${ENDPOINTS.departments}?page_size=200`),
-        api.get(usersListPath("role=teacher&page_size=200")),
-      ]);
+      const catalog = await fetchOrgCatalog(api, ENDPOINTS);
+      setSemesters(catalog.semesters);
+      setDepartments(catalog.departments);
+      setSemesterAlert(catalog.semesters.length ? "" : "No semesters found. Add semesters from Admin > Semesters.");
 
-      setCourses(coursesRes.data.results || []);
-      setTotal(coursesRes.data.count || 0);
-      const semesterRows = semesterRes.data.results || [];
-      setSemesters(semesterRows);
-      setDepartments(deptRes.data.results || []);
-      setSemesterAlert(semesterRows.length ? "" : "No semesters found. Add semesters from Admin > Semesters.");
-      setTeachers(teacherRes.data.results || []);
+      const [coursesRes, teacherRes] = await Promise.all([
+        api.get(`${ENDPOINTS.courses}?${params.toString()}`),
+        api.get(usersListPath("role=teacher&page_size=200")).catch(() => ({ data: { results: [] } })),
+      ]);
+      setCourses(listRows(coursesRes.data));
+      setTotal(coursesRes.data.count || listRows(coursesRes.data).length);
+      setTeachers(listRows(teacherRes.data));
     } finally {
       setLoading(false);
     }
@@ -128,7 +127,7 @@ const CoursesPage = () => {
 
   const edit = (row) => {
     setEditingId(row.id);
-    setForm({ code: row.code, title: row.title, semester: row.semester, department: row.department || "", teachers: row.teachers || [] });
+    setForm({ code: row.code, title: row.title, semester: String(row.semester || ""), department: String(row.department || ""), teachers: row.teachers || [] });
     setFormErrors({});
   };
 
@@ -204,11 +203,12 @@ const CoursesPage = () => {
           <TextField required size="small" label="Code" value={form.code} error={Boolean(formErrors.code)} helperText={formErrors.code || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
           <TextField required size="small" label="Title" value={form.title} error={Boolean(formErrors.title)} helperText={formErrors.title || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
           <TextField required select size="small" label="Semester" value={form.semester} error={Boolean(formErrors.semester)} helperText={formErrors.semester || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, semester: e.target.value }))}>
-            {semesters.map((s) => <MenuItem key={s.id} value={s.id}>{s.number}</MenuItem>)}
+            <SelectPlaceholder items={semesters} readyText="Select semester" emptyText="None yet — add in Semesters" />
+            {semesters.map((s) => <MenuItem key={s.id} value={String(s.id)}>{s.number}</MenuItem>)}
           </TextField>
           <TextField select size="small" label="Department" value={form.department} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))}>
-            <MenuItem value="">None</MenuItem>
-            {departments.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+            <SelectPlaceholder items={departments} readyText="None" emptyText="None yet — add in Classes & Depts" />
+            {departments.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
           </TextField>
           <TextField required select size="small" label="Teachers" error={Boolean(formErrors.teachers)} helperText={formErrors.teachers || ""} SelectProps={{ multiple: true }} value={form.teachers} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, teachers: e.target.value }))}>
             {teachers.map((teacher) => <MenuItem key={teacher.id} value={teacher.id}>{getUserDisplayName(teacher, { includeUsername: true })}</MenuItem>)}

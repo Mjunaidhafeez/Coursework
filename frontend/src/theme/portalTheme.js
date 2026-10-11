@@ -107,6 +107,7 @@ export const buildMuiThemeOptions = (branding) => {
             borderRadius: 14,
             border: "1px solid #deE8fb",
             boxShadow: "0 10px 24px rgba(15, 33, 75, 0.07)",
+            transition: "box-shadow 180ms ease, transform 180ms ease",
           },
         },
       },
@@ -117,9 +118,28 @@ export const buildMuiThemeOptions = (branding) => {
             textTransform: "none",
             borderRadius: 10,
             fontWeight: 700,
+            transition: "transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease",
+            "&:hover": { transform: "translateY(-1px)" },
           },
           contained: {
             boxShadow: `0 8px 18px ${palette.primary}38`,
+            "&:hover": { boxShadow: `0 12px 22px ${palette.primary}44` },
+          },
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            transition: "box-shadow 160ms ease, border-color 160ms ease",
+            "&.Mui-focused": { boxShadow: `0 0 0 3px ${palette.primary}24` },
+          },
+        },
+      },
+      MuiTableRow: {
+        styleOverrides: {
+          root: {
+            transition: "background-color 160ms ease",
+            "&:hover": { backgroundColor: `${palette.primary}0d` },
           },
         },
       },
@@ -130,6 +150,11 @@ export const buildMuiThemeOptions = (branding) => {
             color: palette.ink,
             background: "#f4f8ff",
           },
+        },
+      },
+      MuiMenu: {
+        styleOverrides: {
+          paper: { borderRadius: 12, boxShadow: "0 16px 36px rgba(15, 33, 75, 0.14)" },
         },
       },
     },

@@ -9,7 +9,7 @@ const CompactAddForm = ({
   clearLabel = "Clear",
   extra = null,
 }) => (
-  <Paper variant="outlined" sx={{ p: 0.85, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
+  <Paper variant="outlined" sx={{ p: 0.85, borderColor: "#dbeafe", bgcolor: "#f8fbff", "&:hover": { boxShadow: "0 14px 28px rgba(15, 33, 75, 0.1)" } }}>
     <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mb: 0.7 }}>
       <Typography sx={{ fontWeight: 800, fontSize: "0.86rem", color: "#13377a" }}>{title}</Typography>
       {extra}
