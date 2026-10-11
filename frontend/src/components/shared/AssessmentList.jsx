@@ -1,6 +1,7 @@
 import { Box, Button, Checkbox, Chip, Paper, Stack, Typography } from "@mui/material";
 
 import { humanizeCourseworkType } from "../../utils/courseworkOptions";
+import { shouldAllotTopics, TOPIC_SOURCE_TEACHER_GROUP } from "../../utils/courseworkForm";
 import { formatDate } from "../../utils/format";
 
 const modeLabel = {
@@ -9,7 +10,7 @@ const modeLabel = {
   both: "Individual or group",
 };
 
-const AssessmentList = ({ grouped = [], emptyText = "No assessments found.", onEdit, onDelete, isSelected, onToggle }) => {
+const AssessmentList = ({ grouped = [], emptyText = "No assessments found.", onEdit, onDelete, onAllot, isSelected, onToggle }) => {
   const entries = Array.isArray(grouped) ? grouped : Object.entries(grouped);
 
   if (!entries.length) {
@@ -58,20 +59,36 @@ const AssessmentList = ({ grouped = [], emptyText = "No assessments found.", onE
                       ) : null}
                       <Chip size="small" variant="outlined" label={`${item.max_marks ?? "-"} marks`} />
                       <Chip size="small" variant="outlined" label={`Due ${formatDate(item.deadline)}`} />
-                      <Chip
-                        size="small"
-                        color={item.approval_required ? "warning" : "default"}
-                        variant="outlined"
-                        label={item.approval_required ? "Topic approval" : "No topic approval"}
-                      />
+                      {shouldAllotTopics(item) ? (
+                        <Chip
+                          size="small"
+                          color="info"
+                          variant="outlined"
+                          label={item.topic_source === TOPIC_SOURCE_TEACHER_GROUP ? "Teacher allots per group" : "Teacher allots per student"}
+                        />
+                      ) : (
+                        <>
+                          <Chip
+                            size="small"
+                            color={item.approval_required ? "warning" : "default"}
+                            variant="outlined"
+                            label={item.approval_required ? "Topic approval" : "No topic approval"}
+                          />
+                          {item.auto_approve_all_students ? <Chip size="small" color="success" variant="outlined" label="Auto-approve" /> : null}
+                          {item.topic_duplication_allowed ? <Chip size="small" variant="outlined" label="Same topic OK" /> : null}
+                        </>
+                      )}
                       {item.lock_at_due_time ? <Chip size="small" variant="outlined" label="Locks at due" /> : null}
-                      {item.auto_approve_all_students ? <Chip size="small" color="success" variant="outlined" label="Auto-approve" /> : null}
-                      {item.topic_duplication_allowed ? <Chip size="small" variant="outlined" label="Same topic OK" /> : null}
                     </Stack>
                   </Box>
                   <Stack direction="row" spacing={0.8} alignItems="center">
                     {onToggle ? (
                       <Checkbox size="small" checked={Boolean(isSelected?.(item.id))} onChange={() => onToggle(item.id)} />
+                    ) : null}
+                    {onAllot && shouldAllotTopics(item) ? (
+                      <Button size="small" variant="contained" onClick={() => onAllot(item)}>
+                        Allot topics
+                      </Button>
                     ) : null}
                     <Button size="small" variant="outlined" onClick={() => onEdit(item)}>
                       Edit

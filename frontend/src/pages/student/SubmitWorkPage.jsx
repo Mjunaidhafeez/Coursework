@@ -34,6 +34,7 @@ import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import { extractApiErrorMessage } from "../../utils/apiErrors";
 import { COURSEWORK_TYPE_OPTIONS, SUBMISSION_TYPE_OPTIONS } from "../../utils/courseworkOptions";
+import { shouldAllotTopics } from "../../utils/courseworkForm";
 import { formatDate, formatMarks } from "../../utils/format";
 import { openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { shallowEqualObjects } from "../../utils/object";
@@ -803,6 +804,9 @@ const SubmitWorkPage = () => {
                                     />
                                     <Chip size="small" color={isClosedView ? "warning" : "info"} label={`Deadline: ${formatDate(coursework.deadline)}`} />
                                     <Chip size="small" label={`Teachers: ${(coursework.teacher_names || []).join(", ") || "-"}`} />
+                                    {shouldAllotTopics(coursework) ? (
+                                      <Chip size="small" color="info" variant="outlined" label="Teacher allotted topic" />
+                                    ) : null}
                                   </Stack>
                                   {!submission && isClosedView ? (
                                     <Paper variant="outlined" sx={{ p: 1, borderColor: "#ffe0b2", bgcolor: "#fff8f0" }}>
@@ -812,6 +816,17 @@ const SubmitWorkPage = () => {
                                           Deadline passed. No request/submission was created for this assessment.
                                         </Typography>
                                       </Stack>
+                                    </Paper>
+                                  ) : !submission && shouldAllotTopics(coursework) ? (
+                                    <Paper variant="outlined" sx={{ p: 1, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.7 }}>
+                                        Waiting for your teacher to allot a topic
+                                      </Typography>
+                                      <Typography variant="body2" color="text.secondary">
+                                        {coursework.topic_source === "teacher_group"
+                                          ? "Your teacher will give each group a different topic. After that you can upload your work here."
+                                          : "Your teacher will give each student a different topic. After that you can upload your work here."}
+                                      </Typography>
                                     </Paper>
                                   ) : !submission ? (
                                     <Paper variant="outlined" sx={{ p: 1, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
@@ -1006,7 +1021,7 @@ const SubmitWorkPage = () => {
                                           <StudentMemberList members={membersBySubmission[submission.id] || []} compact />
                                         )}
                                       </Stack>
-                                      {!submission.is_marked && (
+                                      {!submission.is_marked && !shouldAllotTopics(coursework) && (
                                         <Paper variant="outlined" sx={{ mt: 1, p: 1, borderColor: "#bfdbfe", bgcolor: "#f8fbff" }}>
                                           <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} alignItems={{ md: "center" }} sx={{ mb: 0.8 }}>
                                             <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>

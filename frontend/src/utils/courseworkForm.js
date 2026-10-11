@@ -1,5 +1,36 @@
 import { normalizeCourseworkType } from "./courseworkOptions";
 
+export const TOPIC_SOURCE_STUDENT = "student";
+export const TOPIC_SOURCE_TEACHER_STUDENT = "teacher_student";
+export const TOPIC_SOURCE_TEACHER_GROUP = "teacher_group";
+
+export const TOPIC_SOURCE_OPTIONS = [
+  { value: TOPIC_SOURCE_STUDENT, label: "Students choose their topic" },
+  { value: TOPIC_SOURCE_TEACHER_STUDENT, label: "I will allot a topic to each student" },
+  { value: TOPIC_SOURCE_TEACHER_GROUP, label: "I will allot a topic to each group" },
+];
+
+export const topicSourceLabel = (value) =>
+  TOPIC_SOURCE_OPTIONS.find((option) => option.value === value)?.label || TOPIC_SOURCE_OPTIONS[0].label;
+
+export const shouldAllotTopics = (row) =>
+  [TOPIC_SOURCE_TEACHER_STUDENT, TOPIC_SOURCE_TEACHER_GROUP].includes(String(row?.topic_source || ""));
+
+export const topicSourceOptionsFor = (submissionType) =>
+  TOPIC_SOURCE_OPTIONS.filter(
+    (option) => option.value !== TOPIC_SOURCE_TEACHER_GROUP || submissionType === "group" || submissionType === "both"
+  );
+
+export const applyTopicSource = (prev, topicSource) => {
+  const next = { ...prev, topic_source: topicSource };
+  if (topicSource !== TOPIC_SOURCE_STUDENT) {
+    next.approval_required = false;
+    next.topic_duplication_allowed = false;
+    next.auto_approve_all_students = false;
+  }
+  return next;
+};
+
 export const emptyCourseworkForm = {
   course: "",
   title: "",
@@ -11,6 +42,7 @@ export const emptyCourseworkForm = {
   approval_required: false,
   topic_duplication_allowed: false,
   auto_approve_all_students: false,
+  topic_source: TOPIC_SOURCE_STUDENT,
   deadline: "",
   max_marks: "",
 };
@@ -54,6 +86,9 @@ export const validateCourseworkForm = (form) => {
       }
     }
   }
+  if (String(form?.topic_source || TOPIC_SOURCE_STUDENT) === TOPIC_SOURCE_TEACHER_GROUP && submissionType === "individual") {
+    errors.topic_source = "Allotting one topic per group requires Group or Both.";
+  }
 
   return {
     ok: Object.keys(errors).length === 0,
@@ -86,6 +121,7 @@ export const toCourseworkEditForm = (row) => ({
   approval_required: Boolean(row.approval_required),
   topic_duplication_allowed: Boolean(row.topic_duplication_allowed),
   auto_approve_all_students: Boolean(row.auto_approve_all_students),
+  topic_source: row.topic_source || TOPIC_SOURCE_STUDENT,
   deadline: row.deadline ? row.deadline.slice(0, 16) : "",
   max_marks: row.max_marks,
 });

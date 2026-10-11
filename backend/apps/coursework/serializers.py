@@ -38,6 +38,7 @@ class CourseworkSerializer(serializers.ModelSerializer):
             "approval_required",
             "topic_duplication_allowed",
             "auto_approve_all_students",
+            "topic_source",
             "deadline",
             "max_marks",
             "created_by",
@@ -71,6 +72,15 @@ class CourseworkSerializer(serializers.ModelSerializer):
 
         if auto_approve_all_students:
             # Auto-approval mode bypasses topic approval workflow for all enrolled students.
+            attrs["approval_required"] = False
+
+        topic_source = attrs.get("topic_source") or getattr(self.instance, "topic_source", Coursework.TopicSource.STUDENT)
+        if topic_source == Coursework.TopicSource.TEACHER_GROUP and submission_type == Coursework.SubmissionType.INDIVIDUAL:
+            raise serializers.ValidationError(
+                {"topic_source": "Allotting one topic per group requires Group or Both submission type."}
+            )
+        if topic_source != Coursework.TopicSource.STUDENT:
+            attrs["topic_duplication_allowed"] = False
             attrs["approval_required"] = False
 
         if submission_type in [Coursework.SubmissionType.GROUP, Coursework.SubmissionType.BOTH]:
@@ -294,6 +304,13 @@ class SubmissionSerializer(serializers.ModelSerializer):
         now = timezone.now()
         topic = (attrs.get("topic") or getattr(self.instance, "topic", "") or "").strip()
 
+        if user.role == User.Role.STUDENT and coursework.topic_source != Coursework.TopicSource.STUDENT:
+            allotted = (getattr(self.instance, "topic", "") or "").strip()
+            if not allotted:
+                raise serializers.ValidationError({"topic": "Wait for your teacher to allot a topic."})
+            attrs["topic"] = allotted
+            topic = allotted
+
         if not topic:
             raise serializers.ValidationError({"topic": "Topic is required."})
 
@@ -356,7 +373,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
                     f"Selected group has {accepted_members_count} members, but max allowed is {coursework.max_group_members}."
                 )
 
-        if not coursework.topic_duplication_allowed:
+        if not coursework.topic_duplication_allowed and coursework.topic_source == Coursework.TopicSource.STUDENT:
             topic_conflict = self._find_topic_conflict_submission(
                 coursework=coursework,
                 topic=topic,

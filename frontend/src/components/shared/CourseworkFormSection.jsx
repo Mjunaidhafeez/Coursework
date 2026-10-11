@@ -1,5 +1,6 @@
 import { Button, Checkbox, FormControlLabel, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 
+import { applyTopicSource, topicSourceOptionsFor, TOPIC_SOURCE_STUDENT, TOPIC_SOURCE_TEACHER_GROUP } from "../../utils/courseworkForm";
 import { humanizeCourseworkType, normalizeCourseworkType } from "../../utils/courseworkOptions";
 
 const fieldSx = {
@@ -34,6 +35,8 @@ const CourseworkFormSection = ({
   };
 
   const showGroupSize = form.submission_type === "group" || form.submission_type === "both";
+  const studentsChooseTopic = (form.topic_source || TOPIC_SOURCE_STUDENT) === TOPIC_SOURCE_STUDENT;
+  const topicOptions = topicSourceOptionsFor(form.submission_type);
   const selectedType = normalizeCourseworkType(form.coursework_type) || "assignment";
   const typeOptions = (() => {
     const seen = new Set();
@@ -161,7 +164,14 @@ const CourseworkFormSection = ({
             value={form.submission_type}
             onChange={(_, value) => {
               if (!value) return;
-              setForm((p) => ({ ...p, submission_type: value }));
+              setForm((p) => ({
+                ...p,
+                submission_type: value,
+                topic_source:
+                  value === "individual" && p.topic_source === TOPIC_SOURCE_TEACHER_GROUP
+                    ? TOPIC_SOURCE_STUDENT
+                    : p.topic_source,
+              }));
             }}
             sx={{
               "& .MuiToggleButton-root": {
@@ -194,6 +204,27 @@ const CourseworkFormSection = ({
           )}
         </Stack>
 
+        <TextField
+          select
+          size="small"
+          label="Who sets the topic?"
+          value={form.topic_source || TOPIC_SOURCE_STUDENT}
+          error={Boolean(formErrors.topic_source)}
+          helperText={formErrors.topic_source || "Choose this if you will give each student or each group a different topic."}
+          sx={{ ...fieldSx, flex: { sm: "1 1 280px" }, minWidth: { sm: 260 } }}
+          onChange={(e) => {
+            const value = e.target.value;
+            setForm((p) => applyTopicSource(p, value));
+            clearFieldErrorIfValid("topic_source", Boolean(value));
+          }}
+        >
+          {topicOptions.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </TextField>
+
         <Stack direction="row" spacing={0.4} useFlexGap flexWrap="wrap" alignItems="center">
           <FormControlLabel
             sx={{ mr: 1.2 }}
@@ -207,42 +238,46 @@ const CourseworkFormSection = ({
             }
             label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Lock after deadline</Typography>}
           />
-          <FormControlLabel
-            sx={{ mr: 1.2 }}
-            control={
-              <Checkbox
-                size="small"
-                sx={ruleCheckboxSx}
-                checked={Boolean(form.approval_required)}
-                onChange={(e) => setForm((p) => ({ ...p, approval_required: e.target.checked }))}
+          {studentsChooseTopic ? (
+            <>
+              <FormControlLabel
+                sx={{ mr: 1.2 }}
+                control={
+                  <Checkbox
+                    size="small"
+                    sx={ruleCheckboxSx}
+                    checked={Boolean(form.approval_required)}
+                    onChange={(e) => setForm((p) => ({ ...p, approval_required: e.target.checked }))}
+                  />
+                }
+                label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Topic approval</Typography>}
               />
-            }
-            label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Topic approval</Typography>}
-          />
-          <FormControlLabel
-            sx={{ mr: 1.2 }}
-            control={
-              <Checkbox
-                size="small"
-                sx={ruleCheckboxSx}
-                checked={Boolean(form.topic_duplication_allowed)}
-                onChange={(e) => setForm((p) => ({ ...p, topic_duplication_allowed: e.target.checked }))}
+              <FormControlLabel
+                sx={{ mr: 1.2 }}
+                control={
+                  <Checkbox
+                    size="small"
+                    sx={ruleCheckboxSx}
+                    checked={Boolean(form.topic_duplication_allowed)}
+                    onChange={(e) => setForm((p) => ({ ...p, topic_duplication_allowed: e.target.checked }))}
+                  />
+                }
+                label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Same topic OK</Typography>}
               />
-            }
-            label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Same topic OK</Typography>}
-          />
-          <FormControlLabel
-            sx={{ mr: 1.2 }}
-            control={
-              <Checkbox
-                size="small"
-                sx={ruleCheckboxSx}
-                checked={Boolean(form.auto_approve_all_students)}
-                onChange={(e) => setForm((p) => ({ ...p, auto_approve_all_students: e.target.checked }))}
+              <FormControlLabel
+                sx={{ mr: 1.2 }}
+                control={
+                  <Checkbox
+                    size="small"
+                    sx={ruleCheckboxSx}
+                    checked={Boolean(form.auto_approve_all_students)}
+                    onChange={(e) => setForm((p) => ({ ...p, auto_approve_all_students: e.target.checked }))}
+                  />
+                }
+                label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Auto-approve all</Typography>}
               />
-            }
-            label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Auto-approve all</Typography>}
-          />
+            </>
+          ) : null}
         </Stack>
 
         {datalistId ? <datalist id={datalistId} /> : null}

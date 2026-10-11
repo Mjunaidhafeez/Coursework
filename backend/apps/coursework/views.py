@@ -20,7 +20,7 @@ from apps.common.uploads import (
     validate_upload,
 )
 from apps.common.whatsapp import notify_event
-from apps.groups.models import GroupMember
+from apps.groups.models import GroupMember, StudentGroup
 
 from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
 from .serializers import CourseworkSerializer, FeedbackGradeSerializer, SubmissionSerializer
@@ -35,7 +35,16 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
     bulk_update_fields = ("course",)
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy", "bulk_delete", "bulk_update"]:
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "bulk_delete",
+            "bulk_update",
+            "topic_targets",
+            "allot_topics",
+        ]:
             return [IsTeacherOrAdmin()]
         return [permissions.IsAuthenticated()]
 
@@ -63,6 +72,8 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
         return queryset
 
     def _ensure_auto_approved_roster(self, coursework):
+        if coursework.topic_source != Coursework.TopicSource.STUDENT:
+            return {"created": 0, "updated": 0}
         if not coursework.auto_approve_all_students:
             return {"created": 0, "updated": 0}
         enrolled_student_ids = list(
@@ -113,6 +124,210 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
             raise PermissionDenied("You can only sync auto-approve for your courses.")
         result = self._ensure_auto_approved_roster(coursework)
         return Response(result, status=status.HTTP_200_OK)
+
+    def _ensure_coursework_staff(self, request, coursework):
+        if request.user.role not in [User.Role.TEACHER, User.Role.SUPER_ADMIN]:
+            raise PermissionDenied("Only teacher/admin can allot topics.")
+        if request.user.role == User.Role.TEACHER and not coursework.course.teachers.filter(id=request.user.id).exists():
+            raise PermissionDenied("You can only allot topics for your courses.")
+
+    def _student_label(self, user):
+        name = (user.get_full_name() or "").strip() or user.username
+        roll = getattr(getattr(user, "student_profile", None), "student_id", "") or ""
+        return {"id": user.id, "name": name, "roll_no": roll}
+
+    def _course_students(self, coursework):
+        ids = list(
+            Enrollment.objects.filter(course_id=coursework.course_id).values_list("student_id", flat=True).distinct()
+        )
+        qs = User.objects.filter(role=User.Role.STUDENT, is_active=True)
+        if ids:
+            qs = qs.filter(id__in=ids)
+        else:
+            semester_id = getattr(coursework.course, "semester_id", None)
+            qs = qs.filter(student_profile__semester_id=semester_id) if semester_id else qs.none()
+        return qs.select_related("student_profile").order_by("first_name", "last_name", "username")
+
+    def _course_groups(self, coursework):
+        return (
+            StudentGroup.objects.filter(
+                source=StudentGroup.Source.MANUAL,
+                status=StudentGroup.Status.APPROVED,
+            )
+            .filter(
+                Q(scope=StudentGroup.Scope.GLOBAL)
+                | Q(course_id=coursework.course_id)
+                | Q(coursework_id=coursework.id)
+            )
+            .prefetch_related("members__student__student_profile")
+            .order_by("name")
+        )
+
+    @action(detail=True, methods=["get"])
+    def topic_targets(self, request, pk=None):
+        coursework = self.get_object()
+        self._ensure_coursework_staff(request, coursework)
+        source = coursework.topic_source
+        if source == Coursework.TopicSource.STUDENT:
+            return Response({"topic_source": source, "targets": []})
+
+        submissions = list(Submission.objects.filter(coursework=coursework).exclude(topic=""))
+        if source == Coursework.TopicSource.TEACHER_GROUP:
+            topic_by_group = {}
+            for submission in submissions:
+                if submission.group_id and submission.topic:
+                    topic_by_group.setdefault(submission.group_id, submission.topic)
+            targets = []
+            for group in self._course_groups(coursework):
+                members = [
+                    self._student_label(member.student)
+                    for member in group.members.all()
+                    if member.invitation_status != GroupMember.InvitationStatus.REJECTED
+                ]
+                targets.append(
+                    {
+                        "id": group.id,
+                        "name": group.name,
+                        "members": members,
+                        "topic": topic_by_group.get(group.id, ""),
+                    }
+                )
+            return Response({"topic_source": source, "targets": targets})
+
+        topic_by_student = {}
+        for submission in submissions:
+            if submission.student_id and submission.topic:
+                topic_by_student.setdefault(submission.student_id, submission.topic)
+        targets = [
+            {**self._student_label(student), "topic": topic_by_student.get(student.id, "")}
+            for student in self._course_students(coursework)
+        ]
+        return Response({"topic_source": source, "targets": targets})
+
+    @action(detail=True, methods=["post"])
+    def allot_topics(self, request, pk=None):
+        coursework = self.get_object()
+        self._ensure_coursework_staff(request, coursework)
+        source = coursework.topic_source
+        if source == Coursework.TopicSource.STUDENT:
+            raise ValidationError({"topic_source": "This assessment lets students choose their own topic."})
+
+        assignments = request.data.get("assignments") or []
+        if not isinstance(assignments, list):
+            raise ValidationError({"assignments": "Provide a list of id and topic."})
+
+        cleaned = []
+        seen_topics = {}
+        seen_ids = set()
+        for row in assignments:
+            if not isinstance(row, dict):
+                raise ValidationError({"assignments": "Each assignment must be an object with id and topic."})
+            target_id = row.get("id") or row.get("student_id") or row.get("group_id")
+            topic = str(row.get("topic") or "").strip()
+            if not topic:
+                continue
+            try:
+                target_id = int(target_id)
+            except (TypeError, ValueError):
+                raise ValidationError({"assignments": "Each assignment needs a valid id."})
+            topic_key = topic.casefold()
+            if topic_key in seen_topics:
+                raise ValidationError({"topic": f"Topic '{topic}' is already allotted to another target."})
+            if target_id in seen_ids:
+                raise ValidationError({"assignments": "Each student or group can only have one topic."})
+            seen_topics[topic_key] = target_id
+            seen_ids.add(target_id)
+            cleaned.append((target_id, topic))
+
+        if not cleaned:
+            raise ValidationError({"assignments": "Enter at least one topic."})
+
+        overwrite_ids = {target_id for target_id, _ in cleaned}
+        existing_qs = Submission.objects.filter(coursework=coursework).exclude(topic="")
+        if source == Coursework.TopicSource.TEACHER_GROUP:
+            existing_qs = existing_qs.exclude(group_id__in=overwrite_ids)
+        else:
+            existing_qs = existing_qs.exclude(student_id__in=overwrite_ids)
+        existing_topics = {str(topic).strip().casefold() for topic in existing_qs.values_list("topic", flat=True) if topic}
+        for _, topic in cleaned:
+            if topic.casefold() in existing_topics:
+                raise ValidationError({"topic": f"Topic '{topic}' is already allotted."})
+
+        now = timezone.now()
+        allotted = 0
+        notified_ids = []
+        if source == Coursework.TopicSource.TEACHER_GROUP:
+            groups = {group.id: group for group in self._course_groups(coursework).filter(id__in=overwrite_ids)}
+            for group_id, topic in cleaned:
+                group = groups.get(group_id)
+                if not group:
+                    raise ValidationError({"assignments": f"Group {group_id} is not an approved group for this course."})
+                member_ids = list(
+                    GroupMember.objects.filter(group_id=group_id)
+                    .exclude(invitation_status=GroupMember.InvitationStatus.REJECTED)
+                    .values_list("student_id", flat=True)
+                )
+                if not member_ids:
+                    raise ValidationError({"assignments": f"Group '{group.name}' has no members."})
+                existing = {
+                    submission.student_id: submission
+                    for submission in Submission.objects.filter(coursework=coursework, student_id__in=member_ids)
+                }
+                for student_id in member_ids:
+                    submission = existing.get(student_id)
+                    if submission:
+                        submission.topic = topic
+                        submission.group_id = group_id
+                        submission.approval_status = Submission.ApprovalStatus.APPROVED
+                        if not submission.submitted_at:
+                            submission.submitted_at = now
+                        submission.save(update_fields=["topic", "group", "approval_status", "submitted_at"])
+                    else:
+                        Submission.objects.create(
+                            coursework=coursework,
+                            student_id=student_id,
+                            group_id=group_id,
+                            topic=topic,
+                            submitted_at=now,
+                            approval_status=Submission.ApprovalStatus.APPROVED,
+                        )
+                    allotted += 1
+                    notified_ids.append(student_id)
+        else:
+            allowed_ids = set(self._course_students(coursework).values_list("id", flat=True))
+            for student_id, topic in cleaned:
+                if student_id not in allowed_ids:
+                    raise ValidationError({"assignments": f"Student {student_id} is not in this course."})
+                submission = (
+                    Submission.objects.filter(coursework=coursework, student_id=student_id)
+                    .order_by("-submitted_at", "-id")
+                    .first()
+                )
+                if submission:
+                    submission.topic = topic
+                    submission.approval_status = Submission.ApprovalStatus.APPROVED
+                    if not submission.submitted_at:
+                        submission.submitted_at = now
+                    submission.save(update_fields=["topic", "approval_status", "submitted_at"])
+                else:
+                    Submission.objects.create(
+                        coursework=coursework,
+                        student_id=student_id,
+                        topic=topic,
+                        submitted_at=now,
+                        approval_status=Submission.ApprovalStatus.APPROVED,
+                    )
+                allotted += 1
+                notified_ids.append(student_id)
+
+        students = list(User.objects.filter(id__in=notified_ids, is_active=True))
+        if students:
+            push_notifications(
+                students,
+                f"Topic allotted: {coursework.title}",
+                "Your teacher allotted a topic. Open Submit Work to upload your file.",
+            )
+        return Response({"allotted": allotted, "targets": len(cleaned)}, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         coursework = self.get_object()

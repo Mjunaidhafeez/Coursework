@@ -9,12 +9,14 @@ import PaginationControls from "../../components/PaginationControls";
 import AssessmentList from "../../components/shared/AssessmentList";
 import CompactTabs from "../../components/shared/CompactTabs";
 import CourseworkFormSection from "../../components/shared/CourseworkFormSection";
+import TopicAllotDialog from "../../components/shared/TopicAllotDialog";
 import ListingPage from "../../components/shared/ListingPage";
 import BulkActionBar from "../../components/shared/BulkActionBar";
 import CourseworkListFilters from "../../components/shared/CourseworkListFilters";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useUi } from "../../context/UiContext";
 import useRowSelection from "../../hooks/useRowSelection";
+import useTopicAllot from "../../hooks/useTopicAllot";
 import { runBulkDelete } from "../../utils/bulkApi";
 import { buildCourseworkTypeOptions, SUBMISSION_TYPE_OPTIONS } from "../../utils/courseworkOptions";
 import { confirmDelete } from "../../utils/confirm";
@@ -60,6 +62,7 @@ const TeacherCourseworkPage = () => {
   const [submissionFilter, setSubmissionFilter] = useState("");
   const [semesterFilter, setSemesterFilter] = useState("");
   const selection = useRowSelection();
+  const topicAllot = useTopicAllot();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [form, setForm] = useState(emptyCourseworkForm);
@@ -122,13 +125,11 @@ const TeacherCourseworkPage = () => {
 
     const payload = toCourseworkPayload({ ...form, max_marks: marksValidation.value });
     try {
-      if (editingId) {
-        await api.patch(`${ENDPOINTS.courseworks}${editingId}/`, payload);
-        notify("Assessment updated");
-      } else {
-        await api.post(ENDPOINTS.courseworks, payload);
-        notify("Assessment added");
-      }
+      const { data } = editingId
+        ? await api.patch(`${ENDPOINTS.courseworks}${editingId}/`, payload)
+        : await api.post(ENDPOINTS.courseworks, payload);
+      notify(editingId ? "Assessment updated" : "Assessment added");
+      topicAllot.openAfterSave(data);
     } catch (err) {
       const serverErrors = extractFieldErrors(err?.response?.data);
       if (Object.keys(serverErrors).length) {
@@ -288,8 +289,14 @@ const TeacherCourseworkPage = () => {
         }
         onEdit={edit}
         onDelete={remove}
+        onAllot={topicAllot.setAllotFor}
         isSelected={selection.isSelected}
         onToggle={selection.toggle}
+      />
+      <TopicAllotDialog
+        coursework={topicAllot.allotFor}
+        onClose={() => topicAllot.setAllotFor(null)}
+        onSaved={() => loadData()}
       />
       <Box sx={{ mt: 1.2 }}>
         <PaginationControls

@@ -12,6 +12,11 @@ class Coursework(TimeStampedModel):
         GROUP = "group", "Group"
         BOTH = "both", "Both"
 
+    class TopicSource(models.TextChoices):
+        STUDENT = "student", "Students choose their topic"
+        TEACHER_STUDENT = "teacher_student", "Teacher allots a topic to each student"
+        TEACHER_GROUP = "teacher_group", "Teacher allots a topic to each group"
+
     course = models.ForeignKey("academics.Course", on_delete=models.CASCADE, related_name="courseworks")
     title = models.CharField(max_length=200)
     description = models.TextField()
@@ -22,6 +27,7 @@ class Coursework(TimeStampedModel):
     approval_required = models.BooleanField(default=False)
     topic_duplication_allowed = models.BooleanField(default=False)
     auto_approve_all_students = models.BooleanField(default=False)
+    topic_source = models.CharField(max_length=20, choices=TopicSource.choices, default=TopicSource.STUDENT)
     deadline = models.DateTimeField()
     max_marks = models.DecimalField(max_digits=6, decimal_places=2)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_courseworks")
