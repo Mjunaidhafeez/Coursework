@@ -14,6 +14,7 @@ from .views import (
     bulk_import,
     global_search,
     recycle_bin,
+    recycle_bin_purge,
     transcript,
 )
 
@@ -33,5 +34,6 @@ urlpatterns = [
     path("backup/", backup_export, name="backup-export"),
     path("search/", global_search, name="global-search"),
     path("recycle/", recycle_bin, name="recycle-bin"),
+    path("recycle/purge/", recycle_bin_purge, name="recycle-bin-purge"),
     path("", include(router.urls)),
 ]

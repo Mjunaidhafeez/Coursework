@@ -720,9 +720,6 @@ def recycle_bin(request):
         user_ids, notice_ids = _recycle_ids(request.data)
         if not notice_ids and not user_ids:
             return Response({"detail": "Nothing selected."}, status=status.HTTP_400_BAD_REQUEST)
-        action = str(request.data.get("action") or "restore").strip().lower()
-        if action in {"purge", "delete", "permanent"}:
-            return _purge_recycle(request, user_ids, notice_ids)
         return _restore_recycle(user_ids, notice_ids)
     inactive = User.objects.filter(is_active=False).exclude(role=User.Role.SUPER_ADMIN).order_by("-id")[:200]
     notices = Notice.objects.filter(is_deleted=True).order_by("-updated_at")[:100]
@@ -735,3 +732,12 @@ def recycle_bin(request):
             "notices": [{"id": item.id, "title": item.title} for item in notices],
         }
     )
+
+
+@api_view(["POST"])
+@permission_classes([IsSuperAdmin])
+def recycle_bin_purge(request):
+    user_ids, notice_ids = _recycle_ids(request.data)
+    if not notice_ids and not user_ids:
+        return Response({"detail": "Nothing selected."}, status=status.HTTP_400_BAD_REQUEST)
+    return _purge_recycle(request, user_ids, notice_ids)

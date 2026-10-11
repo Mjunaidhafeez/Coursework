@@ -95,7 +95,7 @@ const RecycleBinPage = () => {
 
   const restore = async (payload, message) => {
     try {
-      await api.post(ENDPOINTS.campusRecycle, { action: "restore", ...payload });
+      await api.post(ENDPOINTS.campusRecycle, payload);
       notify(message);
       usersSel.clear();
       noticesSel.clear();
@@ -108,7 +108,7 @@ const RecycleBinPage = () => {
   const purge = async (payload, entityLabel, count = 1) => {
     if (!confirmPermanentDelete(entityLabel, count)) return;
     try {
-      await api.post(ENDPOINTS.campusRecycle, { action: "purge", ...payload });
+      await api.post(ENDPOINTS.campusRecyclePurge, payload);
       notify(
         payload.user_id || payload.user_ids?.length
           ? "Permanently deleted. Username and roll no can be used again."
