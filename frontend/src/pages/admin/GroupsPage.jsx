@@ -3,51 +3,41 @@ import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import {
   Box,
   Button,
-  Chip,
   Checkbox,
+  Chip,
   CircularProgress,
-  ListItemText,
   MenuItem,
-  Paper,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import api from "../../api/client";
+import { ENDPOINTS } from "../../api/endpoints";
 import PaginationControls from "../../components/PaginationControls";
-import CompactAddForm from "../../components/shared/CompactAddForm";
-import FormErrorSummary from "../../components/shared/FormErrorSummary";
+import BulkActionBar from "../../components/shared/BulkActionBar";
+import GroupCard from "../../components/shared/GroupCard";
+import GroupComposer from "../../components/shared/GroupComposer";
+import GroupReviewActions from "../../components/shared/GroupReviewActions";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
-import StudentMemberList from "../../components/shared/StudentMemberList";
-import { compactFieldSx } from "../../components/shared/listingStyles";
 import { useUi } from "../../context/UiContext";
-import { ENDPOINTS } from "../../api/endpoints";
-import BulkActionBar from "../../components/shared/BulkActionBar";
 import useRowSelection from "../../hooks/useRowSelection";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
-import { uniqueCourseSemesters } from "../../utils/courseworkOptions";
-import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
-import {
-  emptyGroupForm,
-  fetchGlobalEligibleStudents,
-  sortStudentsByRollOrUsername,
-  toGroupEditForm,
-  toGroupPayload,
-} from "../../utils/groupForm";
-import { GROUP_STATUS_OPTIONS } from "../../utils/groupOptions";
-import { downloadCsvFile, printTablePdf } from "../../utils/export";
-import { getUserDisplayName } from "../../utils/userDisplay";
 import { confirmDelete } from "../../utils/confirm";
+import { uniqueCourseSemesters } from "../../utils/courseworkOptions";
+import { downloadCsvFile, printTablePdf } from "../../utils/export";
+import { occupancyFromGroups } from "../../utils/groupForm";
+import { GROUP_STATUS_OPTIONS } from "../../utils/groupOptions";
+import { describeGroupScope } from "../../utils/groupScopeOptions";
+import { fetchOrgCatalog } from "../campus/listRows";
 
 const GroupsPage = () => {
   const { notify, isGlobalLoading } = useUi();
   const [groups, setGroups] = useState([]);
   const [total, setTotal] = useState(0);
   const [courses, setCourses] = useState([]);
-  const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("");
@@ -56,12 +46,10 @@ const GroupsPage = () => {
   const selection = useRowSelection();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [form, setForm] = useState(emptyGroupForm);
-  const [formErrors, setFormErrors] = useState({});
-  const [editingId, setEditingId] = useState(null);
+  const [editingGroup, setEditingGroup] = useState(null);
   const [loading, setLoading] = useState(false);
   const [assignedGroupByStudentId, setAssignedGroupByStudentId] = useState({});
-  const sortedStudents = useMemo(() => sortStudentsByRollOrUsername(students), [students]);
+
   const buildGroupsParams = ({
     searchValue = search,
     pageValue = page,
@@ -81,6 +69,11 @@ const GroupsPage = () => {
     return params;
   };
 
+  const loadAssignedGroupMap = async (ignoreGroupId = editingGroup?.id) => {
+    const { data } = await api.get(`${ENDPOINTS.groups}?page_size=4000&ordering=name`);
+    setAssignedGroupByStudentId(occupancyFromGroups(data.results || [], ignoreGroupId));
+  };
+
   const loadData = async ({
     searchValue = search,
     pageValue = page,
@@ -92,129 +85,32 @@ const GroupsPage = () => {
     const params = buildGroupsParams({ searchValue, pageValue, pageSizeValue, statusValue, courseValue, semesterValue });
     setLoading(true);
     try {
-      const [groupsRes, coursesRes] = await Promise.all([
-        api.get(`${ENDPOINTS.groups}?${params.toString()}`),
-        api.get(ENDPOINTS.courses),
-      ]);
-
-      setGroups(groupsRes.data.results || []);
-      setTotal(groupsRes.data.count || 0);
-      setCourses(coursesRes.data.results || []);
+      const { data } = await api.get(`${ENDPOINTS.groups}?${params.toString()}`);
+      setGroups(data.results || []);
+      setTotal(data.count || 0);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadEligibleStudents = async () => {
-    setStudents(await fetchGlobalEligibleStudents(api, ENDPOINTS));
-  };
-
-  const loadAssignedGroupMap = async () => {
-    const { data } = await api.get(`${ENDPOINTS.groups}?page_size=4000&ordering=name`);
-    const map = {};
-    (data.results || []).forEach((group) => {
-      if (!["pending", "approved"].includes(String(group.status || "").toLowerCase())) return;
-      (group.members || []).forEach((member) => {
-        const studentId = Number(member.student);
-        if (!studentId) return;
-        if (editingId && Number(group.id) === Number(editingId)) return;
-        if (!map[studentId]) {
-          map[studentId] = {
-            groupId: Number(group.id),
-            groupName: group.name || `Group #${group.id}`,
-          };
-        }
-      });
-    });
-    setAssignedGroupByStudentId(map);
+  const refresh = async () => {
+    await Promise.all([loadData(), loadAssignedGroupMap(editingGroup?.id)]);
   };
 
   useEffect(() => {
     loadData({ searchValue: "", pageValue: 1 });
-    loadEligibleStudents();
+    fetchOrgCatalog(api, ENDPOINTS).then((catalog) => setCourses(catalog.courses));
     loadAssignedGroupMap();
   }, []);
 
-  const validateForm = () => {
-    const nextErrors = {};
-    if (!form.name.trim()) nextErrors.name = "Group name is required";
-    if (!form.member_ids.length) nextErrors.member_ids = "Select at least one student";
-    const conflictingStudent = (form.member_ids || []).find((studentId) => {
-      const linked = assignedGroupByStudentId[Number(studentId)];
-      return linked && (!editingId || Number(linked.groupId) !== Number(editingId));
-    });
-    if (conflictingStudent) {
-      const linked = assignedGroupByStudentId[Number(conflictingStudent)];
-      const studentObj = sortedStudents.find((student) => Number(student.id) === Number(conflictingStudent));
-      const studentLabel = getUserDisplayName(studentObj, { includeUsername: true }) || `Student #${conflictingStudent}`;
-      nextErrors.member_ids = `${studentLabel} is already in "${linked.groupName}". One student can be in only one class group.`;
-    }
-    setFormErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const submit = async () => {
-    if (!validateForm()) {
-      notify("Please fill mandatory group fields", "error");
-      return;
-    }
-    try {
-      const payload = toGroupPayload(form);
-      if (editingId) {
-        await api.patch(`${ENDPOINTS.groups}${editingId}/`, payload);
-        notify("Group updated");
-      } else {
-        await api.post(ENDPOINTS.groups, payload);
-        notify("Group added");
-      }
-      setEditingId(null);
-      setForm(emptyGroupForm);
-      setFormErrors({});
-      await Promise.all([loadData(), loadAssignedGroupMap()]);
-    } catch (err) {
-      setFormErrors((prev) => ({ ...prev, ...extractFieldErrors(err.response?.data) }));
-      notify(extractApiErrorMessage(err), "error");
-    }
-  };
-
-  const edit = (item) => {
-    setEditingId(item.id);
-    setForm(toGroupEditForm(item));
-    setFormErrors({});
-    loadEligibleStudents();
-    loadAssignedGroupMap();
-  };
-
-  const approve = async (id) => {
-    try {
-      await api.post(`${ENDPOINTS.groups}${id}/approve/`);
-      notify("Group request approved");
-      await Promise.all([loadData(), loadAssignedGroupMap()]);
-    } catch (err) {
-      notify(extractApiErrorMessage(err), "error");
-    }
-  };
-
-  const reject = async (id) => {
-    try {
-      await api.post(`${ENDPOINTS.groups}${id}/reject/`);
-      notify("Group request rejected");
-      await Promise.all([loadData(), loadAssignedGroupMap()]);
-    } catch (err) {
-      notify(extractApiErrorMessage(err), "error");
-    }
-  };
-
   const remove = async (id) => {
-    if (!confirmDelete("group")) {
-      return;
-    }
+    if (!confirmDelete("group")) return;
     const prev = groups;
-    setGroups((curr) => curr.filter((g) => g.id !== id));
+    setGroups((curr) => curr.filter((group) => group.id !== id));
     try {
       await api.delete(`${ENDPOINTS.groups}${id}/`);
       notify("Group deleted");
-      await Promise.all([loadData(), loadAssignedGroupMap()]);
+      await refresh();
     } catch {
       setGroups(prev);
       notify("Delete failed", "error");
@@ -227,7 +123,7 @@ const GroupsPage = () => {
       if (!result.ok) return;
       notify("Selected groups deleted");
       selection.clear();
-      await Promise.all([loadData(), loadAssignedGroupMap()]);
+      await refresh();
     } catch {
       notify("Bulk delete failed", "error");
     }
@@ -243,7 +139,7 @@ const GroupsPage = () => {
       notify(`Updated ${data.updated_count || 0} groups`);
       selection.clear();
       setBulkStatus("");
-      await Promise.all([loadData(), loadAssignedGroupMap()]);
+      await refresh();
     } catch {
       notify("Bulk update failed", "error");
     }
@@ -254,32 +150,33 @@ const GroupsPage = () => {
     const { data } = await api.get(`${ENDPOINTS.groups}?${params.toString()}`);
     return (data.results || []).map((group) => [
       group.name || "-",
+      describeGroupScope(group),
       group.status || "-",
       (group.members || [])
         .map((member) => `${member.student_name || member.name || "-"} | ${member.student_roll_no || member.roll_no || "-"}`)
         .join("\n"),
     ]);
   };
+
   const exportGroupsCsv = async () => {
     try {
-      const rows = await getGroupExportRows();
       downloadCsvFile({
         filePrefix: "class-groups",
-        headers: ["Group Name", "Status", "Group Members (Name | Roll No)"],
-        rows,
+        headers: ["Group Name", "Group For", "Status", "Group Members (Name | Roll No)"],
+        rows: await getGroupExportRows(),
       });
       notify("Groups CSV exported");
     } catch {
       notify("Failed to export groups CSV", "error");
     }
   };
+
   const exportGroupsPdf = async () => {
     try {
-      const rows = await getGroupExportRows();
       printTablePdf({
         title: "Class Groups",
-        headers: ["Group Name", "Status", "Group Members (Name | Roll No)"],
-        rows,
+        headers: ["Group Name", "Group For", "Status", "Group Members (Name | Roll No)"],
+        rows: await getGroupExportRows(),
       });
       notify("Groups PDF exported");
     } catch {
@@ -290,69 +187,22 @@ const GroupsPage = () => {
   return (
     <ListingPage
       title="Group Management & Approvals"
+      subtitle="Create a group for a course or class, or approve student requests. A student already in a group or on a pending request cannot join another."
+      addFormMaxHeight={{ xs: "70vh", md: "62vh" }}
       addForm={(
-        <CompactAddForm
-          title={editingId ? "Update Group" : "Add Group"}
-          submitLabel={editingId ? "Update" : "Add"}
-          onSubmit={submit}
-          onClear={() => {
-            setEditingId(null);
-            setForm(emptyGroupForm);
-            setFormErrors({});
+        <GroupComposer
+          mode="manage"
+          editingGroup={editingGroup}
+          assignedGroupByStudentId={assignedGroupByStudentId}
+          onSaved={async () => {
+            setEditingGroup(null);
+            await refresh();
+          }}
+          onCleared={() => {
+            setEditingGroup(null);
             loadAssignedGroupMap();
           }}
-          extra={<FormErrorSummary errors={formErrors} />}
-        >
-          <TextField required size="small" label="Group Name" value={form.name} error={Boolean(formErrors.name)} helperText={formErrors.name || ""} sx={compactFieldSx} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-          <TextField
-            select
-            size="small"
-            label="Members"
-            SelectProps={{
-              multiple: true,
-              MenuProps: {
-                PaperProps: {
-                  sx: { maxHeight: 320, borderRadius: 2, mt: 0.6 },
-                },
-              },
-              renderValue: (selected) =>
-                selected
-                  .map((id) => getUserDisplayName(sortedStudents.find((student) => student.id === id), { includeUsername: true }) || id)
-                  .join(", "),
-            }}
-            value={form.member_ids}
-            error={Boolean(formErrors.member_ids)}
-            helperText={formErrors.member_ids || ""}
-            sx={{
-              ...compactFieldSx,
-              minWidth: { xs: "100%", sm: 220 },
-              flex: { xs: "1 1 100%", sm: "1 1 260px" },
-            }}
-            onChange={(e) => setForm((p) => ({ ...p, member_ids: e.target.value }))}
-          >
-            {sortedStudents.map((student) => (
-              <MenuItem
-                key={student.id}
-                value={student.id}
-                disabled={
-                  Boolean(assignedGroupByStudentId[Number(student.id)]) &&
-                  (!editingId || Number(assignedGroupByStudentId[Number(student.id)]?.groupId) !== Number(editingId))
-                }
-              >
-                <Checkbox checked={form.member_ids.includes(student.id)} />
-                <ListItemText
-                  primary={getUserDisplayName(student, { includeUsername: true })}
-                  secondary={
-                    assignedGroupByStudentId[Number(student.id)] &&
-                    (!editingId || Number(assignedGroupByStudentId[Number(student.id)]?.groupId) !== Number(editingId))
-                      ? `Already in ${assignedGroupByStudentId[Number(student.id)]?.groupName}`
-                      : (student.student_id || student.username)
-                  }
-                />
-              </MenuItem>
-            ))}
-          </TextField>
-        </CompactAddForm>
+        />
       )}
       filters={(
         <SearchToolbar
@@ -396,75 +246,55 @@ const GroupsPage = () => {
         />
       )}
     >
-        <BulkActionBar
-          count={selection.count}
-          onClear={selection.clear}
-          onDelete={handleBulkDelete}
-          updateSlot={(
-            <>
-              <TextField size="small" select label="Status" value={bulkStatus} sx={{ minWidth: 130 }} onChange={(e) => setBulkStatus(e.target.value)}>
-                <MenuItem value="">Keep</MenuItem>
-                {GROUP_STATUS_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-              </TextField>
-              <Button size="small" variant="contained" onClick={handleBulkUpdate}>Update selected</Button>
-            </>
-          )}
-        />
-        <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
-          <Chip size="small" label={`Total: ${total}`} variant="outlined" />
-          <Chip size="small" label={`Pending: ${groups.filter((g) => g.status === "pending").length}`} color="warning" variant="outlined" />
-          <Chip size="small" label={`Approved: ${groups.filter((g) => g.status === "approved").length}`} color="success" variant="outlined" />
-        </Stack>
-        {!groups.length && !loading ? (
-          <Typography variant="body2" color="text.secondary">No groups found for current filters.</Typography>
-        ) : (
-          <Box
-            sx={{
-              display: "grid",
-              gap: 1.1,
-              gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" },
-            }}
-          >
-            {groups.map((group) => (
-              <Paper key={group.id} variant="outlined" sx={{ p: 1, borderColor: "#dbeafe", borderRadius: 1.5, bgcolor: "#fafcff" }}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.7 }}>
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <Checkbox size="small" checked={selection.isSelected(group.id)} onChange={() => selection.toggle(group.id)} />
-                    <Typography sx={{ fontWeight: 800 }}>{group.name}</Typography>
-                  </Stack>
-                  <Chip
-                    size="small"
-                    label={group.status || "pending"}
-                    color={group.status === "approved" ? "success" : group.status === "rejected" ? "error" : "warning"}
-                    variant="outlined"
-                  />
-                </Stack>
-                <StudentMemberList members={group.members || []} compact />
-                <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 0.8 }}>
-                  {group.status === "pending" && (
-                    <>
-                      <Button size="small" color="success" onClick={() => approve(group.id)}>Approve</Button>
-                      <Button size="small" color="warning" onClick={() => reject(group.id)}>Reject</Button>
-                    </>
-                  )}
-                  <Button size="small" onClick={() => edit(group)}>Edit</Button>
-                  <Button size="small" color="error" onClick={() => remove(group.id)}>Delete</Button>
-                </Stack>
-              </Paper>
-            ))}
-          </Box>
+      <BulkActionBar
+        count={selection.count}
+        onClear={selection.clear}
+        onDelete={handleBulkDelete}
+        updateSlot={(
+          <>
+            <TextField size="small" select label="Status" value={bulkStatus} sx={{ minWidth: 130 }} onChange={(e) => setBulkStatus(e.target.value)}>
+              <MenuItem value="">Keep</MenuItem>
+              {GROUP_STATUS_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+            </TextField>
+            <Button size="small" variant="contained" onClick={handleBulkUpdate}>Update selected</Button>
+          </>
         )}
-        {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
-
-        <Box sx={{ mt: 1.5 }}>
-          <PaginationControls
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={(newPage) => { setPage(newPage); loadData({ pageValue: newPage }); }}
-            onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
-          />
+      />
+      <Stack direction="row" spacing={0.7} sx={{ mb: 0.8 }}>
+        <Chip size="small" label={`Total: ${total}`} variant="outlined" />
+        <Chip size="small" label={`Pending: ${groups.filter((group) => group.status === "pending").length}`} color="warning" variant="outlined" />
+        <Chip size="small" label={`Approved: ${groups.filter((group) => group.status === "approved").length}`} color="success" variant="outlined" />
+      </Stack>
+      {!groups.length && !loading ? (
+        <Typography variant="body2" color="text.secondary">No groups found for current filters.</Typography>
+      ) : (
+        <Box sx={{ display: "grid", gap: 1.1, gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" } }}>
+          {groups.map((group) => (
+            <GroupCard
+              key={group.id}
+              group={group}
+              leading={<Checkbox size="small" checked={selection.isSelected(group.id)} onChange={() => selection.toggle(group.id)} />}
+              actions={(
+                <>
+                  <GroupReviewActions group={group} onDone={refresh} />
+                  <Button size="small" onClick={() => { setEditingGroup(group); loadAssignedGroupMap(group.id); }}>Edit</Button>
+                  <Button size="small" color="error" onClick={() => remove(group.id)}>Delete</Button>
+                </>
+              )}
+            />
+          ))}
         </Box>
+      )}
+      {loading && !isGlobalLoading && <Stack alignItems="center" sx={{ py: 2 }}><CircularProgress size={24} /></Stack>}
+      <Box sx={{ mt: 1.5 }}>
+        <PaginationControls
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={(newPage) => { setPage(newPage); loadData({ pageValue: newPage }); }}
+          onPageSizeChange={(newSize) => { setPageSize(newSize); setPage(1); loadData({ pageValue: 1, pageSizeValue: newSize }); }}
+        />
+      </Box>
     </ListingPage>
   );
 };

@@ -65,3 +65,14 @@ class GroupMember(TimeStampedModel):
 
     def __str__(self):
         return f"{self.student.username} in {self.group.name}"
+
+    @classmethod
+    def active_for_students(cls, student_ids, exclude_group_id=None):
+        qs = cls.objects.filter(
+            student_id__in=student_ids,
+            group__source=StudentGroup.Source.MANUAL,
+            group__status__in=[StudentGroup.Status.PENDING, StudentGroup.Status.APPROVED],
+        ).exclude(invitation_status=cls.InvitationStatus.REJECTED).select_related("group", "student")
+        if exclude_group_id:
+            qs = qs.exclude(group_id=exclude_group_id)
+        return qs

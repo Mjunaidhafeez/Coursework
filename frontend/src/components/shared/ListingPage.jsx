@@ -11,6 +11,7 @@ const ListingPage = ({
   toolbar = null,
   footer = null,
   fill = false,
+  addFormMaxHeight = { xs: "34vh", md: "38vh" },
   children,
 }) => (
   <Stack
@@ -63,7 +64,7 @@ const ListingPage = ({
     {addForm ? (
       <Box
         id="assessment-create-form"
-        sx={{ flexShrink: 0, maxHeight: { xs: "34vh", md: "38vh" }, overflow: "auto" }}
+        sx={{ flexShrink: 0, maxHeight: addFormMaxHeight, overflow: "auto" }}
       >
         {addForm}
       </Box>

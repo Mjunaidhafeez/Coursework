@@ -43,6 +43,8 @@ class StudentGroupSerializer(serializers.ModelSerializer):
     member_ids = serializers.ListField(child=serializers.IntegerField(min_value=1), write_only=True, required=False)
     creator_name = serializers.CharField(source="creator.username", read_only=True)
     course_title = serializers.CharField(source="course.title", read_only=True)
+    course_semester = serializers.IntegerField(source="course.semester.number", read_only=True, allow_null=True)
+    course_department = serializers.CharField(source="course.department.name", read_only=True, allow_null=True, default="")
     coursework_title = serializers.CharField(source="coursework.title", read_only=True)
 
     class Meta:
@@ -55,6 +57,8 @@ class StudentGroupSerializer(serializers.ModelSerializer):
             "scope",
             "course",
             "course_title",
+            "course_semester",
+            "course_department",
             "coursework",
             "coursework_title",
             "creator",
@@ -138,28 +142,41 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                         {"member_ids": "All selected students must be enrolled in this course."}
                     )
 
-            # Class-group guard: one student can belong to only one active manual group.
-            # Exclude the current group on edit so existing members can be retained.
             candidate_ids = set(member_ids)
             if request.user.role == User.Role.STUDENT:
                 candidate_ids.add(request.user.id)
+                if len(candidate_ids) < 2:
+                    raise serializers.ValidationError(
+                        {"member_ids": "Select at least one classmate besides yourself."}
+                    )
+                profile = getattr(request.user, "student_profile", None)
+                locks = {
+                    key: getattr(profile, key, None)
+                    for key in ("semester_id", "department_id", "school_class_id", "section_id")
+                    if getattr(profile, key, None)
+                }
+                if locks:
+                    peers = User.objects.filter(id__in=candidate_ids, role=User.Role.STUDENT).select_related("student_profile")
+                    for student in peers:
+                        peer_profile = getattr(student, "student_profile", None)
+                        if any(getattr(peer_profile, key, None) != value for key, value in locks.items()):
+                            raise serializers.ValidationError(
+                                {
+                                    "member_ids": "You can only add classmates from your own semester, class and section."
+                                }
+                            )
 
-            active_memberships = GroupMember.objects.filter(
-                student_id__in=candidate_ids,
-                accepted=True,
-                group__source=StudentGroup.Source.MANUAL,
-                group__status__in=[StudentGroup.Status.PENDING, StudentGroup.Status.APPROVED],
-            ).select_related("group", "student")
-            if self.instance:
-                active_memberships = active_memberships.exclude(group_id=self.instance.id)
-
+            active_memberships = GroupMember.active_for_students(
+                candidate_ids, exclude_group_id=getattr(self.instance, "id", None)
+            )
             first_conflict = active_memberships.order_by("student_id", "created_at").first()
             if first_conflict:
                 student_label = first_conflict.student.get_full_name().strip() or first_conflict.student.username
+                state = "already in" if first_conflict.group.status == StudentGroup.Status.APPROVED else "already listed on a pending request for"
                 raise serializers.ValidationError(
                     {
                         "member_ids": (
-                            f"{student_label} is already part of '{first_conflict.group.name}'. "
+                            f"{student_label} is {state} '{first_conflict.group.name}'. "
                             "A student can belong to only one class group."
                         )
                     }
@@ -207,9 +224,13 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                 )
 
         if request.user.role == User.Role.STUDENT:
-            admins = User.objects.filter(role=User.Role.SUPER_ADMIN, is_active=True)
+            reviewer_ids = list(User.objects.filter(role=User.Role.SUPER_ADMIN, is_active=True).values_list("id", flat=True))
+            if group.course_id:
+                reviewer_ids.extend(group.course.teachers.filter(is_active=True).values_list("id", flat=True))
+            else:
+                reviewer_ids.extend(User.objects.filter(role=User.Role.TEACHER, is_active=True).values_list("id", flat=True))
             push_notifications(
-                admins,
+                reviewer_ids,
                 "New group request submitted",
                 f"{request.user.get_full_name().strip() or request.user.username} requested group '{group.name}' for {target_label}.",
             )

@@ -1,1 +1,0 @@
-import{j as r}from"./index-8MBNLtYJ.js";import{M as l}from"./MenuItem-4Ew5nufL.js";const m=({items:e=[],readyText:t="Select",emptyText:o="Nothing added yet"})=>r.jsx(l,{value:"",children:e.length?t:o});export{m as S};

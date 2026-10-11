@@ -1,0 +1,417 @@
+import { Alert, Chip, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
+
+import api from "../../api/client";
+import { ENDPOINTS } from "../../api/endpoints";
+import { useUi } from "../../context/UiContext";
+import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
+import {
+  emptyGroupForm,
+  emptyStudentFilters,
+  fetchEligibleStudents,
+  filtersFromProfile,
+  occupancyFromStudents,
+  studentOrgLabel,
+  toGroupEditForm,
+  toGroupPayload,
+} from "../../utils/groupForm";
+import { GROUP_SCOPE_OPTIONS } from "../../utils/groupScopeOptions";
+import { getUserDisplayName } from "../../utils/userDisplay";
+import { classesForDepartment, fetchOrgCatalog, sectionsForClass } from "../../pages/campus/listRows";
+import { compactFieldSx } from "./listingStyles";
+import CompactAddForm from "./CompactAddForm";
+import FormErrorSummary from "./FormErrorSummary";
+import GroupMemberPicker from "./GroupMemberPicker";
+import SelectPlaceholder from "./SelectPlaceholder";
+
+const GroupComposer = ({
+  mode = "manage",
+  editingGroup = null,
+  assignedGroupByStudentId = {},
+  currentUserId = null,
+  lockedProfile = null,
+  blockedReason = "",
+  onSaved,
+  onCleared,
+}) => {
+  const { notify } = useUi();
+  const isRequest = mode === "request";
+  const lockedIds = isRequest && currentUserId ? [Number(currentUserId)] : [];
+  const [form, setForm] = useState(() => (
+    isRequest ? { ...emptyGroupForm, scope: "global", member_ids: lockedIds } : emptyGroupForm
+  ));
+  const [formErrors, setFormErrors] = useState({});
+  const [courses, setCourses] = useState([]);
+  const [courseworks, setCourseworks] = useState([]);
+  const [semesters, setSemesters] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [knownStudents, setKnownStudents] = useState({});
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentFilters, setStudentFilters] = useState(() => (
+    mode === "request" ? filtersFromProfile(lockedProfile) : emptyStudentFilters
+  ));
+  const [occupancy, setOccupancy] = useState({});
+
+  const editingId = editingGroup?.id || null;
+  const scopeOptions = isRequest ? GROUP_SCOPE_OPTIONS.filter((item) => item.value !== "coursework") : GROUP_SCOPE_OPTIONS;
+  const visibleCourses = useMemo(() => {
+    if (!isRequest || !lockedProfile?.semester) return courses;
+    return courses.filter((course) => String(course.semester) === String(lockedProfile.semester));
+  }, [courses, isRequest, lockedProfile]);
+
+  const classOptions = useMemo(
+    () => classesForDepartment(classes, studentFilters.department),
+    [classes, studentFilters.department]
+  );
+  const sectionOptions = useMemo(
+    () => sectionsForClass(sections, studentFilters.school_class),
+    [sections, studentFilters.school_class]
+  );
+  const pickerStudents = useMemo(() => {
+    const q = studentFilters.search.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter((student) => {
+      const haystack = [student.full_name, student.first_name, student.last_name, student.username, student.student_id]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [students, studentFilters.search]);
+
+  const selectedCourse = useMemo(
+    () => visibleCourses.find((course) => String(course.id) === String(form.course)),
+    [visibleCourses, form.course]
+  );
+  const selectedCoursework = useMemo(
+    () => courseworks.find((item) => String(item.id) === String(form.coursework)),
+    [courseworks, form.coursework]
+  );
+  const assignedMap = useMemo(() => ({ ...assignedGroupByStudentId, ...occupancy }), [assignedGroupByStudentId, occupancy]);
+  const profileLabel = studentOrgLabel({
+    semester_number: lockedProfile?.semester_number,
+    department_name: lockedProfile?.department_name,
+    school_class_name: lockedProfile?.school_class_name,
+    section_name: lockedProfile?.section_name,
+  });
+
+  const formSummary = useMemo(() => {
+    const semester = semesters.find((item) => String(item.id) === String(studentFilters.semester));
+    const department = departments.find((item) => String(item.id) === String(studentFilters.department));
+    if (form.scope === "coursework") {
+      if (!selectedCoursework) return "Choose the course and assessment this group is for.";
+      return `Assessment group: ${selectedCoursework.title}${selectedCourse ? ` · ${selectedCourse.title}` : ""}`;
+    }
+    if (form.scope === "course") {
+      if (!selectedCourse) return "Choose the course this group is for. Students will load from that course.";
+      return `Course group: ${selectedCourse.title}${selectedCourse.semester_number ? ` · Sem ${selectedCourse.semester_number}` : ""}`;
+    }
+    if (isRequest) return `Class group request${profileLabel ? ` · ${profileLabel}` : ""}`;
+    return ["Overall class group", semester ? `Semester ${semester.number}` : "all semesters", department?.name || ""]
+      .filter(Boolean)
+      .join(" · ");
+  }, [form.scope, selectedCourse, selectedCoursework, studentFilters.semester, studentFilters.department, semesters, departments, isRequest, profileLabel]);
+
+  const canLoadStudents =
+    form.scope === "global" || (form.scope === "course" && form.course) || (form.scope === "coursework" && form.coursework);
+
+  const resetLocal = () => {
+    const nextForm = isRequest
+      ? { ...emptyGroupForm, scope: "global", member_ids: lockedIds }
+      : emptyGroupForm;
+    setForm(nextForm);
+    setFormErrors({});
+    setStudentFilters(isRequest ? filtersFromProfile(lockedProfile) : emptyStudentFilters);
+    setCourseworks([]);
+  };
+
+  useEffect(() => {
+    fetchOrgCatalog(api, ENDPOINTS).then((catalog) => {
+      setSemesters(catalog.semesters);
+      setDepartments(catalog.departments);
+      setClasses(catalog.classes);
+      setSections(catalog.sections);
+      setCourses(catalog.courses);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (isRequest) {
+      setStudentFilters(filtersFromProfile(lockedProfile));
+      setForm((prev) => ({ ...prev, scope: prev.scope === "coursework" ? "global" : prev.scope || "global", member_ids: [...new Set([...(prev.member_ids || []), ...lockedIds])] }));
+    }
+  }, [isRequest, lockedProfile?.semester, lockedProfile?.department, lockedProfile?.school_class, lockedProfile?.section, currentUserId]);
+
+  useEffect(() => {
+    if (!editingGroup) {
+      if (!isRequest) resetLocal();
+      return;
+    }
+    setForm(toGroupEditForm(editingGroup));
+    setFormErrors({});
+    const course = courses.find((row) => Number(row.id) === Number(editingGroup.course));
+    setStudentFilters((prev) => ({
+      ...(isRequest ? filtersFromProfile(lockedProfile) : emptyStudentFilters),
+      semester: course?.semester ? String(course.semester) : prev.semester,
+      department: course?.department ? String(course.department) : prev.department,
+      search: "",
+    }));
+    (editingGroup.members || []).forEach((member) => {
+      const studentId = Number(member.student);
+      if (!studentId) return;
+      setKnownStudents((prev) => ({
+        ...prev,
+        [studentId]: prev[studentId] || {
+          id: studentId,
+          full_name: member.student_name,
+          student_id: member.student_roll_no,
+        },
+      }));
+    });
+  }, [editingGroup, courses]);
+
+  useEffect(() => {
+    if (!form.course) {
+      setCourseworks([]);
+      return;
+    }
+    api
+      .get(`${ENDPOINTS.courseworks}?course=${form.course}&page_size=200`)
+      .then(({ data }) => setCourseworks(data.results || []))
+      .catch(() => setCourseworks([]));
+  }, [form.course]);
+
+  useEffect(() => {
+    if (!canLoadStudents) {
+      setStudents([]);
+      return undefined;
+    }
+    let cancelled = false;
+    setStudentsLoading(true);
+    fetchEligibleStudents(api, ENDPOINTS, {
+      scope: form.scope,
+      course: form.course,
+      coursework: form.coursework,
+      semester: studentFilters.semester,
+      department: studentFilters.department,
+      school_class: studentFilters.school_class,
+      section: studentFilters.section,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setStudents(rows);
+        setOccupancy(occupancyFromStudents(rows));
+        setKnownStudents((prev) => {
+          const next = { ...prev };
+          rows.forEach((student) => {
+            next[Number(student.id)] = student;
+          });
+          return next;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStudents([]);
+          notify("Could not load students", "error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStudentsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    form.scope,
+    form.course,
+    form.coursework,
+    studentFilters.semester,
+    studentFilters.department,
+    studentFilters.school_class,
+    studentFilters.section,
+  ]);
+
+  const validateForm = () => {
+    const nextErrors = {};
+    if (!form.name.trim()) nextErrors.name = "Group name is required";
+    if (form.scope === "course" && !form.course) nextErrors.course = "Choose the course this group is for";
+    if (form.scope === "coursework") {
+      if (!form.course) nextErrors.course = "Choose the course first";
+      if (!form.coursework) nextErrors.coursework = "Choose the assessment this group is for";
+    }
+    const memberIds = [...new Set([...(form.member_ids || []).map(Number), ...lockedIds])];
+    if (!memberIds.length) nextErrors.member_ids = "Select at least one student";
+    if (isRequest && memberIds.length < 2) nextErrors.member_ids = "Select at least one classmate besides yourself";
+    const conflictingStudent = memberIds.find((studentId) => {
+      const linked = assignedMap[Number(studentId)];
+      return linked && (!editingId || Number(linked.groupId) !== Number(editingId));
+    });
+    if (conflictingStudent) {
+      const linked = assignedMap[Number(conflictingStudent)];
+      const studentObj = knownStudents[Number(conflictingStudent)] || students.find((student) => Number(student.id) === Number(conflictingStudent));
+      const studentLabel = getUserDisplayName(studentObj, { includeUsername: true }) || `Student #${conflictingStudent}`;
+      const state = linked.status === "pending" ? "already on a pending request for" : "already in";
+      nextErrors.member_ids = `${studentLabel} is ${state} "${linked.groupName}". One student can be in only one class group.`;
+    }
+    setFormErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const submit = async () => {
+    if (!validateForm()) {
+      notify("Please fill mandatory group fields", "error");
+      return;
+    }
+    try {
+      const payload = toGroupPayload({
+        ...form,
+        member_ids: [...new Set([...(form.member_ids || []).map(Number), ...lockedIds])],
+      });
+      if (editingId) {
+        await api.patch(`${ENDPOINTS.groups}${editingId}/`, payload);
+        notify(isRequest ? "Group request updated" : "Group updated");
+      } else {
+        await api.post(ENDPOINTS.groups, payload);
+        notify(isRequest ? "Group request sent for approval" : "Group added");
+      }
+      resetLocal();
+      await onSaved?.();
+    } catch (err) {
+      setFormErrors((prev) => ({ ...prev, ...extractFieldErrors(err.response?.data) }));
+      notify(extractApiErrorMessage(err), "error");
+    }
+  };
+
+  const applyCourseContext = (courseId) => {
+    const course = visibleCourses.find((item) => String(item.id) === String(courseId));
+    setForm((prev) => ({ ...prev, course: courseId, coursework: "" }));
+    if (isRequest || !course) return;
+    setStudentFilters((prev) => ({
+      ...prev,
+      semester: course.semester ? String(course.semester) : prev.semester,
+      department: course.department ? String(course.department) : prev.department,
+    }));
+  };
+
+  if (blockedReason) {
+    return <Alert severity="warning">{blockedReason}</Alert>;
+  }
+
+  return (
+    <CompactAddForm
+      layout="stack"
+      title={editingId ? (isRequest ? "Update group request" : "Update Group") : isRequest ? "Request a group" : "Add Group"}
+      submitLabel={editingId ? "Update" : isRequest ? "Send request" : "Add"}
+      onSubmit={submit}
+      onClear={() => {
+        resetLocal();
+        onCleared?.();
+      }}
+      extra={<FormErrorSummary errors={formErrors} />}
+    >
+      <Alert severity="info" sx={{ py: 0.4 }}>{formSummary}</Alert>
+      {isRequest && profileLabel ? <Chip size="small" color="primary" variant="outlined" label={`Your class · ${profileLabel}`} /> : null}
+      <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
+        <TextField required size="small" label="Group Name" value={form.name} error={Boolean(formErrors.name)} helperText={formErrors.name || ""} sx={compactFieldSx} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
+        <TextField
+          select
+          required
+          size="small"
+          label="This group is for"
+          value={form.scope}
+          sx={compactFieldSx}
+          onChange={(e) => {
+            const scope = e.target.value;
+            setForm((prev) => ({
+              ...prev,
+              scope,
+              course: scope === "global" ? "" : prev.course,
+              coursework: scope === "coursework" ? prev.coursework : "",
+            }));
+          }}
+        >
+          {scopeOptions.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+        </TextField>
+        {form.scope !== "global" ? (
+          <TextField
+            select
+            required
+            size="small"
+            label="Course"
+            value={String(form.course || "")}
+            error={Boolean(formErrors.course)}
+            helperText={formErrors.course || ""}
+            sx={{ ...compactFieldSx, minWidth: { sm: 220 }, flex: { sm: "1 1 220px" } }}
+            onChange={(e) => applyCourseContext(e.target.value)}
+          >
+            <SelectPlaceholder items={visibleCourses} readyText="Select course" emptyText="No courses yet" />
+            {visibleCourses.map((course) => (
+              <MenuItem key={course.id} value={String(course.id)}>
+                {course.semester_number ? `Sem ${course.semester_number} · ` : ""}{course.title}
+                {course.department_name ? ` · ${course.department_name}` : ""}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+        {form.scope === "coursework" ? (
+          <TextField
+            select
+            required
+            size="small"
+            label="Assessment"
+            value={String(form.coursework || "")}
+            error={Boolean(formErrors.coursework)}
+            helperText={formErrors.coursework || (!form.course ? "Choose a course first" : "")}
+            sx={{ ...compactFieldSx, minWidth: { sm: 220 }, flex: { sm: "1 1 220px" } }}
+            onChange={(e) => setForm((prev) => ({ ...prev, coursework: e.target.value }))}
+          >
+            <SelectPlaceholder items={courseworks} readyText="Select assessment" emptyText="No assessments for this course" />
+            {courseworks.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.title}</MenuItem>)}
+          </TextField>
+        ) : null}
+      </Stack>
+      {isRequest ? null : (
+        <>
+          <Typography sx={{ fontWeight: 800, fontSize: "0.78rem", color: "#13377a" }}>Filter students</Typography>
+          <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
+            <TextField select size="small" label="Semester" value={studentFilters.semester} sx={compactFieldSx} onChange={(e) => setStudentFilters((prev) => ({ ...prev, semester: e.target.value }))}>
+              <SelectPlaceholder items={semesters} readyText="All semesters" emptyText="No semesters yet" />
+              {semesters.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.number}</MenuItem>)}
+            </TextField>
+            <TextField select size="small" label="Department" value={studentFilters.department} sx={compactFieldSx} onChange={(e) => setStudentFilters((prev) => ({ ...prev, department: e.target.value, school_class: "", section: "" }))}>
+              <SelectPlaceholder items={departments} readyText="All departments" emptyText="No departments yet" />
+              {departments.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
+            </TextField>
+            <TextField select size="small" label="Class" value={studentFilters.school_class} sx={compactFieldSx} onChange={(e) => setStudentFilters((prev) => ({ ...prev, school_class: e.target.value, section: "" }))}>
+              <SelectPlaceholder items={classOptions} readyText="All classes" emptyText="No classes yet" />
+              {classOptions.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
+            </TextField>
+            <TextField select size="small" label="Section" value={studentFilters.section} sx={compactFieldSx} onChange={(e) => setStudentFilters((prev) => ({ ...prev, section: e.target.value }))}>
+              <SelectPlaceholder items={sectionOptions} readyText="All sections" emptyText="No sections yet" />
+              {sectionOptions.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
+            </TextField>
+          </Stack>
+        </>
+      )}
+      <GroupMemberPicker
+        students={pickerStudents}
+        knownStudents={knownStudents}
+        memberIds={form.member_ids}
+        onChange={(member_ids) => setForm((prev) => ({ ...prev, member_ids: [...new Set([...lockedIds, ...member_ids.map(Number)])] }))}
+        assignedGroupByStudentId={assignedMap}
+        editingId={editingId}
+        lockedIds={lockedIds}
+        error={formErrors.member_ids || ""}
+        loading={studentsLoading}
+        search={studentFilters.search}
+        onSearchChange={(value) => setStudentFilters((prev) => ({ ...prev, search: value }))}
+        emptyHint={canLoadStudents ? "No classmates match these filters." : form.scope === "coursework" ? "Choose a course and assessment to load students." : "Choose a course to load students."}
+      />
+    </CompactAddForm>
+  );
+};
+
+export default GroupComposer;
