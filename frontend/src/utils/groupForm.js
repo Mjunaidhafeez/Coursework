@@ -81,6 +81,20 @@ export const studentNameRollLabel = (student) => {
   return `${name} · ${roll}`;
 };
 
+export const rollSuffix = (student) => {
+  const roll = String(student?.student_id || student?.username || "");
+  const digits = roll.replace(/\D/g, "");
+  if (digits.length >= 2) return digits.slice(-2);
+  return roll.slice(-2);
+};
+
+export const studentShortLabel = (student) => {
+  const name = getUserDisplayName(student) || `#${student?.id}`;
+  const first = String(name).trim().split(/\s+/)[0] || name;
+  const suffix = rollSuffix(student);
+  return suffix ? `${first} ${suffix}` : first;
+};
+
 export const filtersFromProfile = (profile) => ({
   semester: profile?.semester ? String(profile.semester) : "",
   department: profile?.department ? String(profile.department) : "",

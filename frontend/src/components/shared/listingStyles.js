@@ -21,6 +21,21 @@ export const compactFieldSx = {
   ...labelReadableSx,
 };
 
+export const compactMemberFieldSx = {
+  minWidth: 168,
+  flex: "0 1 288px",
+  maxWidth: 288,
+  "& .MuiInputBase-root": { bgcolor: "#fff", fontSize: "0.72rem" },
+  "& .MuiInputBase-input": { fontSize: "0.72rem", py: 0.45 },
+  "& .MuiInputLabel-root": { fontSize: "0.75rem" },
+  "& .MuiChip-root": { height: 18, fontSize: "0.65rem" },
+  "& .MuiChip-label": { px: 0.55 },
+  "& .MuiFormHelperText-root": { mx: 0.2, mt: 0.05, lineHeight: 1.1, minHeight: 0 },
+  "& .MuiFormHelperText-root:empty": { display: "none", m: 0 },
+  "& .MuiFormHelperText-root:not(.Mui-error)": { display: "none" },
+  ...labelReadableSx,
+};
+
 export const compactSelectSx = compactFieldSx;
 
 export const compactFilterSx = {

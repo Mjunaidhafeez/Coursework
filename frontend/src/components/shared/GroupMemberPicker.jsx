@@ -1,6 +1,7 @@
 import { Autocomplete, Chip, TextField } from "@mui/material";
 
-import { studentNameRollLabel, sortStudentsByRollOrUsername } from "../../utils/groupForm";
+import { studentNameRollLabel, studentShortLabel, sortStudentsByRollOrUsername } from "../../utils/groupForm";
+import { compactMemberFieldSx } from "./listingStyles";
 
 const GroupMemberPicker = ({
   students = [],
@@ -48,11 +49,12 @@ const GroupMemberPicker = ({
       className="group-member-picker"
       multiple
       size="small"
+      limitTags={4}
       options={options}
       value={selected}
       loading={loading}
       disableCloseOnSelect
-      getOptionLabel={studentNameRollLabel}
+      getOptionLabel={studentShortLabel}
       isOptionEqualToValue={(option, value) => Number(option.id) === Number(value.id)}
       getOptionDisabled={(student) => isBlocked(student.id) && !selectedSet.has(Number(student.id))}
       filterOptions={(opts, { inputValue }) => {
@@ -67,7 +69,14 @@ const GroupMemberPicker = ({
           .filter((id) => !isBlocked(id) || selectedSet.has(id));
         onChange([...new Set([...keptLocked, ...picked])]);
       }}
-      ListboxProps={{ style: { maxHeight: 220 } }}
+      ListboxProps={{ style: { maxHeight: 220, fontSize: "0.75rem" } }}
+      sx={{
+        width: 288,
+        maxWidth: 288,
+        flex: "0 1 288px",
+        minWidth: 168,
+        "& .MuiAutocomplete-inputRoot": { flexWrap: "wrap", maxHeight: 56, overflowY: "auto" },
+      }}
       renderTags={(value, getTagProps) =>
         value.map((student, index) => {
           const tagProps = getTagProps({ index });
@@ -77,7 +86,7 @@ const GroupMemberPicker = ({
               {...tagProps}
               key={student.id}
               size="small"
-              label={studentNameRollLabel(student)}
+              label={studentShortLabel(student)}
               disabled={locked}
               onDelete={locked ? undefined : tagProps.onDelete}
             />
@@ -90,7 +99,7 @@ const GroupMemberPicker = ({
         const busy = blocked ? busyLabel(student) : "";
         return (
           <li key={key} {...optionProps}>
-            {studentNameRollLabel(student)}
+            {studentShortLabel(student)}
             {busy ? ` — ${busy}` : ""}
           </li>
         );
@@ -101,7 +110,8 @@ const GroupMemberPicker = ({
           size="small"
           label="Students"
           error={Boolean(error)}
-          helperText={error || (loading ? "Loading students…" : !options.length ? emptyHint : `${memberIds.length} selected`)}
+          helperText={error || (loading ? "Loading students…" : !options.length ? emptyHint : "")}
+          sx={compactMemberFieldSx}
         />
       )}
     />

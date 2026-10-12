@@ -12,7 +12,7 @@ import {
   filtersFromProfile,
   occupancyFromStudents,
   orgFiltersFromGroup,
-  studentNameRollLabel,
+  studentShortLabel,
   toGroupEditForm,
   toGroupPayload,
 } from "../../utils/groupForm";
@@ -279,7 +279,6 @@ const GroupComposer = ({
 
   return (
     <CompactAddForm
-      layout="stack"
       submitLabel={editingId ? "Update" : isRequest ? "Send request" : "Add"}
       onSubmit={submit}
       onClear={() => {
@@ -394,8 +393,8 @@ const GroupComposer = ({
         label="Group lead"
         value={form.lead_id ? String(form.lead_id) : ""}
         error={Boolean(formErrors.lead_id)}
-        helperText={formErrors.lead_id || "This person represents the group when topics are allotted."}
-        sx={{ ...compactFieldSx, minWidth: 240 }}
+        helperText={formErrors.lead_id || ""}
+        sx={compactFieldSx}
         onChange={(e) => {
           const value = e.target.value;
           setForm((prev) => ({ ...prev, lead_id: value }));
@@ -407,7 +406,7 @@ const GroupComposer = ({
           const student = knownStudents[Number(memberId)] || students.find((row) => Number(row.id) === Number(memberId)) || { id: memberId };
           return (
             <MenuItem key={memberId} value={String(memberId)}>
-              {studentNameRollLabel(student)}
+              {studentShortLabel(student)}
             </MenuItem>
           );
         })}

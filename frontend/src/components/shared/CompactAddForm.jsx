@@ -28,8 +28,8 @@ const CompactAddForm = ({
       alignItems={layout === "stack" ? "stretch" : "center"}
       sx={{
         "& .MuiTextField-root": compactFieldSx,
-        "& .group-member-picker": { width: "100%", flex: "1 1 100%", minWidth: 220 },
-        "& .group-member-picker .MuiTextField-root": { maxWidth: "none", flex: "1 1 100%", minWidth: 220 },
+        "& .group-member-picker": { width: 288, maxWidth: 288, flex: "0 1 288px", minWidth: 168 },
+        "& .group-member-picker .MuiTextField-root": { maxWidth: 288, width: "100%", minWidth: 0, flex: "1 1 auto" },
       }}
     >
       {children}
