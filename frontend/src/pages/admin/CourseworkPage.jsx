@@ -28,22 +28,6 @@ import {
 } from "../../utils/courseworkForm";
 import { confirmDelete } from "../../utils/confirm";
 
-const toggleSx = {
-  "& .MuiSwitch-switchBase.Mui-checked": { color: "#1565c0" },
-  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-    bgcolor: "#90caf9",
-    opacity: 1,
-  },
-  "& .MuiSwitch-track": {
-    bgcolor: "#cfd8dc",
-    opacity: 1,
-    transition: "all 180ms ease",
-  },
-  "& .MuiSwitch-thumb": {
-    boxShadow: "0 2px 8px rgba(0,0,0,0.22)",
-  },
-};
-
 const scrollToForm = () => {
   window.requestAnimationFrame(() => {
     document.getElementById("assessment-create-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -224,7 +208,6 @@ const CourseworkPage = () => {
           courses={courses}
           courseworkTypeOptions={courseworkTypeOptions}
           submissionTypeOptions={SUBMISSION_TYPE_OPTIONS}
-          toggleSx={toggleSx}
           onSubmit={submit}
           onClear={() => {
             setEditingId(null);

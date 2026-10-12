@@ -1,13 +1,8 @@
-import { Button, Checkbox, FormControlLabel, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Button, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 
 import { applyTopicSource, topicSourceOptionsFor, TOPIC_SOURCE_STUDENT, TOPIC_SOURCE_TEACHER_GROUP } from "../../utils/courseworkForm";
 import { humanizeCourseworkType, normalizeCourseworkType } from "../../utils/courseworkOptions";
-import { compactFieldSx } from "./listingStyles";
-
-const ruleCheckboxSx = {
-  py: 0,
-  "&.Mui-checked": { color: "#1d4cb4" },
-};
+import { compactFieldSx, compactToggleButtonSx, compactToggleGroupSx } from "./listingStyles";
 
 const CourseworkFormSection = ({
   form,
@@ -16,7 +11,6 @@ const CourseworkFormSection = ({
   courses,
   courseworkTypeOptions,
   submissionTypeOptions,
-  toggleSx,
   datalistId,
   onSubmit,
   onClear,
@@ -48,9 +42,14 @@ const CourseworkFormSection = ({
     return items;
   })();
 
+  const toggleRule = (field) => {
+    setForm((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
+
   return (
     <Paper variant="outlined" sx={{ p: 0.55, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
-      <Stack direction="row" spacing={0.55} useFlexGap flexWrap="wrap" alignItems="center">
+      <Stack spacing={0.7}>
+        <Stack direction="row" spacing={0.55} useFlexGap flexWrap="wrap" alignItems="center">
           <TextField
             required
             select
@@ -142,7 +141,7 @@ const CourseworkFormSection = ({
             onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
             sx={compactFieldSx}
           />
-          <Button size="small" variant="outlined" component="label" sx={{ textTransform: "none", fontWeight: 700 }}>
+          <Button size="small" variant="outlined" component="label" sx={{ textTransform: "none", fontWeight: 700, height: 40 }}>
             {form.sample_file?.name || form.sample_file_name ? "Change sample" : "Sample file"}
             <input
               hidden
@@ -155,40 +154,10 @@ const CourseworkFormSection = ({
             />
           </Button>
           {form.sample_file?.name || form.sample_file_name ? (
-            <Typography variant="caption" sx={{ fontWeight: 600, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {form.sample_file?.name || form.sample_file_name}
             </Typography>
           ) : null}
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={form.submission_type}
-            onChange={(_, value) => {
-              if (!value) return;
-              setForm((p) => ({
-                ...p,
-                submission_type: value,
-                topic_source:
-                  value === "individual" && p.topic_source === TOPIC_SOURCE_TEACHER_GROUP
-                    ? TOPIC_SOURCE_STUDENT
-                    : p.topic_source,
-              }));
-            }}
-            sx={{
-              "& .MuiToggleButton-root": {
-                textTransform: "none",
-                fontWeight: 700,
-                px: 1.2,
-                py: 0.2,
-              },
-            }}
-          >
-            {submissionTypeOptions.map((option) => (
-              <ToggleButton key={option.value} value={option.value}>
-                {option.label}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
           {showGroupSize && (
             <TextField
               required
@@ -223,56 +192,69 @@ const CourseworkFormSection = ({
               </MenuItem>
             ))}
           </TextField>
-          <FormControlLabel
-            sx={{ mr: 1.2 }}
-            control={
-              <Checkbox
-                size="small"
-                sx={ruleCheckboxSx}
-                checked={Boolean(form.lock_at_due_time)}
-                onChange={(e) => setForm((p) => ({ ...p, lock_at_due_time: e.target.checked }))}
-              />
-            }
-            label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Lock after deadline</Typography>}
-          />
+        </Stack>
+        <Stack direction="row" spacing={0.55} useFlexGap flexWrap="wrap" alignItems="center">
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={form.submission_type}
+            onChange={(_, value) => {
+              if (!value) return;
+              setForm((p) => ({
+                ...p,
+                submission_type: value,
+                topic_source:
+                  value === "individual" && p.topic_source === TOPIC_SOURCE_TEACHER_GROUP
+                    ? TOPIC_SOURCE_STUDENT
+                    : p.topic_source,
+              }));
+            }}
+            sx={compactToggleGroupSx}
+          >
+            {submissionTypeOptions.map((option) => (
+              <ToggleButton key={option.value} value={option.value}>
+                {option.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          <ToggleButton
+            size="small"
+            value="lock"
+            selected={Boolean(form.lock_at_due_time)}
+            onChange={() => toggleRule("lock_at_due_time")}
+            sx={compactToggleButtonSx}
+          >
+            Lock after deadline
+          </ToggleButton>
           {studentsChooseTopic ? (
             <>
-              <FormControlLabel
-                sx={{ mr: 1.2 }}
-                control={
-                  <Checkbox
-                    size="small"
-                    sx={ruleCheckboxSx}
-                    checked={Boolean(form.approval_required)}
-                    onChange={(e) => setForm((p) => ({ ...p, approval_required: e.target.checked }))}
-                  />
-                }
-                label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Topic approval</Typography>}
-              />
-              <FormControlLabel
-                sx={{ mr: 1.2 }}
-                control={
-                  <Checkbox
-                    size="small"
-                    sx={ruleCheckboxSx}
-                    checked={Boolean(form.topic_duplication_allowed)}
-                    onChange={(e) => setForm((p) => ({ ...p, topic_duplication_allowed: e.target.checked }))}
-                  />
-                }
-                label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Same topic OK</Typography>}
-              />
-              <FormControlLabel
-                sx={{ mr: 1.2 }}
-                control={
-                  <Checkbox
-                    size="small"
-                    sx={ruleCheckboxSx}
-                    checked={Boolean(form.auto_approve_all_students)}
-                    onChange={(e) => setForm((p) => ({ ...p, auto_approve_all_students: e.target.checked }))}
-                  />
-                }
-                label={<Typography sx={{ fontSize: "0.8rem", fontWeight: 600 }}>Auto-approve all</Typography>}
-              />
+              <ToggleButton
+                size="small"
+                value="approval"
+                selected={Boolean(form.approval_required)}
+                onChange={() => toggleRule("approval_required")}
+                sx={compactToggleButtonSx}
+              >
+                Topic approval
+              </ToggleButton>
+              <ToggleButton
+                size="small"
+                value="duplicate"
+                selected={Boolean(form.topic_duplication_allowed)}
+                onChange={() => toggleRule("topic_duplication_allowed")}
+                sx={compactToggleButtonSx}
+              >
+                Same topic OK
+              </ToggleButton>
+              <ToggleButton
+                size="small"
+                value="auto"
+                selected={Boolean(form.auto_approve_all_students)}
+                onChange={() => toggleRule("auto_approve_all_students")}
+                sx={compactToggleButtonSx}
+              >
+                Auto-approve all
+              </ToggleButton>
             </>
           ) : null}
           {datalistId ? <datalist id={datalistId} /> : null}
@@ -283,6 +265,7 @@ const CourseworkFormSection = ({
             Clear
           </Button>
         </Stack>
+      </Stack>
     </Paper>
   );
 };

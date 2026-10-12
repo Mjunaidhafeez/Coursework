@@ -36,6 +36,26 @@ export const compactMemberFieldSx = {
   ...labelReadableSx,
 };
 
+export const compactToggleButtonSx = {
+  textTransform: "none",
+  fontWeight: 700,
+  px: 1.15,
+  py: 0.35,
+  fontSize: "0.75rem",
+  lineHeight: 1.2,
+  borderColor: "#d5deea",
+  bgcolor: "#fff",
+  "&.Mui-selected": {
+    bgcolor: "#e8f0ff",
+    color: "#13377a",
+    borderColor: "#9db7e8",
+  },
+};
+
+export const compactToggleGroupSx = {
+  "& .MuiToggleButton-root": compactToggleButtonSx,
+};
+
 export const compactSelectSx = compactFieldSx;
 
 export const compactFilterSx = {
