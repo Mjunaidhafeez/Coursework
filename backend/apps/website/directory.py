@@ -1,4 +1,5 @@
 from apps.accounts.models import User
+from apps.academics.models import Course, Department
 from apps.common.uploads import media_field_url
 from apps.groups.models import StudentGroup
 
@@ -100,10 +101,12 @@ def portal_groups(request=None):
                     "name": _label(student),
                     "roll_no": getattr(profile, "student_id", "") or "",
                     "photo_url": _photo(student, request),
+                    "is_lead": bool(getattr(item, "is_lead", False)),
                 }
             )
         if not members:
             continue
+        members.sort(key=lambda row: (not row.get("is_lead"), row.get("name") or ""))
         course = group.course
         rows.append(
             {
@@ -167,3 +170,12 @@ def merged_directory(request=None):
     teachers.sort(key=lambda row: (row.get("department") or "", row.get("name") or ""))
     students.sort(key=lambda row: (row.get("semester") or "", row.get("class_name") or "", row.get("name") or ""))
     return {"teachers": teachers, "students": students, "groups": portal_groups(request)}
+
+
+def portal_counts():
+    programmes = Department.objects.count() or Course.objects.count()
+    return {
+        "students": User.objects.filter(role=User.Role.STUDENT, is_active=True).count(),
+        "faculty": User.objects.filter(role=User.Role.TEACHER, is_active=True).count(),
+        "programmes": programmes,
+    }

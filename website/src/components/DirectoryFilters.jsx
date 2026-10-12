@@ -19,7 +19,11 @@ const DirectoryFilters = ({ rows, fields, values, onChange, onReset }) => {
         {fields.map((field) => (
           <label key={field.key} className="filter-field">
             <span>{fieldLabel(field.allLabel)}</span>
-            <select value={values[field.key] || "All"} onChange={(e) => onChange(field.key, e.target.value)}>
+            <select
+              title={values[field.key] && values[field.key] !== "All" ? values[field.key] : field.allLabel}
+              value={values[field.key] || "All"}
+              onChange={(e) => onChange(field.key, e.target.value)}
+            >
               <option value="All">{field.allLabel}</option>
               {unique(rows, field.key).map((name) => (
                 <option key={name} value={name}>{name}</option>

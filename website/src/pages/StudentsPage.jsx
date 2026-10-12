@@ -1,8 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import CompactPersonRow from "../components/CompactPersonRow";
 import DirectoryFilters, { matchesFilters } from "../components/DirectoryFilters";
+import DirectoryPager from "../components/DirectoryPager";
 import PageBanner from "../components/PageBanner";
 import { useSite } from "../context/SiteContext";
+import { pageCountFor, slicePage } from "../utils/paginate";
 
 const FILTERS = [
   { key: "department", allLabel: "All departments" },
@@ -21,11 +24,18 @@ const StudentsPage = () => {
   const rows = site.students || [];
   const groups = site.groups || [];
   const [filters, setFilters] = useState(emptyFilters);
+  const [studentPage, setStudentPage] = useState(1);
   const visible = useMemo(() => rows.filter((item) => matchesFilters(item, filters)), [rows, filters]);
   const visibleGroups = useMemo(
     () => groups.filter((item) => filters.groups === "All" || item.name === filters.groups),
     [groups, filters.groups]
   );
+  const studentPages = pageCountFor(visible.length);
+  const pagedStudents = slicePage(visible, studentPage);
+
+  useEffect(() => {
+    setStudentPage(1);
+  }, [filters]);
 
   return (
     <div>
@@ -39,28 +49,32 @@ const StudentsPage = () => {
           onReset={() => setFilters(emptyFilters)}
         />
         <p className="meta">{visible.length} student{visible.length === 1 ? "" : "s"}</p>
-        <div className="people-grid">
-          {visible.map((item) => (
-            <article key={item.id} className="person-card">
-              {item.photo_url ? <img src={item.photo_url} alt={item.name} /> : <div className="person-fallback">{item.name.slice(0, 1)}</div>}
-              <h3>{item.name}</h3>
-              <p className="meta">Roll {item.roll_no || "-"}</p>
-              <p className="degrees">{[item.department, item.semester, item.class_name, item.section].filter(Boolean).join(" · ")}</p>
-              {item.subjects?.length ? <p className="meta">{item.subjects.join(" · ")}</p> : null}
-              {item.groups?.length ? <p className="meta">Groups: {item.groups.join(", ")}</p> : null}
-              {item.note ? <p>{item.note}</p> : null}
-            </article>
+        <div className="people-grid people-grid-compact">
+          {pagedStudents.map((item) => (
+            <CompactPersonRow
+              key={item.id}
+              photo={item.photo_url}
+              name={item.name}
+              lines={[item.roll_no, item.semester, item.department]}
+            />
           ))}
         </div>
+        <DirectoryPager page={Math.min(studentPage, studentPages)} pageCount={studentPages} onChange={setStudentPage} />
         {visibleGroups.length ? (
           <>
             <h2 className="section-title">Student groups</h2>
-            <div className="people-grid">
+            <div className="people-grid people-grid-compact">
               {visibleGroups.map((group) => (
-                <article key={group.id} className="person-card">
+                <article key={group.id} className="group-card">
                   <h3>{group.name}</h3>
-                  <p className="meta">{[group.department, group.semester, group.course].filter(Boolean).join(" · ")}</p>
-                  <p className="degrees">{(group.members || []).map((member) => member.name).join(", ")}</p>
+                  {(group.members || []).map((member) => (
+                    <CompactPersonRow
+                      key={`${group.id}-${member.roll_no || member.name}`}
+                      photo={member.photo_url}
+                      name={member.name}
+                      lines={[member.roll_no]}
+                    />
+                  ))}
                 </article>
               ))}
             </div>

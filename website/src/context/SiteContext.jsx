@@ -37,6 +37,7 @@ const FALLBACK = {
   students: [],
   groups: [],
   activities: [],
+  counts: { students: 0, faculty: 0, programmes: 0 },
 };
 
 export const SiteProvider = ({ children }) => {

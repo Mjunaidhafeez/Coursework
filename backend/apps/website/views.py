@@ -19,7 +19,7 @@ from apps.common.notify import push_notifications
 from apps.common.uploads import cloudinary_enabled, media_field_url, upload_to_cloudinary, validate_upload
 
 from .defaults import DEFAULT_PAGES, PAGE_CATALOG, default_page_flags
-from .directory import merged_directory
+from .directory import merged_directory, portal_counts
 from .models import (
     WebsiteActivity,
     WebsiteAlumnus,
@@ -151,6 +151,7 @@ def _public_payload(request=None):
         ],
         "students": directory["students"][:400],
         "groups": directory["groups"],
+        "counts": portal_counts(),
         "activities": [
             {
                 "id": item.id,
