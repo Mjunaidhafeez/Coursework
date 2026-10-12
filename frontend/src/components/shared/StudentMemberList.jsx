@@ -1,4 +1,4 @@
-import { Box, Paper, Stack, Typography } from "@mui/material";
+import { Box, Chip, Paper, Stack, Typography } from "@mui/material";
 
 import PersonAvatar from "./PersonAvatar";
 import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
@@ -17,7 +17,7 @@ const normalizeMember = (member) => {
   const rollNo = member?.rollNo || member?.roll_no || member?.student_roll_no || member?.student_id || "";
   const avatar = toAbsoluteMediaUrl(member?.avatar || member?.student_avatar || null);
   const key = member?.id || member?.student || `${name}-${rollNo}`;
-  return { key, name, rollNo, avatar };
+  return { key, name, rollNo, avatar, isLead: Boolean(member?.is_lead) };
 };
 
 const StudentMemberList = ({ members = [], emptyText = "No members found.", compact = false }) => {
@@ -60,6 +60,7 @@ const StudentMemberList = ({ members = [], emptyText = "No members found.", comp
                 <Typography variant="body2" sx={{ fontWeight: 700, fontSize: compact ? "0.68rem" : "0.8rem" }}>
                   {item.name}
                 </Typography>
+                {item.isLead ? <Chip size="small" color="primary" variant="outlined" label="Lead" sx={{ height: 18, fontSize: "0.62rem" }} /> : null}
               </Stack>
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: compact ? "0.65rem" : undefined }}>
                 {item.rollNo || "-"}

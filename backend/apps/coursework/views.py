@@ -144,31 +144,49 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
         }
 
     def _course_students(self, coursework):
-        ids = list(
-            Enrollment.objects.filter(course_id=coursework.course_id).values_list("student_id", flat=True).distinct()
+        course = coursework.course
+        student_ids = set(
+            Enrollment.objects.filter(course_id=course.id).values_list("student_id", flat=True)
         )
-        qs = User.objects.filter(role=User.Role.STUDENT, is_active=True)
-        if ids:
-            qs = qs.filter(id__in=ids)
-        else:
-            semester_id = getattr(coursework.course, "semester_id", None)
-            qs = qs.filter(student_profile__semester_id=semester_id) if semester_id else qs.none()
-        return qs.select_related("student_profile").order_by("first_name", "last_name", "username")
+        if course.semester_id:
+            class_qs = User.objects.filter(role=User.Role.STUDENT, student_profile__semester_id=course.semester_id)
+            if getattr(course, "department_id", None):
+                class_qs = class_qs.filter(student_profile__department_id=course.department_id)
+            student_ids.update(class_qs.values_list("id", flat=True))
+        if not student_ids:
+            return User.objects.none()
+        return (
+            User.objects.filter(id__in=student_ids)
+            .select_related("student_profile")
+            .order_by("student_profile__student_id", "first_name", "last_name", "username")
+        )
 
     def _course_groups(self, coursework):
-        return (
-            StudentGroup.objects.filter(
-                source=StudentGroup.Source.MANUAL,
-                status=StudentGroup.Status.APPROVED,
-            )
-            .filter(
-                Q(scope=StudentGroup.Scope.GLOBAL)
-                | Q(course_id=coursework.course_id)
-                | Q(coursework_id=coursework.id)
-            )
-            .prefetch_related("members__student__student_profile")
-            .order_by("name")
+        course = coursework.course
+        qs = StudentGroup.objects.filter(
+            source=StudentGroup.Source.MANUAL,
+            status=StudentGroup.Status.APPROVED,
+        ).filter(
+            Q(coursework_id=coursework.id)
+            | Q(course_id=coursework.course_id)
+            | Q(scope=StudentGroup.Scope.GLOBAL)
         )
+        if getattr(course, "semester_id", None):
+            qs = qs.filter(
+                Q(coursework_id=coursework.id)
+                | Q(course_id=coursework.course_id)
+                | Q(semester_id=course.semester_id)
+                | Q(semester__isnull=True, course__isnull=True, coursework__isnull=True)
+            )
+        return qs.prefetch_related("members__student__student_profile").order_by("name")
+
+    def _group_lead(self, group):
+        members = [
+            member
+            for member in group.members.all()
+            if member.invitation_status != GroupMember.InvitationStatus.REJECTED
+        ]
+        return next((member for member in members if member.is_lead), members[0] if members else None)
 
     @action(detail=True, methods=["get"])
     def topic_targets(self, request, pk=None):
@@ -186,16 +204,12 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
                     topic_by_group.setdefault(submission.group_id, submission.topic)
             targets = []
             for group in self._course_groups(coursework):
-                members = [
-                    self._student_label(member.student, request)
-                    for member in group.members.all()
-                    if member.invitation_status != GroupMember.InvitationStatus.REJECTED
-                ]
+                lead = self._group_lead(group)
                 targets.append(
                     {
                         "id": group.id,
                         "name": group.name,
-                        "members": members,
+                        "lead": self._student_label(lead.student, request) if lead else None,
                         "topic": topic_by_group.get(group.id, ""),
                     }
                 )

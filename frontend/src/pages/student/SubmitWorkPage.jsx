@@ -41,6 +41,7 @@ import { shallowEqualObjects } from "../../utils/object";
 import { resolveSubmissionMembers } from "../../utils/submissionMembers";
 import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
 import { oversizedFileNames } from "../../utils/uploadLimits";
+import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 
 const SubmitWorkPage = () => {
   const { user } = useAuth();
@@ -806,6 +807,19 @@ const SubmitWorkPage = () => {
                                     <Chip size="small" label={`Teachers: ${(coursework.teacher_names || []).join(", ") || "-"}`} />
                                     {shouldAllotTopics(coursework) ? (
                                       <Chip size="small" color="info" variant="outlined" label="Teacher allotted topic" />
+                                    ) : null}
+                                    {coursework.sample_file_url ? (
+                                      <Chip
+                                        size="small"
+                                        clickable
+                                        component="a"
+                                        href={toAbsoluteMediaUrl(coursework.sample_file_url)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        color="success"
+                                        variant="outlined"
+                                        label={coursework.sample_file_name ? `Sample: ${coursework.sample_file_name}` : "Sample file"}
+                                      />
                                     ) : null}
                                   </Stack>
                                   {!submission && isClosedView ? (

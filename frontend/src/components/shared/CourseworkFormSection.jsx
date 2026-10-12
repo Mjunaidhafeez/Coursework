@@ -142,6 +142,23 @@ const CourseworkFormSection = ({
             onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
             sx={compactFieldSx}
           />
+          <Button size="small" variant="outlined" component="label" sx={{ textTransform: "none", fontWeight: 700 }}>
+            {form.sample_file?.name || form.sample_file_name ? "Change sample" : "Sample file"}
+            <input
+              hidden
+              type="file"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setForm((p) => ({ ...p, sample_file: file }));
+                e.target.value = "";
+              }}
+            />
+          </Button>
+          {form.sample_file?.name || form.sample_file_name ? (
+            <Typography variant="caption" sx={{ fontWeight: 600, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {form.sample_file?.name || form.sample_file_name}
+            </Typography>
+          ) : null}
           <ToggleButtonGroup
             exclusive
             size="small"

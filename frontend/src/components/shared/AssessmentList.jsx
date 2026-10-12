@@ -3,6 +3,7 @@ import { Box, Button, Checkbox, Chip, Paper, Stack, Typography } from "@mui/mate
 import { humanizeCourseworkType } from "../../utils/courseworkOptions";
 import { shouldAllotTopics, TOPIC_SOURCE_TEACHER_GROUP } from "../../utils/courseworkForm";
 import { formatDate } from "../../utils/format";
+import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 
 const modeLabel = {
   individual: "Individual",
@@ -79,6 +80,19 @@ const AssessmentList = ({ grouped = [], emptyText = "No assessments found.", onE
                         </>
                       )}
                       {item.lock_at_due_time ? <Chip size="small" variant="outlined" label="Locks at due" /> : null}
+                      {item.sample_file_url ? (
+                        <Chip
+                          size="small"
+                          clickable
+                          component="a"
+                          href={toAbsoluteMediaUrl(item.sample_file_url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          color="success"
+                          variant="outlined"
+                          label={item.sample_file_name ? `Sample: ${item.sample_file_name}` : "Sample file"}
+                        />
+                      ) : null}
                     </Stack>
                   </Box>
                   <Stack direction="row" spacing={0.8} alignItems="center">

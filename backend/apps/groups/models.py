@@ -67,6 +67,7 @@ class GroupMember(TimeStampedModel):
 
     group = models.ForeignKey(StudentGroup, on_delete=models.CASCADE, related_name="members")
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="group_memberships")
+    is_lead = models.BooleanField(default=False)
     accepted = models.BooleanField(default=True)
     invitation_status = models.CharField(
         max_length=20, choices=InvitationStatus.choices, default=InvitationStatus.ACCEPTED

@@ -14,6 +14,11 @@ const GroupCard = ({ group, leading = null, badge = null, actions = null, showSt
           <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
             {describeGroupScope(group)}
           </Typography>
+          {group.lead_name ? (
+            <Typography variant="caption" sx={{ display: "block", fontWeight: 700, color: "#1e3a8a" }}>
+              Lead · {group.lead_name}{group.lead_roll_no ? ` · ${group.lead_roll_no}` : ""}
+            </Typography>
+          ) : null}
         </Box>
       </Stack>
       <Stack direction="row" spacing={0.5} alignItems="center">

@@ -99,14 +99,17 @@ const TopicAllotDialog = ({ coursework, onClose, onSaved }) => {
   };
 
   return (
-    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ pb: 0.6 }}>
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ pb: 0.6, whiteSpace: "normal", overflow: "visible", pr: 2 }}>
         Allot topics — {coursework?.title || "Assessment"}
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={1.1}>
           <Typography variant="body2" color="text.secondary">
-            {topicSourceLabel(coursework?.topic_source)}. Each {perGroup ? "group" : "student"} gets a different topic.
+            {topicSourceLabel(coursework?.topic_source)}.{" "}
+            {perGroup
+              ? "Each approved group for this subject is listed with its lead. Assign one unique topic per group."
+              : "Every student enrolled in this subject (plus the same semester/department class) is listed. Assign one unique topic per student."}{" "}
             You can save now and finish the rest later.
           </Typography>
           <Chip
@@ -119,26 +122,45 @@ const TopicAllotDialog = ({ coursework, onClose, onSaved }) => {
           {!loading && !targets.length && !error ? (
             <Alert severity="info">
               {perGroup
-                ? "No approved groups found for this course yet. Approve groups first, then allot topics."
-                : "No students found for this course yet."}
+                ? "No approved groups found for this subject yet. Create groups, set a lead, approve them, then allot topics."
+                : "No students enrolled in this subject yet."}
             </Alert>
           ) : null}
           {targets.map((row) => (
-            <Stack key={row.id} spacing={0.3}>
-              <Stack direction="row" spacing={0.8} alignItems="center">
-                <PersonNameCell person={row} name={row.name} size={28} />
-                {row.roll_no ? (
-                  <Typography variant="caption" color="text.secondary">
-                    {row.roll_no}
-                  </Typography>
-                ) : null}
-              </Stack>
-              {perGroup && row.members?.length ? (
-                <Typography variant="caption" color="text.secondary">
-                  {row.members.map((member) => member.name).join(", ")}
-                </Typography>
-              ) : null}
+            <Stack key={row.id} spacing={0.45} sx={{ width: "100%" }}>
+              {perGroup ? (
+                <Stack spacing={0.2}>
+                  <Typography sx={{ fontWeight: 800, color: "#122a57" }}>{row.name}</Typography>
+                  {row.lead ? (
+                    <Stack direction="row" spacing={0.8} alignItems="center">
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                        Lead
+                      </Typography>
+                      <PersonNameCell person={row.lead} name={row.lead.name} size={26} />
+                      {row.lead.roll_no ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {row.lead.roll_no}
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  ) : (
+                    <Typography variant="caption" color="warning.main">
+                      No lead set for this group
+                    </Typography>
+                  )}
+                </Stack>
+              ) : (
+                <Stack direction="row" spacing={0.8} alignItems="center">
+                  <PersonNameCell person={row} name={row.name} size={28} />
+                  {row.roll_no ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {row.roll_no}
+                    </Typography>
+                  ) : null}
+                </Stack>
+              )}
               <TextField
+                fullWidth
                 size="small"
                 label="Topic"
                 value={topics[String(row.id)] || ""}

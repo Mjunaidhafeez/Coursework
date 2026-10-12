@@ -6,6 +6,7 @@ export const emptyGroupForm = {
   course: "",
   coursework: "",
   member_ids: [],
+  lead_id: "",
 };
 
 export const emptyStudentFilters = {
@@ -44,7 +45,15 @@ export const toGroupPayload = (form, filters = {}) => {
     school_class: orgIdOrNull(org.school_class),
     section: orgIdOrNull(org.section),
     member_ids: (form.member_ids || []).map(Number),
+    lead_id: form.lead_id ? Number(form.lead_id) : null,
   };
+};
+
+export const leadIdFromGroup = (group) => {
+  const lead = (group.members || []).find((member) => member.is_lead);
+  if (lead?.student) return String(lead.student);
+  if (group.lead_id) return String(group.lead_id);
+  return "";
 };
 
 export const toGroupEditForm = (group) => ({
@@ -53,6 +62,7 @@ export const toGroupEditForm = (group) => ({
   course: group.course || "",
   coursework: group.coursework || "",
   member_ids: (group.members || []).map((member) => member.student),
+  lead_id: leadIdFromGroup(group) || (group.members?.[0]?.student ? String(group.members[0].student) : ""),
 });
 
 export const fetchEligibleStudents = async (api, endpoints, filters = {}) => {

@@ -45,6 +45,9 @@ export const emptyCourseworkForm = {
   topic_source: TOPIC_SOURCE_STUDENT,
   deadline: "",
   max_marks: "",
+  sample_file: null,
+  sample_file_url: "",
+  sample_file_name: "",
 };
 
 export const validateMaxMarks = (rawValue) => {
@@ -96,19 +99,22 @@ export const validateCourseworkForm = (form) => {
   };
 };
 
-export const toCourseworkPayload = (form) => ({
-  ...form,
-  title: String(form.title || "").trim(),
-  description: String(form.description || "").trim(),
-  coursework_type: normalizeCourseworkType(form.coursework_type),
-  course: Number(form.course),
-  max_marks: Number(form.max_marks),
-  max_group_members:
-    form.submission_type === "group" || form.submission_type === "both"
-      ? Number(form.max_group_members)
-      : null,
-  deadline: new Date(form.deadline).toISOString(),
-});
+export const toCourseworkPayload = (form) => {
+  const { sample_file, sample_file_url, sample_file_name, ...rest } = form;
+  return {
+    ...rest,
+    title: String(form.title || "").trim(),
+    description: String(form.description || "").trim(),
+    coursework_type: normalizeCourseworkType(form.coursework_type),
+    course: Number(form.course),
+    max_marks: Number(form.max_marks),
+    max_group_members:
+      form.submission_type === "group" || form.submission_type === "both"
+        ? Number(form.max_group_members)
+        : null,
+    deadline: new Date(form.deadline).toISOString(),
+  };
+};
 
 export const toCourseworkEditForm = (row) => ({
   course: row.course,
@@ -124,4 +130,18 @@ export const toCourseworkEditForm = (row) => ({
   topic_source: row.topic_source || TOPIC_SOURCE_STUDENT,
   deadline: row.deadline ? row.deadline.slice(0, 16) : "",
   max_marks: row.max_marks,
+  sample_file: null,
+  sample_file_url: row.sample_file_url || "",
+  sample_file_name: row.sample_file_name || "",
 });
+
+export const saveCourseworkRequest = async (api, endpoints, { editingId, form, maxMarks }) => {
+  const sampleFile = form.sample_file instanceof File ? form.sample_file : null;
+  const payload = toCourseworkPayload({ ...form, max_marks: maxMarks });
+  const url = editingId ? `${endpoints.courseworks}${editingId}/` : endpoints.courseworks;
+  const { data } = editingId ? await api.patch(url, payload) : await api.post(url, payload);
+  if (!sampleFile) return { data };
+  const body = new FormData();
+  body.append("sample_file", sampleFile);
+  return api.patch(`${endpoints.courseworks}${data.id}/`, body);
+};

@@ -32,6 +32,7 @@ class GroupMemberSerializer(serializers.ModelSerializer):
             "student_name",
             "student_roll_no",
             "student_avatar",
+            "is_lead",
             "accepted",
             "invitation_status",
             "created_at",
@@ -50,6 +51,9 @@ class StudentGroupSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True, default="")
     school_class_name = serializers.CharField(source="school_class.name", read_only=True, allow_null=True, default="")
     section_name = serializers.CharField(source="section.name", read_only=True, allow_null=True, default="")
+    lead_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    lead_name = serializers.SerializerMethodField()
+    lead_roll_no = serializers.SerializerMethodField()
 
     class Meta:
         model = StudentGroup
@@ -79,6 +83,9 @@ class StudentGroupSerializer(serializers.ModelSerializer):
             "status",
             "member_ids",
             "members",
+            "lead_id",
+            "lead_name",
+            "lead_roll_no",
             "created_at",
             "updated_at",
         ]
@@ -127,6 +134,43 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                         fields.append(attr[:-3] if attr.endswith("_id") else attr)
         if fields:
             group.save(update_fields=list(dict.fromkeys(fields)))
+        return group
+
+    def _lead_member(self, obj):
+        for member in obj.members.all():
+            if member.is_lead:
+                return member
+        return None
+
+    def get_lead_name(self, obj):
+        member = self._lead_member(obj)
+        if not member:
+            return ""
+        return (member.student.get_full_name() or "").strip() or member.student.username
+
+    def get_lead_roll_no(self, obj):
+        member = self._lead_member(obj)
+        if not member:
+            return ""
+        return getattr(getattr(member.student, "student_profile", None), "student_id", "") or ""
+
+    def _apply_lead(self, group, lead_id=None):
+        member_ids = set(group.members.values_list("student_id", flat=True))
+        if not member_ids:
+            return group
+        chosen = None
+        if lead_id and int(lead_id) in member_ids:
+            chosen = int(lead_id)
+        else:
+            existing = group.members.filter(is_lead=True, student_id__in=member_ids).first()
+            if existing:
+                chosen = existing.student_id
+            elif group.creator_id in member_ids:
+                chosen = group.creator_id
+            else:
+                chosen = min(member_ids)
+        group.members.update(is_lead=False)
+        group.members.filter(student_id=chosen).update(is_lead=True)
         return group
 
     def validate_member_ids(self, value):
@@ -239,11 +283,19 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                     }
                 )
 
+        lead_id = attrs.get("lead_id")
+        check_ids = member_ids
+        if check_ids is None and self.instance:
+            check_ids = list(self.instance.members.values_list("student_id", flat=True))
+        if lead_id and check_ids is not None and int(lead_id) not in {int(sid) for sid in check_ids}:
+            raise serializers.ValidationError({"lead_id": "Group lead must be one of the selected members."})
+
         return attrs
 
     def create(self, validated_data):
         request = self.context["request"]
         member_ids = validated_data.pop("member_ids", [])
+        lead_id = validated_data.pop("lead_id", None)
         if request.user.role == User.Role.STUDENT:
             validated_data["status"] = StudentGroup.Status.PENDING
         elif request.user.role == User.Role.SUPER_ADMIN:
@@ -291,10 +343,12 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                 "New group request submitted",
                 f"{request.user.get_full_name().strip() or request.user.username} requested group '{group.name}' for {target_label}.",
             )
+        self._apply_lead(group, lead_id)
         return self._apply_org_defaults(group, member_set)
 
     def update(self, instance, validated_data):
         member_ids = validated_data.pop("member_ids", None)
+        lead_id = validated_data.pop("lead_id", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -328,4 +382,6 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                     )
             instance.members.exclude(student_id__in=desired_ids).delete()
 
+        if member_ids is not None or lead_id is not None:
+            self._apply_lead(instance, lead_id)
         return self._apply_org_defaults(instance, member_ids)

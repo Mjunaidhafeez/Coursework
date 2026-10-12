@@ -12,6 +12,7 @@ import {
   filtersFromProfile,
   occupancyFromStudents,
   orgFiltersFromGroup,
+  studentNameRollLabel,
   toGroupEditForm,
   toGroupPayload,
 } from "../../utils/groupForm";
@@ -38,7 +39,9 @@ const GroupComposer = ({
   const isRequest = mode === "request";
   const lockedIds = isRequest && currentUserId ? [Number(currentUserId)] : [];
   const [form, setForm] = useState(() => (
-    isRequest ? { ...emptyGroupForm, scope: "global", member_ids: lockedIds } : emptyGroupForm
+    isRequest
+      ? { ...emptyGroupForm, scope: "global", member_ids: lockedIds, lead_id: lockedIds[0] ? String(lockedIds[0]) : "" }
+      : emptyGroupForm
   ));
   const [formErrors, setFormErrors] = useState({});
   const [courses, setCourses] = useState([]);
@@ -77,7 +80,7 @@ const GroupComposer = ({
 
   const resetLocal = () => {
     const nextForm = isRequest
-      ? { ...emptyGroupForm, scope: "global", member_ids: lockedIds }
+      ? { ...emptyGroupForm, scope: "global", member_ids: lockedIds, lead_id: lockedIds[0] ? String(lockedIds[0]) : "" }
       : emptyGroupForm;
     setForm(nextForm);
     setFormErrors({});
@@ -98,7 +101,16 @@ const GroupComposer = ({
   useEffect(() => {
     if (isRequest) {
       setStudentFilters(filtersFromProfile(lockedProfile));
-      setForm((prev) => ({ ...prev, scope: prev.scope === "coursework" ? "global" : prev.scope || "global", member_ids: [...new Set([...(prev.member_ids || []), ...lockedIds])] }));
+      setForm((prev) => {
+        const member_ids = [...new Set([...(prev.member_ids || []), ...lockedIds])];
+        const leadStill = member_ids.includes(Number(prev.lead_id));
+        return {
+          ...prev,
+          scope: prev.scope === "coursework" ? "global" : prev.scope || "global",
+          member_ids,
+          lead_id: leadStill ? prev.lead_id : (member_ids[0] ? String(member_ids[0]) : ""),
+        };
+      });
     }
   }, [isRequest, lockedProfile?.semester, lockedProfile?.department, lockedProfile?.school_class, lockedProfile?.section, currentUserId]);
 
@@ -204,6 +216,9 @@ const GroupComposer = ({
     const memberIds = [...new Set([...(form.member_ids || []).map(Number), ...lockedIds])];
     if (!memberIds.length) nextErrors.member_ids = "Select at least one student";
     if (isRequest && memberIds.length < 2) nextErrors.member_ids = "Select at least one classmate besides yourself";
+    if (memberIds.length && !memberIds.includes(Number(form.lead_id))) {
+      nextErrors.lead_id = "Choose a group lead from the selected members";
+    }
     const conflictingStudent = memberIds.find((studentId) => {
       const linked = assignedMap[Number(studentId)];
       return linked && (!editingId || Number(linked.groupId) !== Number(editingId));
@@ -356,7 +371,15 @@ const GroupComposer = ({
         students={students}
         knownStudents={knownStudents}
         memberIds={form.member_ids}
-        onChange={(member_ids) => setForm((prev) => ({ ...prev, member_ids: [...new Set([...lockedIds, ...member_ids.map(Number)])] }))}
+        onChange={(member_ids) => setForm((prev) => {
+          const nextIds = [...new Set([...lockedIds, ...member_ids.map(Number)])];
+          const leadStill = nextIds.includes(Number(prev.lead_id));
+          return {
+            ...prev,
+            member_ids: nextIds,
+            lead_id: leadStill ? prev.lead_id : (nextIds[0] ? String(nextIds[0]) : ""),
+          };
+        })}
         assignedGroupByStudentId={assignedMap}
         editingId={editingId}
         lockedIds={lockedIds}
@@ -364,6 +387,31 @@ const GroupComposer = ({
         loading={studentsLoading}
         emptyHint={canLoadStudents ? "No classmates match these filters." : form.scope === "coursework" ? "Choose a course and assessment to load students." : "Choose a course to load students."}
       />
+      <TextField
+        required
+        select
+        size="small"
+        label="Group lead"
+        value={form.lead_id ? String(form.lead_id) : ""}
+        error={Boolean(formErrors.lead_id)}
+        helperText={formErrors.lead_id || "This person represents the group when topics are allotted."}
+        sx={{ ...compactFieldSx, minWidth: 240 }}
+        onChange={(e) => {
+          const value = e.target.value;
+          setForm((prev) => ({ ...prev, lead_id: value }));
+          if (formErrors.lead_id) setFormErrors((prev) => ({ ...prev, lead_id: "" }));
+        }}
+      >
+        <MenuItem value="">Select lead</MenuItem>
+        {(form.member_ids || []).map((memberId) => {
+          const student = knownStudents[Number(memberId)] || students.find((row) => Number(row.id) === Number(memberId)) || { id: memberId };
+          return (
+            <MenuItem key={memberId} value={String(memberId)}>
+              {studentNameRollLabel(student)}
+            </MenuItem>
+          );
+        })}
+      </TextField>
     </CompactAddForm>
   );
 };

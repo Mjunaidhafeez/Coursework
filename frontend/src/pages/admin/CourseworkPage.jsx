@@ -21,8 +21,8 @@ import { runBulkDelete } from "../../utils/bulkApi";
 import { buildCourseworkTypeOptions, SUBMISSION_TYPE_OPTIONS } from "../../utils/courseworkOptions";
 import {
   emptyCourseworkForm,
+  saveCourseworkRequest,
   toCourseworkEditForm,
-  toCourseworkPayload,
   validateCourseworkForm,
   validateMaxMarks,
 } from "../../utils/courseworkForm";
@@ -123,11 +123,12 @@ const CourseworkPage = () => {
       return;
     }
 
-    const payload = toCourseworkPayload({ ...form, max_marks: marksValidation.value });
     try {
-      const { data } = editingId
-        ? await api.patch(`${ENDPOINTS.courseworks}${editingId}/`, payload)
-        : await api.post(ENDPOINTS.courseworks, payload);
+      const { data } = await saveCourseworkRequest(api, ENDPOINTS, {
+        editingId,
+        form,
+        maxMarks: marksValidation.value,
+      });
       notify(editingId ? "Assessment updated" : "Assessment added");
       topicAllot.openAfterSave(data);
     } catch (err) {

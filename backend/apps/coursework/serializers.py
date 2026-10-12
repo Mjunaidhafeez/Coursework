@@ -2,7 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.models import User
-from apps.common.uploads import public_file_url
+from apps.common.uploads import media_field_url, public_file_url, store_upload, validate_upload
 from apps.groups.models import GroupMember, StudentGroup
 
 from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
@@ -21,6 +21,9 @@ def normalize_coursework_type(value):
 class CourseworkSerializer(serializers.ModelSerializer):
     course_title = serializers.CharField(source="course.title", read_only=True)
     teacher_names = serializers.SerializerMethodField()
+    sample_file = serializers.FileField(write_only=True, required=False, allow_null=True)
+    sample_file_url = serializers.SerializerMethodField()
+    sample_file_name = serializers.CharField(source="sample_original_name", read_only=True)
 
     class Meta:
         model = Coursework
@@ -41,6 +44,9 @@ class CourseworkSerializer(serializers.ModelSerializer):
             "topic_source",
             "deadline",
             "max_marks",
+            "sample_file",
+            "sample_file_url",
+            "sample_file_name",
             "created_by",
             "created_at",
             "updated_at",
@@ -110,9 +116,38 @@ class CourseworkSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Deadline must be in the future.")
         return value
 
+    def get_sample_file_url(self, obj):
+        return obj.sample_file_url or media_field_url(obj.sample_file, self.context.get("request")) or ""
+
+    def _store_sample(self, instance, upload):
+        if not upload:
+            return instance
+        validate_upload(upload)
+        instance.sample_original_name = getattr(upload, "name", "") or ""
+        stored = store_upload(
+            instance,
+            upload,
+            field_name="sample_file",
+            folder=f"mba-portal/coursework/{instance.id}/samples",
+        )
+        if stored.get("url"):
+            instance.sample_file_url = stored["url"]
+        if stored.get("public_id"):
+            resource_type = stored.get("resource_type") or "raw"
+            instance.sample_storage_key = f"{resource_type}:{stored['public_id']}"
+        instance.save()
+        return instance
+
     def create(self, validated_data):
+        upload = validated_data.pop("sample_file", None)
         validated_data["created_by"] = self.context["request"].user
-        return super().create(validated_data)
+        instance = super().create(validated_data)
+        return self._store_sample(instance, upload)
+
+    def update(self, instance, validated_data):
+        upload = validated_data.pop("sample_file", None)
+        instance = super().update(instance, validated_data)
+        return self._store_sample(instance, upload) if upload else instance
 
 
 class SubmissionFileSerializer(serializers.ModelSerializer):
