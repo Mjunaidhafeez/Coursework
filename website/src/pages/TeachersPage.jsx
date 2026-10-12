@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import DirectoryFilters, { matchesFilters } from "../components/DirectoryFilters";
 import PageBanner from "../components/PageBanner";
 import { useSite } from "../context/SiteContext";
+import { sortByName } from "../utils/sortPeople";
 
 const FILTERS = [
   { key: "department", allLabel: "All departments" },
@@ -17,7 +18,10 @@ const TeachersPage = () => {
   const page = site.pages?.teachers || {};
   const rows = site.teachers || [];
   const [filters, setFilters] = useState(emptyFilters);
-  const visible = useMemo(() => rows.filter((item) => matchesFilters(item, filters)), [rows, filters]);
+  const visible = useMemo(
+    () => sortByName(rows.filter((item) => matchesFilters(item, filters))),
+    [rows, filters]
+  );
 
   return (
     <div>

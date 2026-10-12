@@ -244,7 +244,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
     def get_requested_member_names(self, obj):
         if not obj.requested_member_ids:
             return []
-        users = User.objects.filter(id__in=obj.requested_member_ids).order_by("first_name", "last_name", "username")
+        users = User.objects.filter(id__in=obj.requested_member_ids).order_by(*User.LIST_ORDER)
         result = []
         for user in users:
             full_name = user.get_full_name().strip()
@@ -254,7 +254,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
     def get_requested_member_details(self, obj):
         if not obj.requested_member_ids:
             return []
-        users = User.objects.filter(id__in=obj.requested_member_ids).order_by("first_name", "last_name", "username")
+        users = User.objects.filter(id__in=obj.requested_member_ids).order_by(*User.LIST_ORDER)
         result = []
         for user in users:
             full_name = user.get_full_name().strip() or user.username

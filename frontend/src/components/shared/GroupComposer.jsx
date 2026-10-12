@@ -12,6 +12,7 @@ import {
   filtersFromProfile,
   occupancyFromStudents,
   orgFiltersFromGroup,
+  sortStudentsByRollOrUsername,
   studentShortLabel,
   toGroupEditForm,
   toGroupPayload,
@@ -402,14 +403,15 @@ const GroupComposer = ({
         }}
       >
         <MenuItem value="">Select lead</MenuItem>
-        {(form.member_ids || []).map((memberId) => {
-          const student = knownStudents[Number(memberId)] || students.find((row) => Number(row.id) === Number(memberId)) || { id: memberId };
-          return (
-            <MenuItem key={memberId} value={String(memberId)}>
-              {studentShortLabel(student)}
-            </MenuItem>
-          );
-        })}
+        {sortStudentsByRollOrUsername(
+          (form.member_ids || []).map((memberId) => (
+            knownStudents[Number(memberId)] || students.find((row) => Number(row.id) === Number(memberId)) || { id: memberId }
+          ))
+        ).map((student) => (
+          <MenuItem key={student.id} value={String(student.id)}>
+            {studentShortLabel(student)}
+          </MenuItem>
+        ))}
       </TextField>
     </CompactAddForm>
   );

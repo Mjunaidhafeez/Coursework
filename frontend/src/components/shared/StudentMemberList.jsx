@@ -1,5 +1,6 @@
 import { Box, Chip, Paper, Stack, Typography } from "@mui/material";
 
+import { sortStudentsByRollOrUsername } from "../../utils/groupForm";
 import PersonAvatar from "./PersonAvatar";
 import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 
@@ -21,7 +22,8 @@ const normalizeMember = (member) => {
 };
 
 const StudentMemberList = ({ members = [], emptyText = "No members found.", compact = false }) => {
-  if (!members.length) {
+  const ordered = sortStudentsByRollOrUsername(members);
+  if (!ordered.length) {
     return <Typography variant="body2" color="text.secondary">{emptyText}</Typography>;
   }
 
@@ -46,7 +48,7 @@ const StudentMemberList = ({ members = [], emptyText = "No members found.", comp
           Roll No
         </Typography>
       </Box>
-      {members.map((member, idx) => {
+      {ordered.map((member, idx) => {
         const item = normalizeMember(member);
         return (
           <Paper

@@ -87,7 +87,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const [formErrors, setFormErrors] = useState({});
   const [showValidation, setShowValidation] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [sortBy, setSortBy] = useState("first_name");
+  const [sortBy, setSortBy] = useState(fixedRole === "student" ? "student_id" : "first_name");
   const [sortOrder, setSortOrder] = useState("asc");
   const isStudentAdminPage = urlRole === "student";
   const isUserCenterPage = !fixedRole && !urlRole;
@@ -105,7 +105,8 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     Object.entries(filtersValue).forEach(([key, value]) => {
       if (value) params.append(key, value);
     });
-    params.append("ordering", sortOrderValue === "desc" ? `-${sortByValue}` : sortByValue);
+    const orderingField = sortByValue === "student_id" ? "student_profile__student_id" : sortByValue;
+    params.append("ordering", sortOrderValue === "desc" ? `-${orderingField}` : orderingField);
     params.append("page", String(pageValue));
     params.append("page_size", String(pageSizeValue));
     return params;
@@ -133,6 +134,20 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const applyLocalSort = (rows, sortByValue, sortOrderValue) => {
     const factor = sortOrderValue === "desc" ? -1 : 1;
     return [...rows].sort((a, b) => {
+      const rollA = String(a.student_profile?.student_id || a.username || "");
+      const rollB = String(b.student_profile?.student_id || b.username || "");
+      const nameA = getUserDisplayName(a);
+      const nameB = getUserDisplayName(b);
+      if (sortByValue === "student_id") {
+        const roll = factor * rollA.localeCompare(rollB, undefined, { sensitivity: "base", numeric: true });
+        if (roll) return roll;
+        return factor * nameA.localeCompare(nameB, undefined, { sensitivity: "base", numeric: true });
+      }
+      if (sortByValue === "first_name") {
+        const name = factor * nameA.localeCompare(nameB, undefined, { sensitivity: "base", numeric: true });
+        if (name) return name;
+        return factor * rollA.localeCompare(rollB, undefined, { sensitivity: "base", numeric: true });
+      }
       const aVal = String(a?.[sortByValue] ?? "").toLowerCase();
       const bVal = String(b?.[sortByValue] ?? "").toLowerCase();
       return factor * aVal.localeCompare(bVal, undefined, { sensitivity: "base", numeric: true });
@@ -457,6 +472,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const nameHeaderLabel = urlRole === "teacher" ? "Teacher Name" : urlRole === "student" ? "Student Name" : "Full Name";
   const sortableColumns = [
     { key: "first_name", label: nameHeaderLabel },
+    ...(isStudentAdminPage ? [{ key: "student_id", label: "Roll No" }] : []),
     { key: "username", label: "Username" },
     { key: "email", label: "Email" },
     { key: "role", label: "Role" },
@@ -683,6 +699,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                 <TableCell>
                   <PersonNameCell person={user} />
                 </TableCell>
+                {isStudentAdminPage ? <TableCell>{user.student_profile?.student_id || "-"}</TableCell> : null}
                 <TableCell>{user.username}</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell sx={{ fontWeight: 800 }}>{getRoleLetter(user.role)}</TableCell>

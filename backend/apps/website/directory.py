@@ -1,9 +1,22 @@
+import re
+
 from apps.accounts.models import User
 from apps.academics.models import Course, Department
 from apps.common.uploads import media_field_url
 from apps.groups.models import StudentGroup
 
 from .models import WebsiteStudent, WebsiteTeacher
+
+
+def _natural_key(*parts):
+    key = []
+    for part in parts:
+        for token in re.split(r"(\d+)", str(part or "").upper()):
+            if token.isdigit():
+                key.append(int(token))
+            elif token:
+                key.append(token)
+    return tuple(key)
 
 
 def _label(user):
@@ -19,6 +32,7 @@ def portal_teachers(request=None):
         User.objects.filter(role=User.Role.TEACHER, is_active=True, teacher_profile__show_on_website=True)
         .select_related("teacher_profile__department_ref")
         .prefetch_related("teaching_courses__semester")
+        .order_by("first_name", "last_name", "username")
     )
     rows = []
     for person in people:
@@ -51,6 +65,7 @@ def portal_students(request=None):
             "student_profile__section",
         )
         .prefetch_related("enrollments__course", "group_memberships__group")
+        .order_by(*User.LIST_ORDER)
     )
     rows = []
     for person in people:
@@ -106,7 +121,7 @@ def portal_groups(request=None):
             )
         if not members:
             continue
-        members.sort(key=lambda row: (not row.get("is_lead"), row.get("name") or ""))
+        members.sort(key=lambda row: _natural_key(row.get("roll_no"), row.get("name")))
         course = group.course
         rows.append(
             {
@@ -167,9 +182,11 @@ def merged_directory(request=None):
                 "groups": [],
             }
         )
-    teachers.sort(key=lambda row: (row.get("department") or "", row.get("name") or ""))
-    students.sort(key=lambda row: (row.get("semester") or "", row.get("class_name") or "", row.get("name") or ""))
-    return {"teachers": teachers, "students": students, "groups": portal_groups(request)}
+    teachers.sort(key=lambda row: _natural_key(row.get("name")))
+    students.sort(key=lambda row: _natural_key(row.get("roll_no"), row.get("name")))
+    groups = portal_groups(request)
+    groups.sort(key=lambda row: _natural_key(row.get("name")))
+    return {"teachers": teachers, "students": students, "groups": groups}
 
 
 def portal_counts():

@@ -32,10 +32,10 @@ def me(request):
 
 
 class UserViewSet(BulkActionMixin, viewsets.ModelViewSet):
-    queryset = User.objects.all().order_by("-id")
+    queryset = User.objects.all().order_by(*User.LIST_ORDER)
     filterset_fields = ["role", "is_active"]
     search_fields = ["username", "email", "phone", "first_name", "last_name", "student_profile__student_id"]
-    ordering_fields = ["id", "username", "first_name", "last_name", "email", "role", "date_joined"]
+    ordering_fields = ["id", "username", "first_name", "last_name", "email", "role", "date_joined", "student_profile__student_id"]
 
     def get_permissions(self):
         if self.action in ["list", "retrieve", "create", "update", "partial_update", "destroy", "bulk_delete", "bulk_update"]:
@@ -79,7 +79,7 @@ class UserViewSet(BulkActionMixin, viewsets.ModelViewSet):
             qs = qs.filter(Q(teacher_profile__show_on_website=True) | Q(student_profile__show_on_website=True))
         elif website in ("0", "false", "no"):
             qs = qs.filter(Q(teacher_profile__show_on_website=False) | Q(student_profile__show_on_website=False))
-        return qs.distinct().order_by("-id")
+        return qs.distinct().order_by(*User.LIST_ORDER)
 
     def get_serializer_class(self):
         if self.action in ["create", "update", "partial_update"]:

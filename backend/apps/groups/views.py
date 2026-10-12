@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -26,7 +26,12 @@ class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
         "school_class",
         "section",
         "creator",
-    ).prefetch_related("members", "members__student", "members__student__student_profile")
+    ).prefetch_related(
+        Prefetch(
+            "members",
+            queryset=GroupMember.objects.select_related("student", "student__student_profile").order_by(*User.AS_MEMBER_ORDER),
+        )
+    )
     serializer_class = StudentGroupSerializer
     filterset_fields = ["course", "status", "scope", "coursework"]
     search_fields = ["name", "description"]
@@ -205,7 +210,7 @@ class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
                 qs = qs.filter(student_profile__school_class_id=profile.school_class_id)
             if profile.section_id:
                 qs = qs.filter(student_profile__section_id=profile.section_id)
-        return qs.order_by("first_name", "last_name", "username")
+        return qs.order_by(*User.LIST_ORDER)
 
     def _eligible_students_response(self, student_qs):
         students = list(self._filter_eligible_students(student_qs))

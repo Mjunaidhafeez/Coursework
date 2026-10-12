@@ -16,11 +16,26 @@ export const emptyStudentFilters = {
   section: "",
 };
 
+const localeSort = { numeric: true, sensitivity: "base" };
+
+const personRoll = (row) =>
+  String(row?.student_id || row?.student_roll_no || row?.roll_no || row?.rollNo || row?.username || "").trim();
+
+const personName = (row) =>
+  String(
+    row?.full_name
+    || row?.student_name
+    || row?.name
+    || `${row?.first_name || ""} ${row?.last_name || ""}`.trim()
+    || row?.username
+    || ""
+  ).trim();
+
 export const sortStudentsByRollOrUsername = (students = []) =>
   [...students].sort((a, b) => {
-    const aKey = String(a.student_id || a.username || "").toUpperCase();
-    const bKey = String(b.student_id || b.username || "").toUpperCase();
-    return aKey.localeCompare(bKey, undefined, { numeric: true, sensitivity: "base" });
+    const roll = personRoll(a).localeCompare(personRoll(b), undefined, localeSort);
+    if (roll) return roll;
+    return personName(a).localeCompare(personName(b), undefined, localeSort);
   });
 
 const orgIdOrNull = (value) => (value ? value : null);
