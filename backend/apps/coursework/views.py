@@ -64,11 +64,6 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
         if user.role == User.Role.TEACHER:
             return queryset.filter(course__teachers=user)
         if user.role == User.Role.STUDENT:
-            semester_id = getattr(getattr(user, "student_profile", None), "semester_id", None)
-            if semester_id:
-                return queryset.filter(
-                    Q(course__enrollments__student=user) | Q(course__semester_id=semester_id)
-                ).distinct()
             return queryset.filter(course__enrollments__student=user).distinct()
         return queryset
 
@@ -144,19 +139,9 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
         }
 
     def _course_students(self, coursework):
-        course = coursework.course
-        student_ids = set(
-            Enrollment.objects.filter(course_id=course.id).values_list("student_id", flat=True)
-        )
-        if course.semester_id:
-            class_qs = User.objects.filter(role=User.Role.STUDENT, student_profile__semester_id=course.semester_id)
-            if getattr(course, "department_id", None):
-                class_qs = class_qs.filter(student_profile__department_id=course.department_id)
-            student_ids.update(class_qs.values_list("id", flat=True))
-        if not student_ids:
-            return User.objects.none()
+        student_ids = Enrollment.objects.filter(course_id=coursework.course_id).values_list("student_id", flat=True)
         return (
-            User.objects.filter(id__in=student_ids)
+            User.objects.filter(id__in=student_ids, role=User.Role.STUDENT)
             .select_related("student_profile")
             .order_by("student_profile__student_id", "first_name", "last_name", "username")
         )

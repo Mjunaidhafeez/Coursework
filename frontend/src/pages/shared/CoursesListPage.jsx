@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import api from "../../api/client";
 import PaginationControls from "../../components/PaginationControls";
+import CourseEnrolledCell from "../../components/shared/CourseEnrolledCell";
 import CourseStudyFilesCell from "../../components/shared/CourseStudyFiles";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
@@ -24,15 +25,15 @@ import usePaginatedQuery from "../../hooks/usePaginatedQuery";
 const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
   const { user } = useAuth();
   const canManageFiles = ["teacher", "super_admin"].includes(user?.role);
-  const [semesterFilter, setSemesterFilter] = useState("my");
+  const [semesterFilter, setSemesterFilter] = useState("all");
   const [semesters, setSemesters] = useState([]);
 
   const queryFn = async ({ search, page, pageSize }) => {
     const params = new URLSearchParams();
     if (search) params.append("search", search);
     if (enableSemesterFilter) {
-      if (semesterFilter === "all") params.append("all_semesters", "1");
-      else if (semesterFilter !== "my") params.append("semester", semesterFilter);
+      if (semesterFilter !== "all" && semesterFilter !== "my") params.append("semester", semesterFilter);
+      if (semesterFilter === "my" && user?.student_profile?.semester) params.append("semester", String(user.student_profile.semester));
     }
     params.append("page", String(page));
     params.append("page_size", String(pageSize));
@@ -76,8 +77,8 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
                 value={semesterFilter}
                 onChange={(e) => setSemesterFilter(e.target.value)}
               >
+                <MenuItem value="all">All enrolled</MenuItem>
                 <MenuItem value="my">My Semester</MenuItem>
-                <MenuItem value="all">All Semesters</MenuItem>
                 {semesters.map((semester) => (
                   <MenuItem key={semester.id} value={String(semester.id)}>
                     Semester {semester.number}
@@ -96,6 +97,7 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
               <TableCell>Title</TableCell>
               <TableCell>Semester</TableCell>
               <TableCell>Teachers</TableCell>
+              {canManageFiles ? <TableCell>Students</TableCell> : null}
               <TableCell>Files</TableCell>
             </TableRow>
           </TableHead>
@@ -106,6 +108,11 @@ const CoursesListPage = ({ title, enableSemesterFilter = false }) => {
                 <TableCell>{item.title}</TableCell>
                 <TableCell>{item.semester_name || `Semester ${item.semester_number}`}</TableCell>
                 <TableCell>{(item.teacher_names || []).join(", ") || "-"}</TableCell>
+                {canManageFiles ? (
+                  <TableCell>
+                    <CourseEnrolledCell course={item} />
+                  </TableCell>
+                ) : null}
                 <TableCell>
                   <CourseStudyFilesCell course={item} canManage={canManageFiles} onChanged={() => loadData()} />
                 </TableCell>

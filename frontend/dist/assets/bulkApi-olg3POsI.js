@@ -1,0 +1,1 @@
+import{a as r}from"./index-P64xf4iz.js";import{b as l}from"./confirm-BXW9Oo0O.js";const s=(e,t)=>r.post(`${e}bulk_delete/`,{ids:t}),p=(e,t,o)=>r.post(`${e}bulk_update/`,{ids:t,fields:o}),k=async({endpoint:e,ids:t,label:o="records"})=>{if(!t.length)return{ok:!1};if(!l(t.length,o))return{ok:!1};const{data:a}=await s(e,t);return{ok:!0,data:a}};export{p,k as r};

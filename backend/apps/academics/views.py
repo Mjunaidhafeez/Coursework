@@ -1,6 +1,7 @@
 from urllib.parse import quote
 
 from django.conf import settings
+from django.db.models import Count
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
@@ -20,6 +21,7 @@ from apps.common.uploads import (
 )
 from apps.common.whatsapp import notify_event
 
+from .enrollment import enroll_course_semester_students
 from .models import Course, CourseStudyFile, Department, Enrollment, SchoolClass, Section, Semester
 from .serializers import (
     CourseSerializer,
@@ -116,6 +118,7 @@ class CourseViewSet(BulkActionMixin, viewsets.ModelViewSet):
             "upload_study_file",
             "delete_study_file",
             "rename_study_file",
+            "enrolled_students",
         ]:
             return [IsTeacherOrAdmin()]
         return [permissions.IsAuthenticated()]
@@ -239,14 +242,7 @@ class CourseViewSet(BulkActionMixin, viewsets.ModelViewSet):
         )
 
     def _enroll_semester_students(self, course):
-        student_ids = User.objects.filter(
-            role=User.Role.STUDENT,
-            student_profile__semester_id=course.semester_id,
-        ).values_list("id", flat=True)
-        Enrollment.objects.bulk_create(
-            [Enrollment(student_id=student_id, course=course) for student_id in student_ids],
-            ignore_conflicts=True,
-        )
+        enroll_course_semester_students(course)
 
     def perform_create(self, serializer):
         course = serializer.save()
@@ -256,22 +252,39 @@ class CourseViewSet(BulkActionMixin, viewsets.ModelViewSet):
         course = serializer.save()
         self._enroll_semester_students(course)
 
+    @action(detail=True, methods=["get"], url_path="enrolled-students")
+    def enrolled_students(self, request, pk=None):
+        course = self.get_object()
+        students = (
+            User.objects.filter(role=User.Role.STUDENT, is_active=True, enrollments__course=course)
+            .select_related("student_profile__semester", "student_profile__department")
+            .order_by(*User.LIST_ORDER)
+            .distinct()
+        )
+        return Response(
+            [
+                {
+                    "id": student.id,
+                    "name": student.get_full_name().strip() or student.username,
+                    "roll_no": getattr(getattr(student, "student_profile", None), "student_id", "") or "",
+                    "semester_number": getattr(getattr(getattr(student, "student_profile", None), "semester", None), "number", None),
+                    "department_name": getattr(getattr(getattr(student, "student_profile", None), "department", None), "name", "") or "",
+                }
+                for student in students
+            ]
+        )
+
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().annotate(enrolled_count=Count("enrollments", distinct=True))
         user = self.request.user
         if user.role == User.Role.TEACHER:
             return queryset.filter(teachers=user)
         if user.role == User.Role.STUDENT:
-            all_semesters = str(self.request.query_params.get("all_semesters", "")).lower() in ["1", "true", "yes"]
+            queryset = queryset.filter(enrollments__student=user).distinct()
             requested_semester = self.request.query_params.get("semester")
-            if all_semesters:
-                return queryset
             if requested_semester:
-                return queryset.filter(semester_id=requested_semester)
-            semester_id = getattr(getattr(user, "student_profile", None), "semester_id", None)
-            if semester_id:
-                return queryset.filter(semester_id=semester_id)
-            return queryset.filter(enrollments__student=user)
+                queryset = queryset.filter(semester_id=requested_semester)
+            return queryset
         return queryset
 
 

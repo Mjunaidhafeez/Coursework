@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.academics.enrollment import enroll_student_in_home_courses, sync_student_enrollments
 from apps.academics.models import Department
 from apps.common.uploads import media_field_url, normalize_phone
 
@@ -98,6 +99,7 @@ class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
     mailing_address = serializers.SerializerMethodField()
+    enrolled_course_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -114,6 +116,7 @@ class UserSerializer(serializers.ModelSerializer):
             "avatar",
             "teacher_profile",
             "student_profile",
+            "enrolled_course_ids",
             "is_active",
         ]
 
@@ -125,6 +128,12 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_mailing_address(self, obj):
         return getattr(getattr(obj, "student_profile", None), "mailing_address", "") or ""
+
+    def get_enrolled_course_ids(self, obj):
+        enrollments = getattr(obj, "enrollments", None)
+        if enrollments is None:
+            return []
+        return [enrollment.course_id for enrollment in enrollments.all()]
 
 
 class SelfProfileUpdateSerializer(serializers.ModelSerializer):
@@ -175,6 +184,7 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
     student_profile = StudentProfileSerializer(required=False)
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     avatar = serializers.ImageField(required=False, allow_null=True)
+    enrolled_course_ids = serializers.ListField(child=serializers.IntegerField(), required=False, allow_empty=True)
 
     class Meta:
         model = User
@@ -190,6 +200,7 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
             "avatar",
             "teacher_profile",
             "student_profile",
+            "enrolled_course_ids",
         ]
 
     def validate_username(self, value):
@@ -248,9 +259,19 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    def _apply_enrollments(self, user, course_ids, *, created):
+        if user.role != User.Role.STUDENT:
+            return
+        if course_ids is None:
+            if created:
+                enroll_student_in_home_courses(user)
+            return
+        sync_student_enrollments(user, course_ids)
+
     def create(self, validated_data):
         teacher_profile_data = validated_data.pop("teacher_profile", None)
         student_profile_data = validated_data.pop("student_profile", None)
+        course_ids = validated_data.pop("enrolled_course_ids", None)
         password = validated_data.pop("password", None)
         user = User(**validated_data)
         if password:
@@ -263,11 +284,13 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
             TeacherProfile.objects.create(user=user, **teacher_profile_data)
         if user.role == User.Role.STUDENT and student_profile_data:
             StudentProfile.objects.create(user=user, **student_profile_data)
+        self._apply_enrollments(user, course_ids, created=True)
         return user
 
     def update(self, instance, validated_data):
         teacher_profile_data = validated_data.pop("teacher_profile", None)
         student_profile_data = validated_data.pop("student_profile", None)
+        course_ids = validated_data.pop("enrolled_course_ids", None)
         password = validated_data.pop("password", None)
 
         for attr, value in validated_data.items():
@@ -280,4 +303,5 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
             TeacherProfile.objects.update_or_create(user=instance, defaults=teacher_profile_data)
         if instance.role == User.Role.STUDENT and student_profile_data is not None:
             StudentProfile.objects.update_or_create(user=instance, defaults=student_profile_data)
+        self._apply_enrollments(instance, course_ids, created=False)
         return instance

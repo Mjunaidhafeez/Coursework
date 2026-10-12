@@ -109,7 +109,7 @@ const TopicAllotDialog = ({ coursework, onClose, onSaved }) => {
             {topicSourceLabel(coursework?.topic_source)}.{" "}
             {perGroup
               ? "Each approved group for this subject is listed with its lead. Assign one unique topic per group."
-              : "Every student enrolled in this subject (plus the same semester/department class) is listed. Assign one unique topic per student."}{" "}
+              : "Every student enrolled in this subject is listed. Assign one unique topic per student."}{" "}
             You can save now and finish the rest later.
           </Typography>
           <Chip

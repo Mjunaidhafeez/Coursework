@@ -39,6 +39,7 @@ import { downloadCsvFile, printTablePdf } from "../../utils/export";
 import { getRoleLetter, getUserDisplayName } from "../../utils/userDisplay";
 import { PersonNameCell, PersonPhotoField } from "../../components/shared/PersonAvatar";
 import SelectPlaceholder from "../../components/shared/SelectPlaceholder";
+import SubjectEnrollPicker from "../../components/shared/SubjectEnrollPicker";
 import { confirmDelete } from "../../utils/confirm";
 import { fetchOrgCatalog } from "../campus/listRows";
 
@@ -59,6 +60,7 @@ const emptyForm = {
   show_on_website: true,
   avatar: null,
   avatarUrl: "",
+  enrolled_course_ids: [],
 };
 
 const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
@@ -80,6 +82,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [form, setForm] = useState({ ...emptyForm, role: urlRole || "student" });
+  const [enrollFilter, setEnrollFilter] = useState({ department: "", semester: "" });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [semesterAlert, setSemesterAlert] = useState("");
@@ -91,6 +94,14 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
   const [sortOrder, setSortOrder] = useState("asc");
   const isStudentAdminPage = urlRole === "student";
   const isUserCenterPage = !fixedRole && !urlRole;
+  const homeCourseIds = (semesterId, departmentId) =>
+    courses
+      .filter((course) => {
+        if (semesterId && String(course.semester) !== String(semesterId)) return false;
+        if (departmentId && course.department && String(course.department) !== String(departmentId)) return false;
+        return Boolean(semesterId);
+      })
+      .map((course) => String(course.id));
   const buildUsersParams = ({
     searchValue = search,
     pageValue = page,
@@ -287,6 +298,9 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           mailing_address: form.mailing_address || "",
           show_on_website: Boolean(form.show_on_website),
         };
+        if (editingId || form.enrolled_course_ids.length) {
+          payload.enrolled_course_ids = form.enrolled_course_ids.map(Number);
+        }
       }
 
       const saveAvatar = async (userId) => {
@@ -308,6 +322,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       }
 
       setForm({ ...emptyForm, role: urlRole || "student" });
+      setEnrollFilter({ department: "", semester: "" });
       setFormErrors({});
       setShowValidation(false);
       setEditingId(null);
@@ -350,7 +365,9 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
       show_on_website: user.teacher_profile?.show_on_website !== false && user.student_profile?.show_on_website !== false,
       avatar: null,
       avatarUrl: user.avatar || "",
+      enrolled_course_ids: (user.enrolled_course_ids || []).map(String),
     });
+    setEnrollFilter({ department: "", semester: "" });
     setFormErrors({});
   };
 
@@ -486,7 +503,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           title={editingId ? "Update User" : "Add User"}
           submitLabel={editingId ? "Update" : "Add"}
           onSubmit={submit}
-          onClear={() => { setEditingId(null); setForm({ ...emptyForm, role: urlRole || "student" }); setFormErrors({}); setShowValidation(false); }}
+          onClear={() => { setEditingId(null); setForm({ ...emptyForm, role: urlRole || "student" }); setEnrollFilter({ department: "", semester: "" }); setFormErrors({}); setShowValidation(false); }}
           extra={(
             <>
               <FormErrorSummary errors={showValidation ? formErrors : {}} />
@@ -515,7 +532,12 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
             </TextField>
           )}
           {(form.role === "teacher" || form.role === "student") && (
-            <TextField required={form.role === "teacher"} select size="small" label="Department" value={form.department} error={showValidation && Boolean(formErrors.department)} helperText={showValidation ? formErrors.department || (catalogLoading ? "Loading…" : "") : (catalogLoading ? "Loading…" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, department: e.target.value, school_class: "", section: "" }))}>
+            <TextField required={form.role === "teacher"} select size="small" label="Department" value={form.department} error={showValidation && Boolean(formErrors.department)} helperText={showValidation ? formErrors.department || (catalogLoading ? "Loading…" : "") : (catalogLoading ? "Loading…" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => {
+              const department = e.target.value;
+              const next = { ...p, department, school_class: "", section: "" };
+              if (!editingId && p.role === "student") next.enrolled_course_ids = homeCourseIds(p.semester, department);
+              return next;
+            })}>
               <SelectPlaceholder items={departments} readyText="Select department" emptyText="None yet — add in Classes & Depts" />
               {departments.map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
             </TextField>
@@ -523,7 +545,12 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           {form.role === "student" && (
             <>
               <TextField required size="small" label="Student ID" value={form.student_id} error={showValidation && Boolean(formErrors.student_id)} helperText={showValidation ? formErrors.student_id || "" : ""} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, student_id: e.target.value }))} />
-              <TextField required select size="small" label="Semester" value={form.semester} error={showValidation && Boolean(formErrors.semester)} helperText={showValidation ? formErrors.semester || (catalogLoading ? "Loading…" : "") : (catalogLoading ? "Loading…" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, semester: e.target.value }))}>
+              <TextField required select size="small" label="Semester" value={form.semester} error={showValidation && Boolean(formErrors.semester)} helperText={showValidation ? formErrors.semester || (catalogLoading ? "Loading…" : "") : (catalogLoading ? "Loading…" : "")} sx={compactFieldSx} onChange={(e) => updateForm((p) => {
+                const semester = e.target.value;
+                const next = { ...p, semester };
+                if (!editingId) next.enrolled_course_ids = homeCourseIds(semester, p.department);
+                return next;
+              })}>
                 <SelectPlaceholder items={semesters} readyText="Select semester" emptyText="None yet — add in Semesters" />
                 {semesters.map((semester) => <MenuItem key={semester.id} value={String(semester.id)}>{semester.number}</MenuItem>)}
               </TextField>
@@ -540,6 +567,15 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                 ))}
               </TextField>
               <TextField size="small" label="Mailing address" value={form.mailing_address} helperText="Optional" sx={compactFieldSx} onChange={(e) => updateForm((p) => ({ ...p, mailing_address: e.target.value }))} />
+              <SubjectEnrollPicker
+                courses={courses}
+                departments={departments}
+                semesters={semesters}
+                selectedIds={form.enrolled_course_ids}
+                onChange={(ids) => updateForm((p) => ({ ...p, enrolled_course_ids: ids }))}
+                filter={enrollFilter}
+                onFilterChange={setEnrollFilter}
+              />
             </>
           )}
           {(form.role === "teacher" || form.role === "student") && (
@@ -686,6 +722,7 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
               {isStudentAdminPage ? <TableCell>Class</TableCell> : null}
               {isStudentAdminPage ? <TableCell>Section</TableCell> : null}
               {isStudentAdminPage ? <TableCell>Semester</TableCell> : null}
+              {isStudentAdminPage ? <TableCell>Subjects</TableCell> : null}
               <TableCell>Website</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -707,7 +744,9 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
                 {isStudentAdminPage ? <TableCell>{user.student_profile?.school_class_name || "-"}</TableCell> : null}
                 {isStudentAdminPage ? <TableCell>{user.student_profile?.section_name || "-"}</TableCell> : null}
                 {isStudentAdminPage ? <TableCell>{user.student_profile?.semester_number || "-"}</TableCell> : null}
-                <TableCell>{(user.teacher_profile?.show_on_website !== false && user.student_profile?.show_on_website !== false) ? "Yes" : "Hidden"}</TableCell>
+                {isStudentAdminPage ? (
+                  <TableCell>{(user.enrolled_course_ids || []).length ? `${user.enrolled_course_ids.length} enrolled` : "-"}</TableCell>
+                ) : null}
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
                     <Button size="small" onClick={() => editUser(user)}>Edit</Button>

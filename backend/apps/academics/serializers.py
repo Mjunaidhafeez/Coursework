@@ -82,6 +82,7 @@ class CourseSerializer(serializers.ModelSerializer):
     teacher_names = serializers.SerializerMethodField()
     study_files = CourseStudyFileSerializer(many=True, read_only=True)
     study_file_count = serializers.SerializerMethodField()
+    enrolled_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Course
@@ -98,6 +99,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "teacher_names",
             "study_files",
             "study_file_count",
+            "enrolled_count",
             "created_at",
             "updated_at",
         ]
@@ -118,6 +120,12 @@ class CourseSerializer(serializers.ModelSerializer):
             return 0
         all_files = files.all() if hasattr(files, "all") else files
         return len(list(all_files))
+
+    def get_enrolled_count(self, obj):
+        count = getattr(obj, "enrolled_count", None)
+        if count is not None:
+            return count
+        return obj.enrollments.count()
 
     def validate(self, attrs):
         teachers = attrs.get("teachers")

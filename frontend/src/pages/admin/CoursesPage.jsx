@@ -34,6 +34,7 @@ import { getUserDisplayName } from "../../utils/userDisplay";
 import PersonAvatar from "../../components/shared/PersonAvatar";
 import SelectPlaceholder from "../../components/shared/SelectPlaceholder";
 import { confirmDelete } from "../../utils/confirm";
+import CourseEnrolledCell from "../../components/shared/CourseEnrolledCell";
 import CourseStudyFilesCell from "../../components/shared/CourseStudyFiles";
 import { fetchOrgCatalog, listRows } from "../campus/listRows";
 
@@ -281,6 +282,7 @@ const CoursesPage = () => {
               <TableCell>Semester</TableCell>
               <TableCell>Department</TableCell>
               <TableCell>Teachers</TableCell>
+              <TableCell>Students</TableCell>
               <TableCell>Files</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -311,6 +313,9 @@ const CoursesPage = () => {
                   </Stack>
                 </TableCell>
                 <TableCell>
+                  <CourseEnrolledCell course={course} />
+                </TableCell>
+                <TableCell>
                   <CourseStudyFilesCell course={course} canManage onChanged={() => loadData()} />
                 </TableCell>
                 <TableCell align="right">
@@ -323,7 +328,7 @@ const CoursesPage = () => {
             ))}
             {!courses.length && !loading && (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={9}>
                   <Typography variant="body2" color="text.secondary">No courses found for this filter/search.</Typography>
                 </TableCell>
               </TableRow>

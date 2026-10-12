@@ -275,11 +275,9 @@ class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
                 raise PermissionDenied("You can only view classmates for your enrolled courses.")
 
         enrolled_ids = list(enrollment_qs.values_list("student_id", flat=True))
-        if enrolled_ids:
-            return self._eligible_students_response(User.objects.filter(id__in=enrolled_ids))
-        if user.role in [User.Role.SUPER_ADMIN, User.Role.TEACHER]:
-            return self._eligible_students_response(User.objects.all())
-        return Response([])
+        if not enrolled_ids:
+            return Response([])
+        return self._eligible_students_response(User.objects.filter(id__in=enrolled_ids))
 
     def _moderate_group(self, request, new_status):
         group = self.get_object()
