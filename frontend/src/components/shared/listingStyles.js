@@ -36,25 +36,63 @@ export const compactMemberFieldSx = {
   ...labelReadableSx,
 };
 
-export const compactToggleButtonSx = {
+const formControlBase = {
   textTransform: "none",
   fontWeight: 700,
-  px: 1.15,
-  py: 0.35,
-  fontSize: "0.75rem",
+  px: 1.65,
+  py: 0.75,
+  fontSize: "0.8125rem",
   lineHeight: 1.2,
-  borderColor: "#d5deea",
+  minHeight: 40,
+  borderRadius: "10px !important",
+};
+
+export const formActionButtonSx = {
+  ...formControlBase,
+  px: 2.25,
+};
+
+export const compactToggleButtonSx = {
+  ...formControlBase,
+  border: "1px solid #c5d4e8",
   bgcolor: "#fff",
+  color: "#1e3a5f",
   "&.Mui-selected": {
-    bgcolor: "#e8f0ff",
-    color: "#13377a",
-    borderColor: "#9db7e8",
+    bgcolor: "var(--portal-primary)",
+    color: "#fff",
+    borderColor: "var(--portal-primary)",
+    boxShadow: "0 1px 0 rgba(15, 23, 42, 0.1)",
+    "&:hover": {
+      bgcolor: "var(--portal-ink)",
+      borderColor: "var(--portal-ink)",
+    },
+  },
+  "&:hover": {
+    bgcolor: "#f4f8ff",
+    borderColor: "var(--portal-primary)",
   },
 };
 
 export const compactToggleGroupSx = {
+  gap: "6px",
+  "& .MuiToggleButtonGroup-grouped": {
+    borderRadius: "10px !important",
+    border: "1px solid #c5d4e8 !important",
+    margin: "0 !important",
+  },
   "& .MuiToggleButton-root": compactToggleButtonSx,
 };
+
+export const ruleToggleSx = (color) => ({
+  ...compactToggleButtonSx,
+  "&.Mui-selected": {
+    bgcolor: color,
+    color: "#fff",
+    borderColor: color,
+    boxShadow: "0 1px 0 rgba(15, 23, 42, 0.1)",
+    "&:hover": { bgcolor: color, filter: "brightness(0.92)" },
+  },
+});
 
 export const compactSelectSx = compactFieldSx;
 

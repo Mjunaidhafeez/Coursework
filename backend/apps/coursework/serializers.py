@@ -23,7 +23,8 @@ class CourseworkSerializer(serializers.ModelSerializer):
     teacher_names = serializers.SerializerMethodField()
     sample_file = serializers.FileField(write_only=True, required=False, allow_null=True)
     sample_file_url = serializers.SerializerMethodField()
-    sample_file_name = serializers.CharField(source="sample_original_name", read_only=True)
+    sample_file_name = serializers.SerializerMethodField()
+    sample_file_title = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Coursework
@@ -47,6 +48,7 @@ class CourseworkSerializer(serializers.ModelSerializer):
             "sample_file",
             "sample_file_url",
             "sample_file_name",
+            "sample_file_title",
             "created_by",
             "created_at",
             "updated_at",
@@ -54,6 +56,8 @@ class CourseworkSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_by"]
         extra_kwargs = {
             "description": {"required": False, "allow_blank": True},
+            "max_marks": {"required": False, "allow_null": True},
+            "max_group_members": {"required": False, "allow_null": True},
         }
 
     def get_teacher_names(self, obj):
@@ -90,14 +94,21 @@ class CourseworkSerializer(serializers.ModelSerializer):
             attrs["approval_required"] = False
 
         if submission_type in [Coursework.SubmissionType.GROUP, Coursework.SubmissionType.BOTH]:
-            if not max_group_members:
-                raise serializers.ValidationError({"max_group_members": "Max members is required for group/both submission type."})
-            if max_group_members < 2:
+            if max_group_members in (None, ""):
+                attrs["max_group_members"] = None
+            elif max_group_members < 2:
                 raise serializers.ValidationError({"max_group_members": "Max members should be at least 2."})
         elif submission_type == Coursework.SubmissionType.INDIVIDUAL:
             attrs["max_group_members"] = None
 
         return attrs
+
+    def validate_max_marks(self, value):
+        if value in (None, ""):
+            return None
+        if value <= 0:
+            raise serializers.ValidationError("Max marks must be a positive number.")
+        return value
 
     def validate_title(self, value):
         normalized = str(value or "").strip()
@@ -119,11 +130,22 @@ class CourseworkSerializer(serializers.ModelSerializer):
     def get_sample_file_url(self, obj):
         return obj.sample_file_url or media_field_url(obj.sample_file, self.context.get("request")) or ""
 
+    def get_sample_file_name(self, obj):
+        title = str(obj.sample_file_title or "").strip()
+        original = obj.sample_original_name or ""
+        if title:
+            ext = f".{original.rsplit('.', 1)[-1]}" if "." in original else ""
+            return f"{title}{ext}" if ext and not title.lower().endswith(ext.lower()) else title
+        return original
+
     def _store_sample(self, instance, upload):
         if not upload:
             return instance
         validate_upload(upload)
-        instance.sample_original_name = getattr(upload, "name", "") or ""
+        upload_name = getattr(upload, "name", "") or ""
+        if not str(instance.sample_file_title or "").strip():
+            instance.sample_file_title = upload_name.rsplit(".", 1)[0] if "." in upload_name else upload_name
+        instance.sample_original_name = upload_name
         stored = store_upload(
             instance,
             upload,

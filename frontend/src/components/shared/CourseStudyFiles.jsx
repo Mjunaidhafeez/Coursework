@@ -19,31 +19,16 @@ import {
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { renderAsync } from "docx-preview";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import { useUi } from "../../context/UiContext";
 import { extractApiErrorMessage } from "../../utils/apiErrors";
 import { confirmDelete } from "../../utils/confirm";
+import { displayFileName, fileExtensionFrom, IMAGE_EXT, OFFICE_EXT, previewFromBlob, titleFromFileName, WORD_EXT } from "../../utils/filePreview";
 import { oversizedFileNames } from "../../utils/uploadLimits";
-
-const IMAGE_EXT = ["png", "jpg", "jpeg"];
-const WORD_EXT = ["docx"];
-const OFFICE_EXT = ["doc", "ppt", "pptx", "xls", "xlsx"];
-
-const fileExtension = (file) =>
-  String(file?.file_name || file?.title || file?.file || "")
-    .split("?")[0]
-    .split(".")
-    .pop()
-    .toLowerCase();
-
-const displayFileName = (file) => {
-  const raw = String(file?.file_name || file?.title || "Study file");
-  return raw.split("/").pop() || raw;
-};
+import FilePreviewDialog from "./FilePreviewDialog";
 
 const fetchStudyFileBlob = async (courseId, fileId, mode) => {
   const { data } = await api.get(`${ENDPOINTS.courses}${courseId}/study-files/${fileId}/${mode}/`, {
@@ -55,7 +40,6 @@ const fetchStudyFileBlob = async (courseId, fileId, mode) => {
 export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClose, onChanged }) => {
   const { notify } = useUi();
   const fileInputRef = useRef(null);
-  const wordHostRef = useRef(null);
   const [title, setTitle] = useState("");
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -65,40 +49,19 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
   const [preview, setPreview] = useState(null);
   const files = course?.study_files || [];
 
-  useEffect(() => () => {
-    if (preview?.url) URL.revokeObjectURL(preview.url);
-  }, [preview]);
-
-  useEffect(() => {
-    if (preview?.kind !== "word" || !preview.blob || !wordHostRef.current) return;
-    wordHostRef.current.innerHTML = "";
-    renderAsync(preview.blob, wordHostRef.current, undefined, { inWrapper: true, breakPages: true }).catch(() => {
-      notify("Could not preview this Word file. Use Download.", "warning");
-    });
-  }, [preview, notify]);
-
   const openStudyFile = async (item) => {
     if (!course?.id || !item?.id) return;
-    const ext = fileExtension(item);
+    const ext = fileExtensionFrom(item);
     setOpening(true);
     try {
-      if (preview?.url) URL.revokeObjectURL(preview.url);
       if (IMAGE_EXT.includes(ext) || ext === "pdf") {
         const blob = await fetchStudyFileBlob(course.id, item.id, "view");
-        setPreview({
-          url: URL.createObjectURL(blob),
-          title: item.title || displayFileName(item),
-          kind: ext === "pdf" ? "pdf" : "image",
-        });
+        setPreview(previewFromBlob(blob, item.title || displayFileName(item), ext === "pdf" ? "pdf" : "image"));
         return;
       }
       if (WORD_EXT.includes(ext)) {
         const blob = await fetchStudyFileBlob(course.id, item.id, "view");
-        setPreview({
-          blob,
-          title: item.title || displayFileName(item),
-          kind: "word",
-        });
+        setPreview(previewFromBlob(blob, item.title || displayFileName(item), "word"));
         return;
       }
       if (OFFICE_EXT.includes(ext)) {
@@ -153,7 +116,7 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
     }
     const payload = new FormData();
     payload.append("file", file);
-    payload.append("title", title.trim() || file.name.replace(/\.[^.]+$/, ""));
+    payload.append("title", title.trim() || titleFromFileName(file.name));
     setSaving(true);
     try {
       await api.post(`${ENDPOINTS.courses}${course.id}/study-files/`, payload, {
@@ -313,35 +276,7 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
           </Button>
         </DialogActions>
       </Dialog>
-      <Dialog
-        open={Boolean(preview)}
-        onClose={() => setPreview(null)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>{preview?.title || "File preview"}</DialogTitle>
-        <DialogContent dividers sx={{ minHeight: "70vh", p: 0, bgcolor: preview?.kind === "word" ? "#fff" : "#0f172a" }}>
-          {preview?.kind === "image" ? (
-            <Box sx={{ p: 2, textAlign: "center" }}>
-              <Box component="img" src={preview.url} alt={preview.title} sx={{ maxWidth: "100%", maxHeight: "72vh" }} />
-            </Box>
-          ) : null}
-          {preview?.kind === "word" ? (
-            <Box ref={wordHostRef} sx={{ p: 2, bgcolor: "#fff", minHeight: "70vh", overflow: "auto" }} />
-          ) : null}
-          {preview?.kind === "pdf" || preview?.kind === "office" ? (
-            <Box
-              component="iframe"
-              title={preview?.title || "preview"}
-              src={preview?.url}
-              sx={{ width: "100%", height: "72vh", border: 0, bgcolor: "#fff" }}
-            />
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreview(null)}>Close preview</Button>
-        </DialogActions>
-      </Dialog>
+      <FilePreviewDialog preview={preview} onClose={() => setPreview(null)} />
     </Dialog>
   );
 };

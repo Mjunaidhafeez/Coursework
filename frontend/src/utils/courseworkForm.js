@@ -48,12 +48,13 @@ export const emptyCourseworkForm = {
   sample_file: null,
   sample_file_url: "",
   sample_file_name: "",
+  sample_file_title: "",
 };
 
 export const validateMaxMarks = (rawValue) => {
   const maxMarksValue = String(rawValue ?? "").trim();
   if (!maxMarksValue) {
-    return { ok: false, error: "Max Marks is required", value: null };
+    return { ok: true, error: "", value: null };
   }
   const numericMaxMarks = Number(maxMarksValue);
   if (Number.isNaN(numericMaxMarks) || numericMaxMarks <= 0) {
@@ -79,14 +80,10 @@ export const validateCourseworkForm = (form) => {
   if (!deadline) {
     errors.deadline = "Deadline is required";
   }
-  if (submissionType === "group" || submissionType === "both") {
-    if (!maxGroupMembersRaw) {
-      errors.max_group_members = "Max members is required for group/both submission type.";
-    } else {
-      const parsed = Number(maxGroupMembersRaw);
-      if (Number.isNaN(parsed) || parsed < 2) {
-        errors.max_group_members = "Max members should be at least 2.";
-      }
+  if ((submissionType === "group" || submissionType === "both") && maxGroupMembersRaw) {
+    const parsed = Number(maxGroupMembersRaw);
+    if (Number.isNaN(parsed) || parsed < 2) {
+      errors.max_group_members = "Max members should be at least 2.";
     }
   }
   if (String(form?.topic_source || TOPIC_SOURCE_STUDENT) === TOPIC_SOURCE_TEACHER_GROUP && submissionType === "individual") {
@@ -101,16 +98,21 @@ export const validateCourseworkForm = (form) => {
 
 export const toCourseworkPayload = (form) => {
   const { sample_file, sample_file_url, sample_file_name, ...rest } = form;
+  const maxMarks = form.max_marks;
+  const maxMembers = form.max_group_members;
   return {
     ...rest,
     title: String(form.title || "").trim(),
     description: String(form.description || "").trim(),
     coursework_type: normalizeCourseworkType(form.coursework_type),
     course: Number(form.course),
-    max_marks: Number(form.max_marks),
+    sample_file_title: String(form.sample_file_title || "").trim(),
+    max_marks: maxMarks === "" || maxMarks == null ? null : Number(maxMarks),
     max_group_members:
       form.submission_type === "group" || form.submission_type === "both"
-        ? Number(form.max_group_members)
+        ? maxMembers === "" || maxMembers == null
+          ? null
+          : Number(maxMembers)
         : null,
     deadline: new Date(form.deadline).toISOString(),
   };
@@ -129,10 +131,11 @@ export const toCourseworkEditForm = (row) => ({
   auto_approve_all_students: Boolean(row.auto_approve_all_students),
   topic_source: row.topic_source || TOPIC_SOURCE_STUDENT,
   deadline: row.deadline ? row.deadline.slice(0, 16) : "",
-  max_marks: row.max_marks,
+  max_marks: row.max_marks ?? "",
   sample_file: null,
   sample_file_url: row.sample_file_url || "",
   sample_file_name: row.sample_file_name || "",
+  sample_file_title: row.sample_file_title || "",
 });
 
 export const saveCourseworkRequest = async (api, endpoints, { editingId, form, maxMarks }) => {
@@ -143,5 +146,6 @@ export const saveCourseworkRequest = async (api, endpoints, { editingId, form, m
   if (!sampleFile) return { data };
   const body = new FormData();
   body.append("sample_file", sampleFile);
+  if (form.sample_file_title) body.append("sample_file_title", form.sample_file_title);
   return api.patch(`${endpoints.courseworks}${data.id}/`, body);
 };

@@ -33,7 +33,7 @@ class Coursework(TimeStampedModel):
     auto_approve_all_students = models.BooleanField(default=False)
     topic_source = models.CharField(max_length=20, choices=TopicSource.choices, default=TopicSource.STUDENT)
     deadline = models.DateTimeField()
-    max_marks = models.DecimalField(max_digits=6, decimal_places=2)
+    max_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     sample_file = models.FileField(
         upload_to=coursework_sample_path,
         validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx", "zip", "ppt", "pptx", "xlsx", "xls", "png", "jpg", "jpeg"])],
@@ -43,6 +43,7 @@ class Coursework(TimeStampedModel):
     sample_file_url = models.URLField(max_length=500, blank=True)
     sample_storage_key = models.CharField(max_length=255, blank=True)
     sample_original_name = models.CharField(max_length=255, blank=True)
+    sample_file_title = models.CharField(max_length=200, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_courseworks")
 
     class Meta:

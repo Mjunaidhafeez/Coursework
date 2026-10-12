@@ -58,7 +58,9 @@ const AssessmentList = ({ grouped = [], emptyText = "No assessments found.", onE
                       {(item.submission_type === "group" || item.submission_type === "both") && item.max_group_members ? (
                         <Chip size="small" variant="outlined" label={`${item.max_group_members} members max`} />
                       ) : null}
-                      <Chip size="small" variant="outlined" label={`${item.max_marks ?? "-"} marks`} />
+                      {item.max_marks != null && item.max_marks !== "" ? (
+                        <Chip size="small" variant="outlined" label={`${item.max_marks} marks`} />
+                      ) : null}
                       <Chip size="small" variant="outlined" label={`Due ${formatDate(item.deadline)}`} />
                       {shouldAllotTopics(item) ? (
                         <Chip
