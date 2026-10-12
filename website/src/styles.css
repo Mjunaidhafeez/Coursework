@@ -247,6 +247,19 @@ a { color: var(--site-primary); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.person-row.is-stacked {
+  align-items: flex-start;
+  min-height: 88px;
+  max-height: none;
+  padding: 8px;
+}
+.person-row.is-stacked img,
+.person-row.is-stacked .person-row-fallback {
+  margin-top: 2px;
+}
+.person-row.is-stacked .person-row-copy strong {
+  margin-bottom: 2px;
+}
 .group-card {
   background: var(--site-card);
   border: 1px solid #e6edf6;

@@ -63,6 +63,7 @@ const StudentsPage = () => {
               key={item.id}
               photo={item.photo_url}
               name={item.name}
+              stacked
               lines={[item.roll_no, item.semester, item.department]}
             />
           ))}
