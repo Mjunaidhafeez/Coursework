@@ -1,10 +1,7 @@
 import {
-  Autocomplete,
   Alert,
   Box,
   Button,
-  Checkbox,
-  Chip,
   Collapse,
   Dialog,
   DialogActions,
@@ -15,16 +12,16 @@ import {
   InputLabel,
   MenuItem,
   Select,
-  Paper,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 
 import api from "../../api/client";
+import AssessmentRequestFields from "../../components/shared/AssessmentRequestFields";
 import CompactTabs from "../../components/shared/CompactTabs";
 import ListingPage from "../../components/shared/ListingPage";
 import SearchToolbar from "../../components/shared/SearchToolbar";
@@ -317,21 +314,15 @@ const SubmitWorkPage = () => {
       }
       return false;
     });
-  const getCourseworkTypeChipColor = (type) => {
-    const value = String(type || "").toLowerCase();
-    if (value === "assignment") return "primary";
-    if (value === "quiz") return "secondary";
-    if (value === "exam") return "error";
-    if (value === "presentation") return "info";
-    if (value === "project") return "success";
-    return "default";
-  };
-  const getSubmissionModeChipColor = (mode) => {
-    const value = String(mode || "").toLowerCase();
-    if (value === "individual") return "default";
-    if (value === "group") return "warning";
-    if (value === "both") return "secondary";
-    return "default";
+  const assessmentMetaLine = (coursework) => {
+    const type = COURSEWORK_TYPE_OPTIONS.find((option) => option.value === coursework.coursework_type)?.label
+      || coursework.coursework_type
+      || "Assessment";
+    const mode = SUBMISSION_TYPE_OPTIONS.find((option) => option.value === coursework.submission_type)?.label
+      || coursework.submission_type
+      || "Individual";
+    const teachers = (coursework.teacher_names || []).join(", ") || "—";
+    return `${type} · ${mode} · Due ${formatDate(coursework.deadline)} · ${teachers}`;
   };
 
   const uploadSingleRow = async (submission, { showSuccess = true, reloadAfter = true } = {}) => {
@@ -728,531 +719,300 @@ const SubmitWorkPage = () => {
         <Box>
           {(() => {
             const section = viewMode === "opening"
-              ? { key: "opening", title: "Open Assessment", grouped: openingGrouped, tone: "#f8fbff", border: "#dbeafe" }
-              : { key: "closed", title: "Closed Assessment", grouped: closedGrouped, tone: "#fff8f0", border: "#ffe0b2" };
+              ? { key: "opening", title: "Open assessments", grouped: openingGrouped, tone: "#f8fbff", border: "#dbeafe" }
+              : { key: "closed", title: "Closed assessments", grouped: closedGrouped, tone: "#fff8f0", border: "#ffe0b2" };
             const isClosedView = section.key === "closed";
             return (
-              <Paper variant="outlined" sx={{ p: 1, bgcolor: section.tone, borderColor: section.border, maxHeight: "70vh", overflowY: "auto" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1 }}>{section.title}</Typography>
-                <Stack spacing={1}>
+              <Box sx={{ p: 1.2, bgcolor: section.tone, border: "1px solid", borderColor: section.border, borderRadius: 2, maxHeight: "70vh", overflowY: "auto" }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.2 }}>{section.title}</Typography>
+                <Stack spacing={1.4}>
                   {section.grouped.map(([courseTitle, items]) => {
                     const courseKey = `${section.key}-${courseTitle}`;
                     return (
-                      <Paper key={`${section.title}-${courseTitle}`} variant="outlined" sx={{ p: 0.9, borderColor: "primary.main", bgcolor: "#fff" }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{courseTitle}</Typography>
-                      <IconButton size="small" onClick={() => toggleCourseSection(courseKey)}>
-                        {openCourseSections[courseKey] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
-                      </IconButton>
-                    </Stack>
-                    <Collapse in={Boolean(openCourseSections[courseKey])} timeout="auto" unmountOnExit>
-                      <Stack spacing={0.9} sx={{ mt: 0.8 }}>
-                        {items.map((coursework) => {
-                          const submission = submissionByCoursework[String(coursework.id)];
-                          const request = getRequestState(coursework.id);
-                          const additionalLimit = maxAdditionalAllowed(coursework);
-                          const canUpload = submission ? canUploadForSubmission(submission) : false;
-                          const selectedGroupObj = groups.find(
-                            (group) => String(group.id) === String(request.selectedGroup || "")
-                          );
-                          const selectedMemberCount = request.selectedGroup
-                            ? (selectedGroupObj?.members || []).filter((member) => member.accepted !== false).length
-                            : 1 + (request.newMemberIds || []).length;
-                          const blockedIdsForCoursework = blockedMemberIdsByCoursework[String(coursework.id)] || new Set();
-                          const blockedStudentsForCoursework = selectableStudents.filter((student) =>
-                            blockedIdsForCoursework.has(Number(student.id))
-                          );
-                          const selfOption = user
-                            ? {
-                                id: Number(user.id),
-                                full_name:
-                                  `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.username || "Me",
-                                username: user.username || "me",
-                                student_id: "You (pre-selected)",
-                                __self: true,
-                              }
-                            : null;
-                          const memberOptions = selfOption
-                            ? [selfOption, ...selectableStudents]
-                            : selectableStudents;
-                          return (
-                            <Paper key={coursework.id} variant="outlined" sx={{ p: 0.9, borderColor: "#cbd5e1" }}>
-                              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                <Button
-                                  size="small"
-                                  variant="text"
-                                  onClick={() => toggleCourseworkSection(coursework, submission)}
-                                  sx={{ textTransform: "none", fontWeight: 700, p: 0 }}
-                                >
-                                  {coursework.title}
-                                </Button>
-                                <IconButton size="small" onClick={() => toggleCourseworkSection(coursework, submission)}>
-                                  {openCourseworkSections[String(coursework.id)] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
-                                </IconButton>
-                              </Stack>
-                              <Collapse in={Boolean(openCourseworkSections[String(coursework.id)])} timeout="auto" unmountOnExit>
-                                <Stack spacing={1} sx={{ mt: 0.9 }}>
-                                  <Stack direction={{ xs: "column", md: "row" }} spacing={0.8}>
-                                    <Chip
+                      <Box key={`${section.title}-${courseTitle}`} sx={{ p: 1.1, borderRadius: 1.5, bgcolor: "#fff", border: "1px solid #dbeafe" }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#13377a" }}>{courseTitle}</Typography>
+                          <IconButton size="small" onClick={() => toggleCourseSection(courseKey)}>
+                            {openCourseSections[courseKey] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
+                          </IconButton>
+                        </Stack>
+                        <Collapse in={Boolean(openCourseSections[courseKey])} timeout="auto" unmountOnExit>
+                          <Stack spacing={1} sx={{ mt: 1 }}>
+                            {items.map((coursework) => {
+                              const submission = submissionByCoursework[String(coursework.id)];
+                              const request = getRequestState(coursework.id);
+                              const additionalLimit = maxAdditionalAllowed(coursework);
+                              const canUpload = submission ? canUploadForSubmission(submission) : false;
+                              const blockedIdsForCoursework = blockedMemberIdsByCoursework[String(coursework.id)] || new Set();
+                              const blockedStudentsForCoursework = selectableStudents.filter((student) =>
+                                blockedIdsForCoursework.has(Number(student.id))
+                              );
+                              const selfOption = user
+                                ? {
+                                    id: Number(user.id),
+                                    full_name: `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.username || "Me",
+                                    username: user.username || "me",
+                                    student_id: "You (pre-selected)",
+                                    __self: true,
+                                  }
+                                : null;
+                              const memberOptions = selfOption ? [selfOption, ...selectableStudents] : selectableStudents;
+                              const stage = submission ? getSubmissionStageMeta(submission) : null;
+                              const requestFields = (
+                                <AssessmentRequestFields
+                                  courseworkId={coursework.id}
+                                  topic={request.topic}
+                                  onTopicChange={(topic) => updateRequestState(coursework.id, { topic })}
+                                  allowsGroup={allowsGroup(coursework)}
+                                  groups={groups}
+                                  selectedGroup={request.selectedGroup}
+                                  onGroupChange={(selectedGroup) => updateRequestState(coursework.id, { selectedGroup, newMemberIds: [] })}
+                                  memberOptions={memberOptions}
+                                  selectedMemberIds={request.newMemberIds || []}
+                                  onMembersChange={(newMemberIds) => updateRequestState(coursework.id, { newMemberIds })}
+                                  blockedIds={blockedIdsForCoursework}
+                                  blockedStudents={blockedStudentsForCoursework}
+                                  additionalLimit={additionalLimit}
+                                  selfOption={selfOption}
+                                  notify={notify}
+                                />
+                              );
+                              return (
+                                <Box key={coursework.id} sx={{ p: 1.2, borderRadius: 1.5, border: "1px solid #e2e8f0", bgcolor: "#fcfdff" }}>
+                                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                    <Button
                                       size="small"
-                                      color={getCourseworkTypeChipColor(coursework.coursework_type)}
-                                      label={`Assessment Type: ${coursework.coursework_type || "-"}`}
-                                    />
-                                    <Chip
-                                      size="small"
-                                      color={getSubmissionModeChipColor(coursework.submission_type)}
-                                      label={`Submission Mode: ${coursework.submission_type || "-"}`}
-                                    />
-                                    <Chip size="small" color={isClosedView ? "warning" : "info"} label={`Deadline: ${formatDate(coursework.deadline)}`} />
-                                    <Chip size="small" label={`Teachers: ${(coursework.teacher_names || []).join(", ") || "-"}`} />
-                                    {shouldAllotTopics(coursework) ? (
-                                      <Chip size="small" color="info" variant="outlined" label="Teacher allotted topic" />
-                                    ) : null}
-                                    {coursework.sample_file_url ? (
-                                      <Chip
-                                        size="small"
-                                        clickable
-                                        component="a"
-                                        href={toAbsoluteMediaUrl(coursework.sample_file_url)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        color="success"
-                                        variant="outlined"
-                                        label={coursework.sample_file_name ? `Sample: ${coursework.sample_file_name}` : "Sample file"}
-                                      />
-                                    ) : null}
+                                      variant="text"
+                                      onClick={() => toggleCourseworkSection(coursework, submission)}
+                                      sx={{ textTransform: "none", fontWeight: 800, p: 0, color: "#16356f" }}
+                                    >
+                                      {coursework.title}
+                                    </Button>
+                                    <IconButton size="small" onClick={() => toggleCourseworkSection(coursework, submission)}>
+                                      {openCourseworkSections[String(coursework.id)] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
+                                    </IconButton>
                                   </Stack>
-                                  {!submission && isClosedView ? (
-                                    <Paper variant="outlined" sx={{ p: 1, borderColor: "#ffe0b2", bgcolor: "#fff8f0" }}>
-                                      <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }}>
-                                        <Chip size="small" color="warning" label="Closed" />
-                                        <Typography variant="body2" color="text.secondary">
-                                          Deadline passed. No request/submission was created for this assessment.
-                                        </Typography>
-                                      </Stack>
-                                    </Paper>
-                                  ) : !submission && shouldAllotTopics(coursework) ? (
-                                    <Paper variant="outlined" sx={{ p: 1, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
-                                      <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.7 }}>
-                                        Waiting for your teacher to allot a topic
+                                  <Collapse in={Boolean(openCourseworkSections[String(coursework.id)])} timeout="auto" unmountOnExit>
+                                    <Stack spacing={1.2} sx={{ mt: 1 }}>
+                                      <Typography variant="caption" color="text.secondary">
+                                        {assessmentMetaLine(coursework)}
+                                        {shouldAllotTopics(coursework) ? " · Teacher allots the topic" : ""}
                                       </Typography>
-                                      <Typography variant="body2" color="text.secondary">
-                                        {coursework.topic_source === "teacher_group"
-                                          ? "Your teacher will give each group a different topic. After that you can upload your work here."
-                                          : "Your teacher will give each student a different topic. After that you can upload your work here."}
-                                      </Typography>
-                                    </Paper>
-                                  ) : !submission ? (
-                                    <Paper variant="outlined" sx={{ p: 1, borderColor: "#dbeafe", bgcolor: "#f8fbff" }}>
-                                      <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.7 }}>Step 1: Send Request (Topic + Members/Group)</Typography>
-                                      <Stack spacing={0.9}>
-                                        <TextField
+                                      {coursework.sample_file_url ? (
+                                        <Button
                                           size="small"
-                                          label="Topic"
-                                          value={request.topic}
-                                          onChange={(e) => updateRequestState(coursework.id, { topic: e.target.value })}
-                                        />
-                                        {allowsGroup(coursework) && (
-                                          <Fragment>
-                                            <FormControl size="small">
-                                              <InputLabel id={`existing-group-${coursework.id}`}>Existing Group</InputLabel>
-                                              <Select
-                                                labelId={`existing-group-${coursework.id}`}
-                                                label="Existing Group"
-                                                value={request.selectedGroup}
-                                                onChange={(e) => updateRequestState(coursework.id, { selectedGroup: e.target.value, newMemberIds: [] })}
-                                              >
-                                                <MenuItem value="">
-                                                  <em>Select Group</em>
-                                                </MenuItem>
-                                                {groups.map((group) => (
-                                                  <MenuItem key={group.id} value={String(group.id)}>{group.name}</MenuItem>
-                                                ))}
-                                              </Select>
-                                            </FormControl>
-                                            {!request.selectedGroup && (
-                                              <Autocomplete
-                                                multiple
-                                                size="small"
-                                                options={memberOptions}
-                                                value={selectableStudents.filter((student) =>
-                                                  request.newMemberIds.includes(student.id)
-                                                )}
-                                                disableCloseOnSelect
-                                                fullWidth
-                                                getOptionLabel={(option) =>
-                                                  option.full_name || option.username || String(option.id)
-                                                }
-                                                getOptionDisabled={(option) =>
-                                                  Boolean(option.__self) ||
-                                                  Boolean(blockedMemberIdsByCoursework[String(coursework.id)]?.has(Number(option.id)))
-                                                }
-                                                isOptionEqualToValue={(option, value) => Number(option.id) === Number(value.id)}
-                                                onChange={(_, selectedOptions) => {
-                                                  const next = selectedOptions
-                                                    .filter((option) => !option.__self)
-                                                    .map((option) => Number(option.id));
-                                                  if (additionalLimit !== null && next.length > additionalLimit) {
-                                                    notify(`Only ${additionalLimit} additional member(s) allowed`, "warning");
-                                                    return;
-                                                  }
-                                                  updateRequestState(coursework.id, { newMemberIds: next });
-                                                }}
-                                                ListboxProps={{ style: { maxHeight: 250 } }}
-                                                renderTags={(value, getTagProps) => {
-                                                  const tags = [];
-                                                  if (selfOption) {
-                                                    tags.push(
-                                                      <Chip
-                                                        key="self-preselected"
-                                                        size="small"
-                                                        color="info"
-                                                        variant="outlined"
-                                                        label={selfOption.full_name}
-                                                        disabled
-                                                      />
-                                                    );
-                                                  }
-                                                  value.forEach((option, index) => {
-                                                    tags.push(
-                                                      <Chip
-                                                        {...getTagProps({ index })}
-                                                        key={option.id}
-                                                        size="small"
-                                                        color="primary"
-                                                        variant="outlined"
-                                                        label={option.full_name || option.username}
-                                                      />
-                                                    );
-                                                  });
-                                                  return tags;
-                                                }}
-                                                renderOption={(props, option, { selected }) => {
-                                                  const isSelfOption = Boolean(option.__self);
-                                                  const alreadySent = Boolean(
-                                                    blockedMemberIdsByCoursework[String(coursework.id)]?.has(Number(option.id))
-                                                  );
-                                                  return (
-                                                    <li
-                                                      {...props}
-                                                      style={{
-                                                        ...props.style,
-                                                        backgroundColor: (selected || isSelfOption) ? "rgba(25, 118, 210, 0.10)" : props.style?.backgroundColor,
-                                                        borderBottom: "1px solid rgba(15, 23, 42, 0.06)",
-                                                      }}
-                                                    >
-                                                      <Checkbox
-                                                        size="small"
-                                                        checked={isSelfOption ? true : selected}
-                                                        disabled={alreadySent || isSelfOption}
-                                                        sx={{ mr: 0.6, p: 0.3 }}
-                                                      />
-                                                      <Box sx={{ py: 0.25 }}>
-                                                        <Typography variant="body2" sx={{ fontWeight: (selected || isSelfOption) ? 700 : 600 }}>
-                                                          {option.full_name || option.username}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                          {isSelfOption
-                                                            ? "You (pre-selected)"
-                                                            : alreadySent
-                                                            ? "Already sent"
-                                                            : (option.student_id || option.username)}
-                                                        </Typography>
-                                                      </Box>
-                                                    </li>
-                                                  );
-                                                }}
-                                                renderInput={(params) => (
-                                                  <TextField
-                                                    {...params}
-                                                    label="New Members"
-                                                    placeholder="Search and select members"
-                                                    helperText={`Selected: ${request.newMemberIds.length}${additionalLimit !== null ? ` / ${additionalLimit}` : ""}`}
-                                                  />
-                                                )}
-                                                sx={{
-                                                  "& .MuiOutlinedInput-root": {
-                                                    minHeight: 44,
-                                                    alignItems: "flex-start",
-                                                  },
-                                                  "& .MuiAutocomplete-tag": {
-                                                    mt: 0.35,
-                                                    mb: 0.1,
-                                                  },
-                                                }}
-                                              />
-                                            )}
-                                            {!request.selectedGroup && blockedStudentsForCoursework.length > 0 && (
-                                              <Alert severity="warning">
-                                                {blockedStudentsForCoursework.length} student(s) already have a request in this assessment and are disabled in the list.
-                                              </Alert>
-                                            )}
-                                            <Alert severity="info">
-                                              You are included by default. Max members: {coursework.max_group_members || "N/A"}.
-                                              {additionalLimit !== null ? ` You can pick ${additionalLimit} additional member(s).` : ""}
-                                            </Alert>
-                                          </Fragment>
-                                        )}
-                                        <Button variant="contained" onClick={() => handleSendRequest(coursework)}>
-                                          Send Request
+                                          variant="text"
+                                          href={toAbsoluteMediaUrl(coursework.sample_file_url)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          sx={{ alignSelf: "flex-start", px: 0, textTransform: "none" }}
+                                        >
+                                          {coursework.sample_file_name ? `Sample: ${coursework.sample_file_name}` : "View sample file"}
                                         </Button>
-                                      </Stack>
-                                    </Paper>
-                                  ) : (
-                                    <Paper variant="outlined" sx={{ p: 1, borderColor: "#cfe8d8", bgcolor: "#f7fbf8" }}>
-                                      <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.7 }}>Current Submission Status</Typography>
-                                      <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} alignItems={{ md: "center" }}>
-                                        <Chip size="small" color={getSubmissionStageMeta(submission).color} label={getSubmissionStageMeta(submission).label} />
-                                        <Chip size="small" label={`Approval: ${submission.approval_status || "pending"}`} />
-                                        <Chip size="small" label={`File: ${hasUploadedFiles(submission) ? "Uploaded" : "Not Uploaded"}`} />
-                                        <Chip
-                                          size="small"
-                                          label={
-                                            submission.is_marked
-                                              ? `Marked (${formatMarks(submission.obtained_marks)}/${formatMarks(coursework?.max_marks)})`
-                                              : "Not Marked"
-                                          }
-                                        />
-                                        <Chip size="small" color="secondary" label={`Submitted By: ${submission.submitted_by_name || "-"}`} />
-                                        <Chip
-                                          size="small"
-                                          color="secondary"
-                                          variant="outlined"
-                                          label={`Last File Updated By: ${submission.last_file_updated_by_name || "-"}`}
-                                        />
-                                        <Chip
-                                          size="small"
-                                          variant="outlined"
-                                          label={`Last File Updated: ${submission.last_file_updated_at ? formatDate(submission.last_file_updated_at) : "-"}`}
-                                        />
-                                      </Stack>
-                                      <Stack spacing={0.8} sx={{ mt: 1 }}>
-                                        <Typography variant="body2"><strong>Topic:</strong> {submission.topic || "-"}</Typography>
-                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>Members</Typography>
-                                        {membersLoadingBySubmission[submission.id] ? (
-                                          <Typography variant="body2" color="text.secondary">Loading members...</Typography>
-                                        ) : (
-                                          <StudentMemberList members={membersBySubmission[submission.id] || []} compact />
-                                        )}
-                                      </Stack>
-                                      {!submission.is_marked && !shouldAllotTopics(coursework) && (
-                                        <Paper variant="outlined" sx={{ mt: 1, p: 1, borderColor: "#bfdbfe", bgcolor: "#f8fbff" }}>
-                                          <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} alignItems={{ md: "center" }} sx={{ mb: 0.8 }}>
-                                            <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
-                                              Edit Topic / Group Request
-                                            </Typography>
-                                            <Button
-                                              size="small"
-                                              variant={editingRequestByCoursework[String(coursework.id)] ? "contained" : "outlined"}
-                                              onClick={() => {
-                                                const key = String(coursework.id);
-                                                const nextOpen = !editingRequestByCoursework[key];
-                                                if (nextOpen) {
-                                                  updateRequestState(coursework.id, buildRequestStateFromSubmission(submission));
-                                                }
-                                                setEditingRequestByCoursework((prev) => ({
-                                                  ...prev,
-                                                  [key]: nextOpen,
-                                                }));
-                                              }}
-                                            >
-                                              {editingRequestByCoursework[String(coursework.id)] ? "Close Edit" : "Edit Request"}
-                                            </Button>
-                                          </Stack>
-                                          <Collapse in={Boolean(editingRequestByCoursework[String(coursework.id)])} timeout="auto" unmountOnExit>
-                                            <Stack spacing={0.9}>
-                                              <Stack direction={{ xs: "column", md: "row" }} spacing={0.7}>
-                                                <Chip
-                                                  size="small"
-                                                  color="info"
-                                                  variant="outlined"
-                                                  label={`Topic: ${String(request.topic || "").trim() || "-"}`}
-                                                />
-                                                <Chip
-                                                  size="small"
-                                                  color={request.selectedGroup ? "primary" : "default"}
-                                                  variant="outlined"
-                                                  label={`Group: ${request.selectedGroup ? (selectedGroupObj?.name || "Selected Group") : "Not selected"}`}
-                                                />
-                                                <Chip
-                                                  size="small"
-                                                  color="secondary"
-                                                  variant="outlined"
-                                                  label={`Members: ${selectedMemberCount}`}
-                                                />
-                                              </Stack>
-                                              <TextField
-                                                size="small"
-                                                label="Topic"
-                                                value={request.topic}
-                                                onChange={(e) => updateRequestState(coursework.id, { topic: e.target.value })}
-                                              />
-                                              {allowsGroup(coursework) && (
-                                                <FormControl size="small">
-                                                  <InputLabel id={`edit-existing-group-${coursework.id}`}>Existing Group</InputLabel>
-                                                  <Select
-                                                    labelId={`edit-existing-group-${coursework.id}`}
-                                                    label="Existing Group"
-                                                    value={request.selectedGroup}
-                                                    onChange={(e) =>
-                                                      updateRequestState(coursework.id, { selectedGroup: e.target.value, newMemberIds: [] })
-                                                    }
-                                                  >
-                                                    <MenuItem value="">
-                                                      <em>Select Group</em>
-                                                    </MenuItem>
-                                                    {groups.map((group) => (
-                                                      <MenuItem key={group.id} value={String(group.id)}>{group.name}</MenuItem>
-                                                    ))}
-                                                  </Select>
-                                                </FormControl>
-                                              )}
-                                              {!request.selectedGroup && allowsGroup(coursework) && (
-                                                <Autocomplete
-                                                  multiple
-                                                  size="small"
-                                                  options={selectableStudents}
-                                                  value={selectableStudents.filter((student) => request.newMemberIds.includes(student.id))}
-                                                  disableCloseOnSelect
-                                                  fullWidth
-                                                  getOptionLabel={(option) => option.full_name || option.username || String(option.id)}
-                                                  isOptionEqualToValue={(option, value) => Number(option.id) === Number(value.id)}
-                                                  onChange={(_, selectedOptions) => {
-                                                    const next = selectedOptions.map((option) => Number(option.id));
-                                                    if (additionalLimit !== null && next.length > additionalLimit) {
-                                                      notify(`Only ${additionalLimit} additional member(s) allowed`, "warning");
-                                                      return;
-                                                    }
-                                                    updateRequestState(coursework.id, { newMemberIds: next });
-                                                  }}
-                                                  ListboxProps={{ style: { maxHeight: 250 } }}
-                                                  renderInput={(params) => (
-                                                    <TextField {...params} label="New Members" placeholder="Search and select members" />
-                                                  )}
-                                                />
-                                              )}
-                                              <Button
-                                                size="small"
-                                                variant="contained"
-                                                onClick={() => handleUpdateRequest(coursework, submission)}
-                                              >
-                                                Save Request Changes
-                                              </Button>
-                                            </Stack>
-                                          </Collapse>
-                                        </Paper>
-                                      )}
-                                      <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} sx={{ mt: 1 }}>
-                                        {canUpload ? (
-                                          <Fragment>
-                                            <TextField
-                                              type="file"
-                                              size="small"
-                                              inputProps={{ accept: ".pdf,.docx,.zip,.pptx", multiple: true }}
-                                              onChange={(e) => {
-                                                const files = Array.from(e.target.files || []);
-                                                const tooBig = oversizedFileNames(files);
-                                                if (tooBig.length) {
-                                                  notify(`${tooBig.join(", ")} is larger than 25 MB`, "error");
-                                                  e.target.value = "";
-                                                  return;
-                                                }
-                                                setRowFiles((prev) => ({ ...prev, [submission.id]: files }));
-                                              }}
-                                            />
-                                            <Button
-                                              size="small"
-                                              variant="contained"
-                                              disabled={!rowFiles[submission.id]?.length || rowUploading[submission.id]}
-                                              onClick={() => uploadSingleRow(submission)}
-                                            >
-                                              {rowUploading[submission.id] ? "Uploading..." : "Upload Files"}
-                                            </Button>
-                                            {!!rowFiles[submission.id]?.length && (
-                                              <Chip size="small" variant="outlined" label={`Selected: ${rowFiles[submission.id].length}`} />
-                                            )}
-                                            <Typography variant="caption" color="text.secondary">Max 25 MB each, multiple files allowed</Typography>
-                                          </Fragment>
-                                        ) : (
-                                          <Chip
-                                            size="small"
-                                            variant="outlined"
-                                            label={isSubmissionDueLocked(coursework) ? "Due-time locked" : "Upload unavailable"}
-                                          />
-                                        )}
-                                        {(submission.approval_status === "pending" || submission.approval_status === "rejected") && (
-                                          <Button size="small" color="error" onClick={() => remove(submission.id)}>
-                                            Delete Request
-                                          </Button>
-                                        )}
-                                      </Stack>
-                                      <Stack spacing={0.6} sx={{ mt: 0.8 }}>
-                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                          Uploaded Files
+                                      ) : null}
+                                      {!submission && isClosedView ? (
+                                        <Typography variant="body2" color="text.secondary">
+                                          Deadline passed. No request was sent for this assessment.
                                         </Typography>
-                                        {getSubmissionFiles(submission).length ? (
-                                          getSubmissionFiles(submission).map((fileItem) => {
-                                            const deleteKey = `${submission.id}-${fileItem.id}`;
-                                            return (
-                                              <Stack
-                                                key={fileItem.id}
-                                                direction={{ xs: "column", md: "row" }}
-                                                spacing={0.8}
-                                                alignItems={{ md: "center" }}
-                                              >
-                                                <Typography variant="caption" sx={{ flex: 1 }}>
-                                                  {fileItem.file_name || `File #${fileItem.id}`}
-                                                </Typography>
+                                      ) : !submission && shouldAllotTopics(coursework) ? (
+                                        <Box sx={{ p: 1.1, borderRadius: 1.2, bgcolor: "#f8fbff", border: "1px solid #dbeafe" }}>
+                                          <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.4 }}>
+                                            Waiting for your teacher to allot a topic
+                                          </Typography>
+                                          <Typography variant="body2" color="text.secondary">
+                                            {coursework.topic_source === "teacher_group"
+                                              ? "Your teacher will give each group a topic. After that you can upload your work here."
+                                              : "Your teacher will give each student a topic. After that you can upload your work here."}
+                                          </Typography>
+                                        </Box>
+                                      ) : !submission ? (
+                                        <Box sx={{ p: 1.2, borderRadius: 1.2, bgcolor: "#f8fbff", border: "1px solid #dbeafe" }}>
+                                          <Typography variant="body2" sx={{ fontWeight: 800, mb: 1 }}>Send request</Typography>
+                                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                                            Add the topic{allowsGroup(coursework) ? ", then pick a group or members" : ""}. You are included by default
+                                            {coursework.max_group_members ? ` · max ${coursework.max_group_members} members` : ""}.
+                                          </Typography>
+                                          {requestFields}
+                                          <Button variant="contained" sx={{ mt: 1.1 }} onClick={() => handleSendRequest(coursework)}>
+                                            Send request
+                                          </Button>
+                                        </Box>
+                                      ) : (
+                                        <Stack spacing={1.2}>
+                                          <Box sx={{ p: 1.2, borderRadius: 1.2, bgcolor: "#f7fbf8", border: "1px solid #cfe8d8" }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 800, mb: 0.6 }}>Submission</Typography>
+                                            <Typography variant="body2"><strong>Topic:</strong> {submission.topic || "—"}</Typography>
+                                            <Typography variant="body2" sx={{ mt: 0.3 }}>
+                                              <strong>Status:</strong> {stage?.label || "—"}
+                                              {" · "}
+                                              {hasUploadedFiles(submission) ? "File uploaded" : "No file yet"}
+                                              {" · "}
+                                              {submission.is_marked
+                                                ? `Marked ${formatMarks(submission.obtained_marks)}/${formatMarks(coursework?.max_marks)}`
+                                                : "Not marked"}
+                                            </Typography>
+                                            {submission.last_file_updated_at ? (
+                                              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.4 }}>
+                                                Last file update {formatDate(submission.last_file_updated_at)}
+                                                {submission.last_file_updated_by_name ? ` by ${submission.last_file_updated_by_name}` : ""}
+                                              </Typography>
+                                            ) : null}
+                                            <Box sx={{ mt: 1 }}>
+                                              <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.4 }}>Members</Typography>
+                                              {membersLoadingBySubmission[submission.id] ? (
+                                                <Typography variant="body2" color="text.secondary">Loading members...</Typography>
+                                              ) : (
+                                                <StudentMemberList members={membersBySubmission[submission.id] || []} compact />
+                                              )}
+                                            </Box>
+                                            <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                                              {!submission.is_marked && !shouldAllotTopics(coursework) ? (
                                                 <Button
                                                   size="small"
-                                                  disabled={!canUpload || fileItem.is_legacy}
+                                                  variant={editingRequestByCoursework[String(coursework.id)] ? "contained" : "outlined"}
                                                   onClick={() => {
-                                                    setRenamingFile({ submission, fileItem });
-                                                    setRenameTitle(fileItem.title || fileItem.file_name || "");
+                                                    const key = String(coursework.id);
+                                                    const nextOpen = !editingRequestByCoursework[key];
+                                                    if (nextOpen) {
+                                                      updateRequestState(coursework.id, buildRequestStateFromSubmission(submission));
+                                                    }
+                                                    setEditingRequestByCoursework((prev) => ({ ...prev, [key]: nextOpen }));
                                                   }}
                                                 >
-                                                  Rename
+                                                  {editingRequestByCoursework[String(coursework.id)] ? "Close edit" : "Edit request"}
+                                                </Button>
+                                              ) : null}
+                                              {(submission.approval_status === "pending" || submission.approval_status === "rejected") ? (
+                                                <Button size="small" color="error" onClick={() => remove(submission.id)}>
+                                                  Delete request
+                                                </Button>
+                                              ) : null}
+                                            </Stack>
+                                            <Collapse in={Boolean(editingRequestByCoursework[String(coursework.id)])} timeout="auto" unmountOnExit>
+                                              <Box sx={{ mt: 1 }}>
+                                                {requestFields}
+                                                <Button
+                                                  size="small"
+                                                  variant="contained"
+                                                  sx={{ mt: 1 }}
+                                                  onClick={() => handleUpdateRequest(coursework, submission)}
+                                                >
+                                                  Save request
+                                                </Button>
+                                              </Box>
+                                            </Collapse>
+                                          </Box>
+                                          <Box sx={{ p: 1.2, borderRadius: 1.2, border: "1px dashed #93c5fd", bgcolor: "#f8fbff" }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 800 }}>Upload work</Typography>
+                                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                                              PDF, DOCX, ZIP or PPTX. Max 25 MB each.
+                                            </Typography>
+                                            {canUpload ? (
+                                              <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }}>
+                                                <Button component="label" size="small" variant="outlined">
+                                                  Choose files
+                                                  <input
+                                                    hidden
+                                                    type="file"
+                                                    accept=".pdf,.docx,.zip,.pptx"
+                                                    multiple
+                                                    onChange={(e) => {
+                                                      const files = Array.from(e.target.files || []);
+                                                      const tooBig = oversizedFileNames(files);
+                                                      if (tooBig.length) {
+                                                        notify(`${tooBig.join(", ")} is larger than 25 MB`, "error");
+                                                        e.target.value = "";
+                                                        return;
+                                                      }
+                                                      setRowFiles((prev) => ({ ...prev, [submission.id]: files }));
+                                                    }}
+                                                  />
                                                 </Button>
                                                 <Button
                                                   size="small"
-                                                  onClick={() => openSubmissionFilePreview(submission, notify, fileItem)}
+                                                  variant="contained"
+                                                  disabled={!rowFiles[submission.id]?.length || rowUploading[submission.id]}
+                                                  onClick={() => uploadSingleRow(submission)}
                                                 >
-                                                  Preview
+                                                  {rowUploading[submission.id] ? "Uploading..." : "Upload"}
                                                 </Button>
-                                                <Button
-                                                  size="small"
-                                                  color="error"
-                                                  disabled={!canUpload || fileItem.is_legacy || rowFileDeleting[deleteKey]}
-                                                  onClick={() => !fileItem.is_legacy && deleteSubmissionFile(submission, fileItem.id)}
-                                                >
-                                                  {fileItem.is_legacy ? "Delete N/A" : rowFileDeleting[deleteKey] ? "Deleting..." : "Delete"}
-                                                </Button>
+                                                {rowFiles[submission.id]?.length ? (
+                                                  <Typography variant="caption" color="text.secondary">
+                                                    {rowFiles[submission.id].length} file(s) selected
+                                                  </Typography>
+                                                ) : null}
                                               </Stack>
-                                            );
-                                          })
-                                        ) : (
-                                          <Typography variant="caption" color="text.secondary">
-                                            No uploaded files yet.
-                                          </Typography>
-                                        )}
-                                      </Stack>
-                                    </Paper>
-                                  )}
-                                </Stack>
-                              </Collapse>
-                            </Paper>
-                          );
-                        })}
-                      </Stack>
-                    </Collapse>
-                  </Paper>
+                                            ) : (
+                                              <Typography variant="body2" color="text.secondary">
+                                                {isSubmissionDueLocked(coursework)
+                                                  ? "Upload is locked because the due time has passed."
+                                                  : "Upload opens after the teacher approves this request."}
+                                              </Typography>
+                                            )}
+                                            <Stack spacing={0.6} sx={{ mt: 1 }}>
+                                              <Typography variant="body2" sx={{ fontWeight: 700 }}>Files</Typography>
+                                              {getSubmissionFiles(submission).length ? (
+                                                getSubmissionFiles(submission).map((fileItem) => {
+                                                  const deleteKey = `${submission.id}-${fileItem.id}`;
+                                                  return (
+                                                    <Stack
+                                                      key={fileItem.id}
+                                                      direction={{ xs: "column", sm: "row" }}
+                                                      spacing={0.8}
+                                                      alignItems={{ sm: "center" }}
+                                                    >
+                                                      <Typography variant="body2" sx={{ flex: 1 }}>
+                                                        {fileItem.file_name || `File #${fileItem.id}`}
+                                                      </Typography>
+                                                      <Button
+                                                        size="small"
+                                                        disabled={!canUpload || fileItem.is_legacy}
+                                                        onClick={() => {
+                                                          setRenamingFile({ submission, fileItem });
+                                                          setRenameTitle(fileItem.title || fileItem.file_name || "");
+                                                        }}
+                                                      >
+                                                        Rename
+                                                      </Button>
+                                                      <Button
+                                                        size="small"
+                                                        onClick={() => openSubmissionFilePreview(submission, notify, fileItem)}
+                                                      >
+                                                        Preview
+                                                      </Button>
+                                                      <Button
+                                                        size="small"
+                                                        color="error"
+                                                        disabled={!canUpload || fileItem.is_legacy || rowFileDeleting[deleteKey]}
+                                                        onClick={() => !fileItem.is_legacy && deleteSubmissionFile(submission, fileItem.id)}
+                                                      >
+                                                        {fileItem.is_legacy ? "Delete N/A" : rowFileDeleting[deleteKey] ? "Deleting..." : "Delete"}
+                                                      </Button>
+                                                    </Stack>
+                                                  );
+                                                })
+                                              ) : (
+                                                <Typography variant="caption" color="text.secondary">No files uploaded yet.</Typography>
+                                              )}
+                                            </Stack>
+                                          </Box>
+                                        </Stack>
+                                      )}
+                                    </Stack>
+                                  </Collapse>
+                                </Box>
+                              );
+                            })}
+                          </Stack>
+                        </Collapse>
+                      </Box>
                     );
                   })}
                   {!section.grouped.length && (
                     <Typography variant="body2" color="text.secondary">No assessment found.</Typography>
                   )}
                 </Stack>
-              </Paper>
+              </Box>
             );
           })()}
         </Box>

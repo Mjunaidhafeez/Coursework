@@ -29,7 +29,7 @@ import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
 import CompactTabs from "../../components/shared/CompactTabs";
@@ -48,6 +48,7 @@ import { resolveSubmissionMembers } from "../../utils/submissionMembers";
 import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
 import { csvSafe, downloadTextFile, fileSafe } from "../../utils/export";
 import { confirmDelete } from "../../utils/confirm";
+import { leadIdFromGroup } from "../../utils/groupForm";
 
 const compareByRollNo = (a, b) => {
   const rollA = String(a.student_roll_no || a.rollNo || "").trim();
@@ -94,33 +95,91 @@ const STATUS_CHIP = {
   rejected: { label: "Rejected", bgcolor: "#fee2e2", color: "#b91c1c" },
 };
 
+const acceptedGroupMembers = (group) =>
+  (group?.members || []).filter((member) => member.accepted !== false);
+
 const getRowMemberCount = (item, groupsById = {}) => {
-  if (!item || item.is_topic_not_submitted) return 0;
+  if (!item) return 0;
+  if (item.group) {
+    return (
+      (item.group_member_rows || []).length ||
+      (item.group_member_ids || []).length ||
+      acceptedGroupMembers(groupsById[String(item.group)]).length ||
+      0
+    );
+  }
+  if (item.is_topic_not_submitted) return 0;
   return (
     (item.requested_member_details || []).length ||
     (item.requested_member_ids || []).length ||
     (item.requested_member_names || []).length ||
-    (item.group_member_rows || []).length ||
-    (item.group_member_ids || []).length ||
-    (groupsById[String(item.group)]?.members || []).filter((member) => member.accepted !== false).length ||
     0
   );
 };
 
-const isTopicOrFileSender = (item) => {
-  if (!item || item.is_topic_not_submitted) return false;
-  if (item.is_request_sender === true) return true;
-  if (item.is_request_sender === false) return false;
-  const hasTopicOrFile = Boolean(String(item.topic || "").trim() || hasSubmissionFile(item));
-  if (!hasTopicOrFile) return false;
-  const requestedIds = (item.requested_member_ids || []).map(String);
-  const studentId = String(item.student || "");
-  if (requestedIds.length && studentId && requestedIds.includes(studentId)) return false;
-  return true;
-};
+const canShowMembersButton = (item, groupsById = {}) => getRowMemberCount(item, groupsById) > 1;
 
-const canShowMembersButton = (item, groupsById = {}) =>
-  getRowMemberCount(item, groupsById) > 0 && isTopicOrFileSender(item);
+const orderApprovalRows = (rows = []) =>
+  [...rows].sort((a, b) => {
+    const aGroup = a.group ? 0 : 1;
+    const bGroup = b.group ? 0 : 1;
+    if (aGroup !== bGroup) return aGroup - bGroup;
+    if (a.group && b.group) {
+      return String(a.group_name || "").localeCompare(String(b.group_name || ""), undefined, { sensitivity: "base" });
+    }
+    return compareByRollNo(a, b);
+  });
+
+const getExpandableMemberRows = (item, groupsById = {}) => {
+  if (!item) return [];
+  const leadId = String(item.student || "");
+  const byStudent = new Map();
+  (item.group_member_rows || []).forEach((row) => {
+    const key = String(row.student || row.student_id || "");
+    if (!key || key === leadId) return;
+    byStudent.set(key, {
+      ...row,
+      force_individual_row: true,
+      is_member_expand_row: true,
+    });
+  });
+  if (item.group) {
+    acceptedGroupMembers(groupsById[String(item.group)]).forEach((member) => {
+      const key = String(member.student || "");
+      if (!key || key === leadId || byStudent.has(key)) return;
+      byStudent.set(key, {
+        id: `member-${item.coursework}-${member.student}`,
+        submission_id: null,
+        coursework: item.coursework,
+        student: member.student,
+        student_name: member.student_name || member.student_display || `Student #${member.student}`,
+        student_roll_no: member.student_roll_no || "-",
+        group: item.group,
+        group_name: item.group_name,
+        force_individual_row: true,
+        synthetic_member_row: true,
+        is_member_expand_row: true,
+        is_topic_not_submitted: true,
+      });
+    });
+  }
+  (item.requested_member_details || []).forEach((member) => {
+    const key = String(member.student_id || member.student || member.id || "");
+    if (!key || key === leadId || byStudent.has(key)) return;
+    byStudent.set(key, {
+      id: `req-${item.coursework}-${key}`,
+      submission_id: member.submission_id || null,
+      coursework: item.coursework,
+      student: member.student_id || member.student || member.id,
+      student_name: member.name || member.student_name || `Student #${key}`,
+      student_roll_no: member.roll_no || member.student_roll_no || "-",
+      force_individual_row: true,
+      synthetic_member_row: true,
+      is_member_expand_row: true,
+    });
+  });
+  return [...byStudent.values()].sort(compareByRollNo);
+};
 
 const getDisplayedSubmittedAt = (item) => {
   if (!item || item.is_topic_not_submitted) return null;
@@ -224,7 +283,25 @@ const pickRequestSender = (rows = []) =>
     return new Date(b.submitted_at || b.created_at || 0).getTime() - new Date(a.submitted_at || a.created_at || 0).getTime();
   })[0];
 
-const buildSubmissionDisplayRows = (sourceRows = []) => {
+const pickGroupLeadRow = (groupRows = [], group = {}) => {
+  const leadId = leadIdFromGroup(group);
+  if (leadId) {
+    const leadRow = groupRows.find((row) => String(row.student) === String(leadId));
+    if (leadRow) return leadRow;
+  }
+  return groupRows.find((row) => row.is_request_sender) || pickRequestSender(groupRows) || groupRows[0];
+};
+
+const pickFileSourceRow = (rows = []) =>
+  [...rows].sort((a, b) => {
+    const aFile = hasSubmissionFile(a) ? 1 : 0;
+    const bFile = hasSubmissionFile(b) ? 1 : 0;
+    if (bFile !== aFile) return bFile - aFile;
+    return new Date(b.last_file_updated_at || b.submitted_at || 0).getTime()
+      - new Date(a.last_file_updated_at || a.submitted_at || 0).getTime();
+  })[0];
+
+const buildSubmissionDisplayRows = (sourceRows = [], groupsById = {}) => {
   const nonGroupSource = sourceRows.filter((row) => !row.group);
   const collabGroups = new Map();
   nonGroupSource.forEach((row) => {
@@ -250,7 +327,8 @@ const buildSubmissionDisplayRows = (sourceRows = []) => {
     ...row,
     submission_id: row.id,
     is_request_sender: Boolean(senderByRowId.get(String(row.id))),
-  }));
+  })).sort(compareByRollNo);
+
   const groupedRowsMap = new Map();
   sourceRows
     .filter((row) => !!row.group)
@@ -260,22 +338,29 @@ const buildSubmissionDisplayRows = (sourceRows = []) => {
       groupedRowsMap.get(key).push(row);
     });
 
-  const expandedGroupRows = [];
+  const groupLeadRows = [];
   groupedRowsMap.forEach((groupRows) => {
-    const sender = pickRequestSender(groupRows);
-    const senderId = String(sender?.student || sender?.id || "");
+    const group = groupsById[String(groupRows[0].group)] || {};
+    const lead = pickGroupLeadRow(groupRows, group);
+    const fileRow = pickFileSourceRow(groupRows);
+    const topicRow = groupRows.find((row) => String(row.topic || "").trim()) || lead;
     const memberRows = groupRows.map((row) => ({ ...row, submission_id: row.id })).sort(compareByRollNo);
-    groupRows.forEach((row) => {
-      expandedGroupRows.push({
-        ...row,
-        submission_id: row.id,
-        group_member_rows: memberRows,
-        is_request_sender: String(row.student || row.id) === senderId,
-      });
+    groupLeadRows.push({
+      ...lead,
+      submission_id: lead.id,
+      topic: topicRow?.topic || lead.topic || "",
+      file: fileRow?.file ?? lead.file,
+      submitted_files: fileRow?.submitted_files || lead.submitted_files,
+      last_file_updated_at: fileRow?.last_file_updated_at || lead.last_file_updated_at,
+      group_name: group.name || lead.group_name,
+      group_member_rows: memberRows,
+      is_group_lead_row: true,
+      is_request_sender: true,
     });
   });
+  groupLeadRows.sort((a, b) => String(a.group_name || "").localeCompare(String(b.group_name || ""), undefined, { sensitivity: "base" }));
 
-  return [...nonGroupRows, ...expandedGroupRows].sort(compareByRollNo);
+  return [...groupLeadRows, ...nonGroupRows];
 };
 
 const groupRowsByCourseAndCoursework = (rows, courseworksMeta, courses) => {
@@ -299,7 +384,7 @@ const groupRowsByCourseAndCoursework = (rows, courseworksMeta, courses) => {
   });
   Object.keys(grouped).forEach((courseTitle) => {
     Object.keys(grouped[courseTitle]).forEach((courseworkTitle) => {
-      grouped[courseTitle][courseworkTitle].sort(compareByRollNo);
+      grouped[courseTitle][courseworkTitle] = orderApprovalRows(grouped[courseTitle][courseworkTitle]);
     });
   });
   return grouped;
@@ -312,6 +397,7 @@ const SubmissionsPage = () => {
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedCourseIds, setSelectedCourseIds] = useState([]);
   const [selectedAssessmentIds, setSelectedAssessmentIds] = useState([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState([]);
   const [selectedCourseworkByCourse, setSelectedCourseworkByCourse] = useState({});
   const [actionMenu, setActionMenu] = useState({ anchor: null, item: null, idx: 0 });
@@ -325,6 +411,7 @@ const SubmissionsPage = () => {
   const [memberDialogTitle, setMemberDialogTitle] = useState("");
   const [memberDialogItems, setMemberDialogItems] = useState([]);
   const [memberDialogCourseworkId, setMemberDialogCourseworkId] = useState("");
+  const [memberDialogSource, setMemberDialogSource] = useState(null);
   const [feedbackBySubmission, setFeedbackBySubmission] = useState({});
   const [feedbackDraftBySubmission, setFeedbackDraftBySubmission] = useState({});
   const [feedbackSavingBySubmission, setFeedbackSavingBySubmission] = useState({});
@@ -565,6 +652,9 @@ const SubmissionsPage = () => {
   const getRowActions = (item) => {
     const status = getStudentStatus(item);
     const actions = [];
+    if (canShowMembersButton(item, groupsById)) {
+      actions.push({ key: "members", label: "View members" });
+    }
     if (["waiting", "pending", "rejected"].includes(status)) {
       actions.push({ key: "approve", label: "Approve" });
     }
@@ -611,6 +701,11 @@ const SubmissionsPage = () => {
     });
   };
 
+  const toggleGroupExpand = (item, idx = 0) => {
+    const key = getRowSelectKey(item, idx);
+    setOpenGroupRows((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const openSubmissionMembers = async (submission, options = {}) => {
     try {
       if (options.singleOnly) {
@@ -625,6 +720,7 @@ const SubmissionsPage = () => {
         ]);
         setMemberDialogCourseworkId(submission?.coursework || "");
         setMemberDialogTitle(submission?.student_name || submission?.group_name || "Submission Member");
+        setMemberDialogSource(submission);
         setMemberDialogOpen(true);
         return;
       }
@@ -661,6 +757,7 @@ const SubmissionsPage = () => {
       setMemberDialogItems(enriched);
       setMemberDialogCourseworkId(submission?.coursework || "");
       setMemberDialogTitle(submission.topic || submission.group_name || "Submission Members");
+      setMemberDialogSource(submission);
       setMemberDialogOpen(true);
     } catch {
       notify("Could not load submission members", "error");
@@ -668,6 +765,26 @@ const SubmissionsPage = () => {
   };
   const closeMemberDialog = () => {
     setMemberDialogOpen(false);
+    setMemberDialogSource(null);
+  };
+
+  const saveMemberDialogMarks = async () => {
+    const memberRows = memberDialogItems
+      .map((member) => member.linked_submission)
+      .filter(Boolean);
+    const source = memberDialogSource || memberRows[0];
+    if (!source) {
+      notify("No members available to save marks.", "warning");
+      return;
+    }
+    const saved = await saveAllDraftMarks([
+      {
+        ...source,
+        group_member_rows: memberRows.length ? memberRows : source.group_member_rows,
+        is_group_lead_row: Boolean(source.group || memberRows.length > 1),
+      },
+    ]);
+    if (saved) closeMemberDialog();
   };
   const handleMemberDialogClose = (_event, reason) => {
     if (reason === "backdropClick" || reason === "escapeKeyDown") return;
@@ -851,6 +968,7 @@ const SubmissionsPage = () => {
 
   const handleRowAction = async (item, action) => {
     setActionMenu({ anchor: null, item: null, idx: 0 });
+    if (action === "members") return openSubmissionMembers(item);
     if (action === "approve") return approve(item);
     if (action === "reject") return reject(item);
     if (action === "waiting") return setWaiting(item);
@@ -859,11 +977,16 @@ const SubmissionsPage = () => {
     return null;
   };
 
+  const hasDraftMarksValue = (item, draftKey) => {
+    const marks = getFeedbackDraft(item, draftKey).marks;
+    return marks !== "" && marks !== null && marks !== undefined;
+  };
+
   const saveAllDraftMarks = async (items) => {
     const markable = items.filter(Boolean);
     if (!markable.length) {
       notify("No students available to save marks.", "warning");
-      return;
+      return false;
     }
     setSavingAllMarks(true);
     let ok = 0;
@@ -873,24 +996,54 @@ const SubmissionsPage = () => {
         const item = items[idx];
         if (!markable.includes(item)) continue;
         const draftKey = getRowDraftKey(item, idx);
-        const draft = getFeedbackDraft(item, draftKey);
-        if (draft.marks === "" || draft.marks === null || draft.marks === undefined) continue;
-        const groupMemberRows = item.group_member_rows || [];
-        if (groupMemberRows.length > 1) {
-          let savedMember = false;
-          for (const memberRow of groupMemberRows) {
-            const memberDraft = getFeedbackDraft(memberRow);
-            if (memberDraft.marks === "" || memberDraft.marks === null || memberDraft.marks === undefined) continue;
-            const success = await saveFeedback(memberRow, "single", { shouldNotify: false, shouldReload: false });
+        const memberRows = [
+          ...(item.group_member_rows || []),
+          ...getExpandableMemberRows(item, groupsById),
+        ];
+        const uniqueMembers = [];
+        const seenMembers = new Set();
+        memberRows.forEach((row) => {
+          const key = String(row.student || getPrimarySubmissionId(row) || row.id);
+          if (!key || seenMembers.has(key)) return;
+          seenMembers.add(key);
+          uniqueMembers.push(row);
+        });
+        const isGroupLead = Boolean(item.group || item.is_group_lead_row) && uniqueMembers.length > 1;
+        if (isGroupLead) {
+          const leadHasMarks = hasDraftMarksValue(item, draftKey);
+          const individualRows = uniqueMembers.filter((row) => {
+            if (String(row.student) === String(item.student)) return false;
+            return hasDraftMarksValue(row);
+          });
+          if (leadHasMarks) {
+            const success = await saveFeedback(item, "group", {
+              shouldNotify: false,
+              shouldReload: false,
+              draftKey,
+              savingKey: draftKey,
+            });
+            if (success) ok += uniqueMembers.length;
+            else fail += 1;
+          }
+          for (const memberRow of individualRows) {
+            const success = await saveFeedback(
+              { ...memberRow, force_individual_row: true },
+              "single",
+              {
+                shouldNotify: false,
+                shouldReload: false,
+                targetStudentId: memberRow.student,
+              }
+            );
             if (success) {
-              ok += 1;
-              savedMember = true;
+              if (!leadHasMarks) ok += 1;
             } else {
               fail += 1;
             }
           }
-          if (savedMember) continue;
+          if (leadHasMarks || individualRows.length) continue;
         }
+        if (!hasDraftMarksValue(item, draftKey)) continue;
         const success = await saveFeedback(item, resolveRowSaveScope(item), {
           shouldNotify: false,
           shouldReload: false,
@@ -903,10 +1056,11 @@ const SubmissionsPage = () => {
       }
       if (!ok && !fail) {
         notify("Enter marks first, then click Save marks.", "warning");
-        return;
+        return false;
       }
       await Promise.all([loadFeedbackMap(), loadData(), loadWorkflowCounts(), loadSubmissionIndexRows()]);
       notify(fail ? `${ok} saved, ${fail} failed` : `Marks saved for ${ok} student(s)`, fail ? "warning" : "success");
+      return fail === 0;
     } finally {
       setSavingAllMarks(false);
     }
@@ -963,10 +1117,71 @@ const SubmissionsPage = () => {
   }, [courseworksMeta, enrollments, submissionIndexRows, groupsById, courses]);
 
   const rosterRows = useMemo(() => {
-    const submissionRows = buildSubmissionDisplayRows(submissionIndexRows);
-    const waitingRows = allPendingNoRequestEntries.map(toWaitingDisplayRow);
-    return [...submissionRows, ...waitingRows].sort(compareByRollNo);
-  }, [submissionIndexRows, allPendingNoRequestEntries]);
+    const submissionRows = buildSubmissionDisplayRows(submissionIndexRows, groupsById);
+    const groupedStudentKeys = new Set();
+    const existingGroupKeys = new Set();
+    submissionRows.forEach((row) => {
+      if (!row.group) return;
+      existingGroupKeys.add(`${row.coursework}-${row.group}`);
+      (row.group_member_rows || []).forEach((member) => {
+        groupedStudentKeys.add(`${row.coursework}-${member.student || member.student_id}`);
+      });
+      acceptedGroupMembers(groupsById[String(row.group)]).forEach((member) => {
+        groupedStudentKeys.add(`${row.coursework}-${member.student}`);
+      });
+    });
+    const waitingSet = new Set(allPendingNoRequestEntries.map((entry) => `${entry.courseworkId}-${entry.studentId}`));
+    const waitingGroupRows = [];
+    courseworksMeta.forEach((coursework) => {
+      if (!["group", "both"].includes(String(coursework.submission_type || ""))) return;
+      Object.values(groupsById).forEach((group) => {
+        if (group.course && String(group.course) !== String(coursework.course)) return;
+        if (group.coursework && String(group.coursework) !== String(coursework.id)) return;
+        if (existingGroupKeys.has(`${coursework.id}-${group.id}`)) return;
+        const members = acceptedGroupMembers(group);
+        if (!members.some((member) => waitingSet.has(`${coursework.id}-${member.student}`))) return;
+        const leadId = leadIdFromGroup(group) || members[0]?.student;
+        const lead = members.find((member) => String(member.student) === String(leadId)) || members[0];
+        if (!lead) return;
+        const memberRows = members.map((member) => ({
+          id: `missing-${coursework.id}-${member.student}`,
+          submission_id: null,
+          coursework: coursework.id,
+          student: member.student,
+          student_name: member.student_name || member.student_display || `Student #${member.student}`,
+          student_roll_no: member.student_roll_no || "-",
+          group: group.id,
+          group_name: group.name,
+          is_topic_not_submitted: true,
+        })).sort(compareByRollNo);
+        waitingGroupRows.push({
+          id: `missing-group-${coursework.id}-${group.id}`,
+          submission_id: null,
+          coursework: coursework.id,
+          coursework_title: coursework.title,
+          course: coursework.course,
+          student: lead.student,
+          student_name: lead.student_name || lead.student_display || `Student #${lead.student}`,
+          student_roll_no: lead.student_roll_no || "-",
+          group: group.id,
+          group_name: group.name,
+          topic: "",
+          approval_status: "pending",
+          is_topic_not_submitted: true,
+          is_group_lead_row: true,
+          group_member_rows: memberRows,
+        });
+        members.forEach((member) => groupedStudentKeys.add(`${coursework.id}-${member.student}`));
+      });
+    });
+    const waitingRows = allPendingNoRequestEntries
+      .filter((entry) => !groupedStudentKeys.has(`${entry.courseworkId}-${entry.studentId}`))
+      .map(toWaitingDisplayRow);
+    waitingGroupRows.sort((a, b) => String(a.group_name || "").localeCompare(String(b.group_name || ""), undefined, { sensitivity: "base" }));
+    const groupRows = [...submissionRows.filter((row) => row.group), ...waitingGroupRows];
+    const individualRows = [...submissionRows.filter((row) => !row.group), ...waitingRows].sort(compareByRollNo);
+    return [...groupRows, ...individualRows];
+  }, [submissionIndexRows, allPendingNoRequestEntries, groupsById, courseworksMeta]);
 
   const getRowCourseId = (row) =>
     String(row?.course || courseworkById[String(row?.coursework)]?.course || "");
@@ -1004,15 +1219,34 @@ const SubmissionsPage = () => {
       });
   }, [courseworksMeta, courses, selectedCourseIds]);
 
+  const groupFilterOptions = useMemo(() => {
+    const map = new Map();
+    rosterRows.forEach((row) => {
+      if (!row.group) return;
+      const courseId = getRowCourseId(row);
+      const assessmentId = String(row.coursework || "");
+      if (selectedCourseIds.length && !selectedCourseIds.includes(courseId)) return;
+      if (selectedAssessmentIds.length && !selectedAssessmentIds.includes(assessmentId)) return;
+      const id = String(row.group);
+      if (!map.has(id)) map.set(id, row.group_name || groupsById[id]?.name || `Group ${id}`);
+    });
+    return [...map.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: "base" }))
+      .map(([value, label]) => ({ value, label }));
+  }, [rosterRows, groupsById, selectedCourseIds, selectedAssessmentIds, courseworkById]);
+
   const scopedRosterRows = useMemo(() => {
     return rosterRows.filter((row) => {
       const courseId = getRowCourseId(row);
       const assessmentId = String(row.coursework || "");
       if (selectedCourseIds.length && !selectedCourseIds.includes(courseId)) return false;
       if (selectedAssessmentIds.length && !selectedAssessmentIds.includes(assessmentId)) return false;
+      if (selectedGroupIds.length) {
+        return Boolean(row.group) && selectedGroupIds.includes(String(row.group));
+      }
       return true;
     });
-  }, [rosterRows, selectedCourseIds, selectedAssessmentIds, courseworkById]);
+  }, [rosterRows, selectedCourseIds, selectedAssessmentIds, selectedGroupIds, courseworkById]);
 
   const filteredRows = useMemo(
     () => scopedRosterRows.filter((row) => rowMatchesSearch(row, search) && rowMatchesStudentStatuses(row, selectedStatusFilters)),
@@ -1067,6 +1301,14 @@ const SubmissionsPage = () => {
       return next.length === prev.length ? prev : next;
     });
   }, [assessmentFilterOptions]);
+
+  useEffect(() => {
+    const allowed = new Set(groupFilterOptions.map((option) => option.value));
+    setSelectedGroupIds((prev) => {
+      const next = prev.filter((id) => allowed.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [groupFilterOptions]);
 
   const courseNameById = useMemo(() => {
     const map = {};
@@ -1408,7 +1650,7 @@ const SubmissionsPage = () => {
       return;
     }
     resultsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [selectedCourseIds, selectedAssessmentIds, selectedStatusFilters]);
+  }, [selectedCourseIds, selectedAssessmentIds, selectedGroupIds, selectedStatusFilters]);
 
   useEffect(() => {
     const courseKeys = Object.keys(groupedByCourseAndCoursework);
@@ -1441,7 +1683,7 @@ const SubmissionsPage = () => {
   const courseSections = Object.entries(visibleGrouped).map(([courseTitle, courseworkGroup]) => {
     const assessmentTitles = sortAssessmentTitlesByComing(Object.keys(courseworkGroup), courseworkGroup, courseworkById);
     const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
-    const items = (courseworkGroup[selectedTitle] || []).slice().sort(compareByRollNo);
+    const items = orderApprovalRows(courseworkGroup[selectedTitle] || []);
     const selectedItems = items.filter((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
     const tableAllChecked = items.length > 0 && items.every((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
     return {
@@ -1465,11 +1707,147 @@ const SubmissionsPage = () => {
     };
   });
 
+  const renderApprovalTableRow = (item, idx, { sr, isMemberRow = false, isExpanded = false } = {}) => {
+    const primarySubmissionId = getPrimarySubmissionId(item);
+    const memberHintCount = getRowMemberCount(item, groupsById);
+    const canViewMembers = !isMemberRow && canShowMembersButton(item, groupsById);
+    const rowDraftKey = getRowDraftKey(item, idx);
+    const studentLabel = item.student_name || item.submitted_by_name || item.student || "-";
+    const maxMarks = courseworkById[String(item.coursework)]?.max_marks;
+    const studentStatus = getStudentStatus(item);
+    const statusChip = STATUS_CHIP[studentStatus] || STATUS_CHIP.waiting;
+    const rowActions = getRowActions(item);
+    const submittedAt = getDisplayedSubmittedAt(item);
+    const savedMarks = feedbackBySubmission[String(primarySubmissionId)]?.marks ?? item.obtained_marks;
+    const hasSavedMarks = Boolean(item.is_marked || (savedMarks !== "" && savedMarks !== null && savedMarks !== undefined));
+    const showTopic = !isMemberRow && Boolean(String(item.topic || "").trim());
+    const showFile = !isMemberRow && hasSubmissionFile(item);
+
+    return (
+      <TableRow key={`${item.id}-${idx}`} sx={isMemberRow ? { bgcolor: "#f8fafc" } : undefined}>
+        <TableCell padding="checkbox">
+          <Checkbox
+            size="small"
+            checked={!!selectedSubmissionIds[getRowSelectKey(item, idx)]}
+            onChange={() => toggleSelectSubmission(item, idx)}
+          />
+        </TableCell>
+        <TableCell>{isMemberRow ? "" : sr}</TableCell>
+        <TableCell>
+          <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
+            <PersonNameCell person={item} name={studentLabel} size={28} />
+            {!isMemberRow && item.group_name ? (
+              <Chip size="small" variant="outlined" label={item.group_name} sx={{ fontWeight: 700 }} />
+            ) : null}
+            {!isMemberRow && item.is_group_lead_row ? (
+              <Chip size="small" label="Lead" sx={{ bgcolor: "#dbeafe", color: "#1d4ed8", fontWeight: 700 }} />
+            ) : null}
+            {isMemberRow ? (
+              <Chip size="small" variant="outlined" label="Member" />
+            ) : null}
+            {canViewMembers ? (
+              <Chip
+                size="small"
+                label={isExpanded ? `Members (${memberHintCount}) · hide` : `Members (${memberHintCount})`}
+                onClick={() => toggleGroupExpand(item, idx)}
+                sx={{
+                  bgcolor: "#facc15",
+                  color: "#713f12",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  "&:hover": { bgcolor: "#eab308" },
+                }}
+              />
+            ) : null}
+          </Stack>
+          {showTopic ? (
+            <Typography variant="caption" color="text.secondary" display="block">
+              {item.topic}
+            </Typography>
+          ) : null}
+        </TableCell>
+        <TableCell>{item.student_roll_no || "-"}</TableCell>
+        <TableCell>
+          <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
+            {isMemberRow ? "—" : submittedAt ? formatDate(submittedAt) : "—"}
+          </Typography>
+        </TableCell>
+        <TableCell>
+          <Chip
+            size="small"
+            label={statusChip.label}
+            sx={{
+              bgcolor: statusChip.bgcolor,
+              color: statusChip.color,
+              fontWeight: 700,
+            }}
+          />
+        </TableCell>
+        <TableCell>
+          <TextField
+            size="small"
+            type="number"
+            placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : isMemberRow ? "Individual" : "Group / marks"}
+            value={getFeedbackDraft(item, rowDraftKey).marks}
+            onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
+            inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
+            sx={{
+              width: 96,
+              ...(hasSavedMarks
+                ? {
+                    "& .MuiOutlinedInput-root": {
+                      bgcolor: "#dcfce7",
+                      "& fieldset": { borderColor: "#22c55e" },
+                      "&:hover fieldset": { borderColor: "#16a34a" },
+                    },
+                  }
+                : {}),
+            }}
+          />
+        </TableCell>
+        <TableCell>
+          {showFile ? (
+            <Stack direction="row" spacing={0.3}>
+              <IconButton size="small" onClick={() => openFilePreview(item)} title="View file">
+                <VisibilityOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" onClick={() => downloadFile(item)} title="Download file">
+                <DownloadRoundedIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+          ) : (
+            <Typography variant="caption" color="text.secondary">{isMemberRow ? "—" : "No file"}</Typography>
+          )}
+        </TableCell>
+        <TableCell align="right">
+          {isMemberRow ? null : (
+            <>
+              <IconButton size="small" onClick={(e) => setActionMenu({ anchor: e.currentTarget, item, idx })}>
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+              <Menu
+                anchorEl={actionMenu.anchor}
+                open={Boolean(actionMenu.anchor) && actionMenu.item?.id === item.id}
+                onClose={() => setActionMenu({ anchor: null, item: null, idx: 0 })}
+              >
+                {rowActions.map((action) => (
+                  <MenuItem key={action.key} onClick={() => handleRowAction(item, action.key)}>
+                    {action.label}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
+        </TableCell>
+      </TableRow>
+    );
+  };
+
   return (
     <Box sx={{ flex: 1, minHeight: 0, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
     <ListingPage
       title="Assessment Approvals"
-      subtitle="Filter students by course, assessment, and status. All is selected by default."
+      subtitle="Group assessments show group leads first. Open Members to mark the group or each student, then save once."
       actions={isAdminApprovalsView ? (
         <Stack direction="row" spacing={0.8}>
           <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
@@ -1485,6 +1863,7 @@ const SubmissionsPage = () => {
           onReset={() => {
             setSelectedCourseIds([]);
             setSelectedAssessmentIds([]);
+            setSelectedGroupIds([]);
             setSelectedStatusFilters([]);
             resetSearch();
           }}
@@ -1503,6 +1882,15 @@ const SubmissionsPage = () => {
                 onChange={setSelectedAssessmentIds}
                 minWidth={220}
               />
+              {groupFilterOptions.length ? (
+                <MultiFilterSelect
+                  label="Group"
+                  value={selectedGroupIds}
+                  options={groupFilterOptions}
+                  onChange={setSelectedGroupIds}
+                  minWidth={200}
+                />
+              ) : null}
               <MultiFilterSelect
                 label="Student status"
                 value={selectedStatusFilters}
@@ -1556,10 +1944,10 @@ const SubmissionsPage = () => {
                 >
                   <Box sx={{ minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 800, color: "#16356f" }}>
-                      {`${section.selectedItems.length} selected of ${section.items.length} students`}
+                      {`${section.selectedItems.length} selected of ${section.items.length} ${section.items.some((row) => row.group) ? "groups / students" : "students"}`}
             </Typography>
                     <Typography variant="caption" sx={{ color: "#5b6f91", display: "block", mt: 0.2 }}>
-                      Use the action menu on each row, or apply a bulk action to selected or all students. Typed marks can also be saved from this list.
+                      Groups show the lead only. Open Members to give the same marks to the group or different marks to each student, then use Save typed marks.
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" alignItems="center" justifyContent="flex-end">
@@ -1626,7 +2014,17 @@ const SubmissionsPage = () => {
       ) : null}
       footer={displayRows.length ? (
         <Typography variant="body2" color="text.secondary" sx={{ pt: 0.8 }}>
-          {displayRows.length} student{displayRows.length === 1 ? "" : "s"} in this view
+          {(() => {
+            const groupCount = displayRows.filter((row) => row.group).length;
+            const individualCount = displayRows.length - groupCount;
+            if (groupCount && individualCount) {
+              return `${groupCount} group${groupCount === 1 ? "" : "s"} and ${individualCount} individual student${individualCount === 1 ? "" : "s"} in this view`;
+            }
+            if (groupCount) {
+              return `${groupCount} group${groupCount === 1 ? "" : "s"} in this view`;
+            }
+            return `${displayRows.length} student${displayRows.length === 1 ? "" : "s"} in this view`;
+          })()}
                 </Typography>
       ) : null}
     >
@@ -1681,136 +2079,19 @@ const SubmissionsPage = () => {
                         </TableHead>
                         <TableBody>
                           {items.map((item, idx) => {
-                            const primarySubmissionId = getPrimarySubmissionId(item);
-                            const memberHintCount = getRowMemberCount(item, groupsById);
-                            const canViewMembers = canShowMembersButton(item, groupsById);
-                            const rowDraftKey = getRowDraftKey(item, idx);
-                            const senderName = item.student_name || item.submitted_by_name || item.student || "-";
-                            const studentLabel = senderName;
-                            const maxMarks = courseworkById[String(item.coursework)]?.max_marks;
-                            const studentStatus = getStudentStatus(item);
-                            const statusChip = STATUS_CHIP[studentStatus] || STATUS_CHIP.waiting;
-                            const rowActions = getRowActions(item);
-                            const submittedAt = getDisplayedSubmittedAt(item);
-                            const savedMarks = feedbackBySubmission[String(primarySubmissionId)]?.marks ?? item.obtained_marks;
-                            const hasSavedMarks = Boolean(item.is_marked || (savedMarks !== "" && savedMarks !== null && savedMarks !== undefined));
-
+                            const memberRows = getExpandableMemberRows(item, groupsById);
+                            const expanded = Boolean(openGroupRows[getRowSelectKey(item, idx)]);
                             return (
-                              <TableRow key={item.id}>
-                                <TableCell padding="checkbox">
-                                  <Checkbox
-                                            size="small"
-                                    checked={!!selectedSubmissionIds[getRowSelectKey(item, idx)]}
-                                    onChange={() => toggleSelectSubmission(item, idx)}
-                                  />
-                                </TableCell>
-                                <TableCell>{idx + 1}</TableCell>
-                                <TableCell>
-                                  <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
-                                    <PersonNameCell
-                                      person={item}
-                                      name={studentLabel}
-                                      size={28}
-                                    />
-                                    {canViewMembers ? (
-                                          <Chip
-                                            size="small"
-                                        label={`Members (${memberHintCount})`}
-                                        onClick={() => openSubmissionMembers(item)}
-                                        sx={{
-                                          bgcolor: "#facc15",
-                                          color: "#713f12",
-                                          fontWeight: 700,
-                                          cursor: "pointer",
-                                          "&:hover": { bgcolor: "#eab308" },
-                                        }}
-                                      />
-                                    ) : null}
-                                          </Stack>
-                                  {item.topic ? (
-                                    <Typography variant="caption" color="text.secondary" display="block">
-                                      {item.topic}
-                                    </Typography>
-                                  ) : null}
-                                    </TableCell>
-                                      <TableCell>{item.student_roll_no || "-"}</TableCell>
-                                      <TableCell>
-                                  <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
-                                    {submittedAt ? formatDate(submittedAt) : "—"}
-                                  </Typography>
-                                      </TableCell>
-                                      <TableCell>
-                                            <Chip
-                                              size="small"
-                                    label={statusChip.label}
-                                    sx={{
-                                      bgcolor: statusChip.bgcolor,
-                                      color: statusChip.color,
-                                      fontWeight: 700,
-                                    }}
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                            <TextField
-                                              size="small"
-                                              type="number"
-                                    placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
-                                              value={getFeedbackDraft(item, rowDraftKey).marks}
-                                              onChange={(e) => handleMarksDraftChange(item, e.target.value, rowDraftKey)}
-                                    inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
-                                    sx={{
-                                      width: 96,
-                                      ...(hasSavedMarks
-                                        ? {
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: "#dcfce7",
-                                              "& fieldset": { borderColor: "#22c55e" },
-                                              "&:hover fieldset": { borderColor: "#16a34a" },
-                                            },
-                                          }
-                                        : {}),
-                                    }}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                  {hasSubmissionFile(item) ? (
-                                    <Stack direction="row" spacing={0.3}>
-                                      <IconButton size="small" onClick={() => openFilePreview(item)} title="View file">
-                                              <VisibilityOutlinedIcon fontSize="small" />
-                                            </IconButton>
-                                      <IconButton size="small" onClick={() => downloadFile(item)} title="Download file">
-                                              <DownloadRoundedIcon fontSize="small" />
-                                            </IconButton>
-                                          </Stack>
-                                  ) : (
-                                    <Typography variant="caption" color="text.secondary">No file</Typography>
-                                  )}
-                                                        </TableCell>
-                                                        <TableCell align="right">
-                                  <IconButton
-                                                            size="small"
-                                    onClick={(e) => setActionMenu({ anchor: e.currentTarget, item, idx })}
-                                  >
-                                    <MoreVertIcon fontSize="small" />
-                                  </IconButton>
-                                  <Menu
-                                    anchorEl={actionMenu.anchor}
-                                    open={Boolean(actionMenu.anchor) && actionMenu.item?.id === item.id}
-                                    onClose={() => setActionMenu({ anchor: null, item: null, idx: 0 })}
-                                  >
-                                    {rowActions.map((action) => (
-                                      <MenuItem
-                                        key={action.key}
-                                        onClick={() => handleRowAction(item, action.key)}
-                                      >
-                                        {action.label}
-                                      </MenuItem>
-                                    ))}
-                                  </Menu>
-                                                        </TableCell>
-                                                  </TableRow>
-                                                );
-                                              })}
+                              <Fragment key={item.id}>
+                                {renderApprovalTableRow(item, idx, { sr: idx + 1, isExpanded: expanded })}
+                                {expanded
+                                  ? memberRows.map((member, memberIdx) =>
+                                      renderApprovalTableRow(member, `${idx}-m${memberIdx}`, { isMemberRow: true })
+                                    )
+                                  : null}
+                              </Fragment>
+                            );
+                          })}
                                             </TableBody>
                                           </Table>
                       </TableContainer>
@@ -1830,23 +2111,34 @@ const SubmissionsPage = () => {
       >
         <DialogTitle>{memberDialogTitle || "Group members"}</DialogTitle>
         <DialogContent dividers sx={{ p: 0, maxHeight: "72vh" }}>
+          <Box sx={{ px: 2, py: 1.2, bgcolor: "#f8fbff", borderBottom: "1px solid #e2e8f0" }}>
+            <Typography variant="caption" sx={{ color: "#5b6f91", display: "block", mb: 0.8 }}>
+              Lead marks apply to the whole group. Change any member to give individual marks. One save writes both.
+            </Typography>
+            {memberDialogSource ? (
+              <TextField
+                size="small"
+                type="number"
+                label="Group marks"
+                value={getFeedbackDraft(memberDialogSource).marks}
+                onChange={(e) => handleMarksDraftChange(memberDialogSource, e.target.value)}
+                sx={{ width: 140 }}
+              />
+            ) : null}
+          </Box>
           <Box sx={{ overflowX: "auto" }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ minWidth: 220 }}>Name</TableCell>
                   <TableCell sx={{ minWidth: 130 }}>Roll No</TableCell>
-                  <TableCell sx={{ minWidth: 220 }}>Current Marks</TableCell>
+                  <TableCell sx={{ minWidth: 160 }}>Individual marks</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {memberDialogItems.map((member, idx) => {
                   const memberSubmission = member.linked_submission;
-                  const memberSubmissionId = getPrimarySubmissionId(memberSubmission);
                   const maxMarks = courseworkById[String(memberSubmission?.coursework || memberDialogCourseworkId)]?.max_marks;
-                  const givenMarks = memberSubmissionId
-                    ? feedbackBySubmission[String(memberSubmissionId)]?.marks ?? memberSubmission?.obtained_marks ?? "-"
-                    : "-";
                   return (
                     <TableRow key={`${member.id || member.student_id || idx}-dialog`}>
                       <TableCell>
@@ -1855,14 +2147,17 @@ const SubmissionsPage = () => {
                       <TableCell>{member.roll_no || "-"}</TableCell>
                       <TableCell>
                         {memberSubmission ? (
-                          <Chip
+                          <TextField
                             size="small"
-                            color="primary"
-                            variant="outlined"
-                            label={`Obtained/Total: ${formatMarks(givenMarks)}/${formatMarks(maxMarks)}`}
+                            type="number"
+                            placeholder={maxMarks ? ` / ${formatMarks(maxMarks)}` : "Marks"}
+                            value={getFeedbackDraft(memberSubmission).marks}
+                            onChange={(e) => handleMarksDraftChange(memberSubmission, e.target.value)}
+                            inputProps={{ min: 0, max: maxMarks || undefined, step: 1 }}
+                            sx={{ width: 110 }}
                           />
                         ) : (
-                          <Chip size="small" variant="outlined" color="warning" label="No submission record" />
+                          <Typography variant="caption" color="text.secondary">No submission record</Typography>
                         )}
                       </TableCell>
                     </TableRow>
@@ -1874,6 +2169,9 @@ const SubmissionsPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeMemberDialog}>Close</Button>
+          <Button variant="contained" onClick={saveMemberDialogMarks} disabled={savingAllMarks}>
+            {savingAllMarks ? "Saving..." : "Save marks"}
+          </Button>
         </DialogActions>
       </Dialog>
 
