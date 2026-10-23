@@ -178,7 +178,18 @@ class SubmissionFileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SubmissionFile
-        fields = ["id", "title", "file", "file_url", "file_name", "original_name", "uploaded_by", "uploaded_at", "created_at"]
+        fields = [
+            "id",
+            "submission",
+            "title",
+            "file",
+            "file_url",
+            "file_name",
+            "original_name",
+            "uploaded_by",
+            "uploaded_at",
+            "created_at",
+        ]
         read_only_fields = fields
 
     def get_file_name(self, obj):

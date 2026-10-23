@@ -15,6 +15,15 @@ export const primarySubmissionFileUrl = (submission) => {
 export const hasSubmissionFile = (submission) =>
   Boolean((submission?.submitted_files || []).length || submission?.file || primarySubmissionFileUrl(submission));
 
+export const filesWithOwner = (files = [], ownerId) =>
+  (files || []).map((file) => ({
+    ...file,
+    submission: file.submission || ownerId,
+  }));
+
+const fileOwnerSubmissionId = (submission, fileItem) =>
+  fileItem?.submission || submission?.file_source_id || submission?.id;
+
 const openBlob = (blob, filename, download = false) => {
   const url = URL.createObjectURL(blob);
   if (download) {
@@ -31,8 +40,9 @@ const openBlob = (blob, filename, download = false) => {
 };
 
 const fetchSubmissionFileBlob = async (submission, fileItem, mode) => {
-  if (fileItem?.id && !String(fileItem.id).startsWith("legacy") && submission?.id) {
-    const { data } = await api.get(`${ENDPOINTS.submissions}${submission.id}/files/${fileItem.id}/${mode}/`, {
+  const ownerId = fileOwnerSubmissionId(submission, fileItem);
+  if (fileItem?.id && !String(fileItem.id).startsWith("legacy") && ownerId) {
+    const { data } = await api.get(`${ENDPOINTS.submissions}${ownerId}/files/${fileItem.id}/${mode}/`, {
       responseType: "blob",
     });
     return data;

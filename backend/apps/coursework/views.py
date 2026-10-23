@@ -732,10 +732,36 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             return
         raise PermissionDenied("You do not have permission to view this file.")
 
+    def _resolve_submission_file(self, submission, file_id):
+        if not file_id:
+            return None
+        target = submission.submission_files.filter(id=file_id).first()
+        if target:
+            return target
+        extra = (
+            SubmissionFile.objects.filter(id=file_id)
+            .select_related("submission")
+            .first()
+        )
+        if not extra or extra.submission.coursework_id != submission.coursework_id:
+            return None
+        other = extra.submission
+        if submission.group_id and other.group_id and submission.group_id == other.group_id:
+            return extra
+        own_ids = {*(submission.requested_member_ids or [])}
+        other_ids = {*(other.requested_member_ids or [])}
+        if submission.student_id:
+            own_ids.add(submission.student_id)
+        if other.student_id:
+            other_ids.add(other.student_id)
+        if own_ids and own_ids == other_ids:
+            return extra
+        return None
+
     def _serve_submission_file(self, request, file_id, as_attachment):
         submission = self.get_object()
         self._ensure_file_access(request.user, submission)
-        target = submission.submission_files.filter(id=file_id).first()
+        target = self._resolve_submission_file(submission, file_id)
         if not target:
             return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
         try:

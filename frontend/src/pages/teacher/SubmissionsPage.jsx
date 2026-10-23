@@ -43,7 +43,7 @@ import usePaginatedQuery from "../../hooks/usePaginatedQuery";
 import { fetchFeedbackBySubmissionMap } from "../../utils/feedback";
 import { formatDate, formatMarks } from "../../utils/format";
 import { shallowEqualObjects } from "../../utils/object";
-import { downloadSubmissionFile, hasSubmissionFile, openSubmissionFilePreview } from "../../utils/submissionFiles";
+import { downloadSubmissionFile, filesWithOwner, hasSubmissionFile, openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { resolveSubmissionMembers } from "../../utils/submissionMembers";
 import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
 import { csvSafe, downloadTextFile, fileSafe } from "../../utils/export";
@@ -348,9 +348,10 @@ const buildSubmissionDisplayRows = (sourceRows = [], groupsById = {}) => {
     groupLeadRows.push({
       ...lead,
       submission_id: lead.id,
+      file_source_id: fileRow?.id || lead.id,
       topic: topicRow?.topic || lead.topic || "",
       file: fileRow?.file ?? lead.file,
-      submitted_files: fileRow?.submitted_files || lead.submitted_files,
+      submitted_files: filesWithOwner(fileRow?.submitted_files || lead.submitted_files, fileRow?.id || lead.id),
       last_file_updated_at: fileRow?.last_file_updated_at || lead.last_file_updated_at,
       group_name: group.name || lead.group_name,
       group_member_rows: memberRows,
