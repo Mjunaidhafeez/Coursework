@@ -40,6 +40,19 @@ export const uniqueCourseSemesters = (courses = []) => {
     .sort((a, b) => Number(a.number) - Number(b.number));
 };
 
+export const uniqueCourseTeachers = (courses = []) => {
+  const names = new Set();
+  courses.forEach((course) => {
+    (course.teacher_names || []).forEach((name) => {
+      const label = String(name || "").trim();
+      if (label) names.add(label);
+    });
+  });
+  return [...names]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .map((label) => ({ value: label, label }));
+};
+
 export const buildCourseworkTypeOptions = (extraValues = []) => {
   const map = new Map();
   COURSEWORK_TYPE_OPTIONS.forEach((item) => map.set(normalizeCourseworkType(item.value), item.label));

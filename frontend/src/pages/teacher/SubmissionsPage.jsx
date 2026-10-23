@@ -27,7 +27,6 @@ import {
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import api from "../../api/client";
@@ -41,7 +40,7 @@ import { useUi } from "../../context/UiContext";
 import { ENDPOINTS } from "../../api/endpoints";
 import usePaginatedQuery from "../../hooks/usePaginatedQuery";
 import { fetchFeedbackBySubmissionMap } from "../../utils/feedback";
-import { formatDate, formatMarks } from "../../utils/format";
+import { formatDate, formatDueShort, formatMarks } from "../../utils/format";
 import { shallowEqualObjects } from "../../utils/object";
 import { downloadSubmissionFile, filesWithOwner, hasSubmissionFile, openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { resolveSubmissionMembers } from "../../utils/submissionMembers";
@@ -49,6 +48,26 @@ import { STATUS_CHIP, STUDENT_STATUS_OPTIONS, getStudentStatus } from "../../uti
 import { exportTable } from "../../utils/export";
 import { confirmDelete } from "../../utils/confirm";
 import { leadIdFromGroup, rosterMembers } from "../../utils/groupForm";
+import {
+  buildCourseworkTypeOptions,
+  normalizeCourseworkType,
+  SUBMISSION_TYPE_OPTIONS,
+  uniqueCourseSemesters,
+  uniqueCourseTeachers,
+} from "../../utils/courseworkOptions";
+import { closedSortKey, isAssessmentOpen, sortAssessmentTitlesByWindow, upcomingSortKey } from "../../utils/assessmentWindow";
+
+const FLAG_FILTER_OPTIONS = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+];
+
+const matchesFlagFilter = (selected = [], flag) => {
+  if (!selected.length) return true;
+  if (selected.includes("yes") && flag) return true;
+  if (selected.includes("no") && !flag) return true;
+  return false;
+};
 
 const compareByRollNo = (a, b) => {
   const rollA = String(a.student_roll_no || a.rollNo || "").trim();
@@ -63,19 +82,8 @@ const compareByRollNo = (a, b) => {
   });
 };
 
-const getAssessmentDeadlineScore = (title, courseworkGroup, courseworkById) => {
-  const row = courseworkGroup?.[title]?.[0];
-  const cw = courseworkById?.[String(row?.coursework)];
-  const deadline = cw?.deadline ? new Date(cw.deadline).getTime() : NaN;
-  if (!Number.isFinite(deadline)) return Number.MAX_SAFE_INTEGER;
-  const now = Date.now();
-  return deadline >= now ? deadline : deadline + 1e15;
-};
-
-const sortAssessmentTitlesByComing = (titles, courseworkGroup, courseworkById) =>
-  [...titles].sort(
-    (a, b) => getAssessmentDeadlineScore(a, courseworkGroup, courseworkById) - getAssessmentDeadlineScore(b, courseworkGroup, courseworkById)
-  );
+const courseworkForTitle = (title, courseworkGroup, courseworkById) =>
+  courseworkById?.[String(courseworkGroup?.[title]?.[0]?.coursework)];
 
 const uniqueMemberCount = (values = []) =>
   new Set(values.map((value) => String(value || "").trim()).filter(Boolean)).size;
@@ -326,10 +334,19 @@ const SubmissionsPage = () => {
   const { notify, isGlobalLoading } = useUi();
   const isAdminApprovalsView = user?.role === "super_admin";
   const [statusFilter, setStatusFilter] = useState("");
+  const [viewMode, setViewMode] = useState("opening");
   const [selectedCourseIds, setSelectedCourseIds] = useState([]);
   const [selectedAssessmentIds, setSelectedAssessmentIds] = useState([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState([]);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState([]);
+  const [selectedSemesterIds, setSelectedSemesterIds] = useState([]);
+  const [selectedTeacherNames, setSelectedTeacherNames] = useState([]);
+  const [selectedTypeFilters, setSelectedTypeFilters] = useState([]);
+  const [selectedModeFilters, setSelectedModeFilters] = useState([]);
+  const [selectedFileFilters, setSelectedFileFilters] = useState([]);
+  const [selectedLateFilters, setSelectedLateFilters] = useState([]);
+  const [selectedTopicFilters, setSelectedTopicFilters] = useState([]);
+  const [exportMenu, setExportMenu] = useState(null);
   const [selectedCourseworkByCourse, setSelectedCourseworkByCourse] = useState({});
   const [actionMenu, setActionMenu] = useState({ anchor: null, item: null, idx: 0 });
   const [bulkActionByCourse, setBulkActionByCourse] = useState({});
@@ -1133,11 +1150,8 @@ const SubmissionsPage = () => {
     return courseworksMeta
       .filter((item) => !courseSet.size || courseSet.has(String(item.course)))
       .slice()
-      .sort((a, b) => {
-        const group = { [a.title]: [{ coursework: a.id }], [b.title]: [{ coursework: b.id }] };
-        return getAssessmentDeadlineScore(a.title, group, { [String(a.id)]: a, [String(b.id)]: b })
-          - getAssessmentDeadlineScore(b.title, group, { [String(a.id)]: a, [String(b.id)]: b });
-      })
+      .filter((item) => (viewMode === "closed" ? !isAssessmentOpen(item) : isAssessmentOpen(item)))
+      .sort((a, b) => (viewMode === "closed" ? closedSortKey(a) - closedSortKey(b) : upcomingSortKey(a) - upcomingSortKey(b)))
       .map((item) => {
         const courseTitle = courses.find((course) => String(course.id) === String(item.course))?.title;
         const title = item.title || `Assessment #${item.id}`;
@@ -1146,7 +1160,21 @@ const SubmissionsPage = () => {
           label: showCoursePrefix && courseTitle ? `${courseTitle} · ${title}` : title,
         };
       });
-  }, [courseworksMeta, courses, selectedCourseIds]);
+  }, [courseworksMeta, courses, selectedCourseIds, viewMode]);
+
+  const semesterFilterOptions = useMemo(
+    () =>
+      uniqueCourseSemesters(courses).map((item) => ({
+        value: String(item.id),
+        label: `Semester ${item.number}`,
+      })),
+    [courses]
+  );
+  const teacherFilterOptions = useMemo(() => uniqueCourseTeachers(courses), [courses]);
+  const typeFilterOptions = useMemo(
+    () => buildCourseworkTypeOptions(courseworksMeta.map((item) => item.coursework_type)),
+    [courseworksMeta]
+  );
 
   const groupFilterOptions = useMemo(() => {
     const map = new Map();
@@ -1166,25 +1194,69 @@ const SubmissionsPage = () => {
 
   const scopedRosterRows = useMemo(() => {
     return rosterRows.filter((row) => {
+      const coursework = courseworkById[String(row.coursework)];
       const courseId = getRowCourseId(row);
+      const course = courses.find((item) => String(item.id) === courseId);
       const assessmentId = String(row.coursework || "");
       if (selectedCourseIds.length && !selectedCourseIds.includes(courseId)) return false;
       if (selectedAssessmentIds.length && !selectedAssessmentIds.includes(assessmentId)) return false;
+      if (selectedSemesterIds.length && !selectedSemesterIds.includes(String(course?.semester || ""))) return false;
+      if (selectedTeacherNames.length && !(course?.teacher_names || []).some((name) => selectedTeacherNames.includes(name))) return false;
+      if (selectedTypeFilters.length && !selectedTypeFilters.includes(normalizeCourseworkType(coursework?.coursework_type))) return false;
+      if (selectedModeFilters.length && !selectedModeFilters.includes(String(coursework?.submission_type || ""))) return false;
+      if (!matchesFlagFilter(selectedFileFilters, hasSubmissionFile(row))) return false;
+      if (!matchesFlagFilter(selectedLateFilters, Boolean(row.is_late))) return false;
+      if (!matchesFlagFilter(selectedTopicFilters, Boolean(String(row.topic || "").trim()))) return false;
       if (selectedGroupIds.length) {
         return Boolean(row.group) && selectedGroupIds.includes(String(row.group));
       }
       return true;
     });
-  }, [rosterRows, selectedCourseIds, selectedAssessmentIds, selectedGroupIds, courseworkById]);
+  }, [
+    rosterRows,
+    selectedCourseIds,
+    selectedAssessmentIds,
+    selectedGroupIds,
+    selectedSemesterIds,
+    selectedTeacherNames,
+    selectedTypeFilters,
+    selectedModeFilters,
+    selectedFileFilters,
+    selectedLateFilters,
+    selectedTopicFilters,
+    courseworkById,
+    courses,
+  ]);
 
   const filteredRows = useMemo(
     () => scopedRosterRows.filter((row) => rowMatchesSearch(row, search) && rowMatchesStudentStatuses(row, selectedStatusFilters)),
     [scopedRosterRows, search, selectedStatusFilters]
   );
 
+  const windowRows = useMemo(
+    () =>
+      filteredRows.filter((row) => {
+        const open = isAssessmentOpen(courseworkById[String(row.coursework)]);
+        return viewMode === "closed" ? !open : open;
+      }),
+    [filteredRows, courseworkById, viewMode]
+  );
+
+  const windowCounts = useMemo(() => {
+    const open = new Set();
+    const closed = new Set();
+    filteredRows.forEach((row) => {
+      const id = String(row.coursework || "");
+      if (!id) return;
+      if (isAssessmentOpen(courseworkById[id])) open.add(id);
+      else closed.add(id);
+    });
+    return { open: open.size, closed: closed.size };
+  }, [filteredRows, courseworkById]);
+
   const groupedByCourseAndCoursework = useMemo(
-    () => groupRowsByCourseAndCoursework(filteredRows, courseworksMeta, courses),
-    [filteredRows, courseworksMeta, courses]
+    () => groupRowsByCourseAndCoursework(windowRows, courseworksMeta, courses),
+    [windowRows, courseworksMeta, courses]
   );
 
   const visibleGrouped = groupedByCourseAndCoursework;
@@ -1196,7 +1268,7 @@ const SubmissionsPage = () => {
       Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
         const titles = Object.keys(courseworkGroup);
         if (!titles.length) return;
-        const comingTitle = sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
+        const comingTitle = sortAssessmentTitlesByWindow(titles, courseworkGroup, courseworkById, viewMode)[0];
         if (!next[courseTitle] || !courseworkGroup[next[courseTitle]]) {
           next[courseTitle] = comingTitle;
           changed = true;
@@ -1204,22 +1276,22 @@ const SubmissionsPage = () => {
       });
       return changed ? next : prev;
     });
-  }, [visibleGrouped, courseworkById]);
+  }, [visibleGrouped, courseworkById, viewMode]);
 
   const displayRows = useMemo(() => {
     if (selectedAssessmentIds.length || selectedStatusFilters.length) {
-      return filteredRows;
+      return windowRows;
     }
     const list = [];
     Object.entries(visibleGrouped).forEach(([courseTitle, courseworkGroup]) => {
       const titles = Object.keys(courseworkGroup);
       if (!titles.length) return;
       const selectedTitle =
-        selectedCourseworkByCourse[courseTitle] || sortAssessmentTitlesByComing(titles, courseworkGroup, courseworkById)[0];
+        selectedCourseworkByCourse[courseTitle] || sortAssessmentTitlesByWindow(titles, courseworkGroup, courseworkById, viewMode)[0];
       (courseworkGroup[selectedTitle] || []).forEach((row) => list.push(row));
     });
     return list;
-  }, [visibleGrouped, selectedCourseworkByCourse, courseworkById, selectedAssessmentIds, selectedStatusFilters, filteredRows]);
+  }, [visibleGrouped, selectedCourseworkByCourse, courseworkById, selectedAssessmentIds, selectedStatusFilters, windowRows, viewMode]);
 
   const statusFilterOptions = STUDENT_STATUS_OPTIONS;
 
@@ -1256,15 +1328,21 @@ const SubmissionsPage = () => {
   const approvalSheet = useMemo(() => {
     const headers = [
       "Sr #",
+      "Window",
+      "Semester",
       "Course",
       "Teacher",
       "Assessment",
+      "Type",
+      "Mode",
+      "Due",
       "Name",
       "Group",
       "Members",
       "Roll no",
       "Date/time",
       "Status",
+      "Late",
       "Marks",
       "Max marks",
       "File",
@@ -1274,6 +1352,7 @@ const SubmissionsPage = () => {
     const rows = displayRows.map((item, idx) => {
       const coursework = courseworkById[String(item.coursework)];
       const courseId = String(coursework?.course || "");
+      const course = courses.find((row) => String(row.id) === courseId);
       const submittedAt = getDisplayedSubmittedAt(item);
       const submissionId = getPrimarySubmissionId(item);
       const feedbackRow = feedbackBySubmission[String(submissionId)] || {};
@@ -1286,15 +1365,21 @@ const SubmissionsPage = () => {
           : "No";
       return [
         idx + 1,
+        isAssessmentOpen(coursework) ? "Open" : "Closed",
+        course?.semester_name || (course?.semester_number ? `Semester ${course.semester_number}` : "-"),
         courseNameById[courseId] || "-",
         courseTeacherById[courseId] || "-",
         item.coursework_title || coursework?.title || "-",
+        typeFilterOptions.find((option) => option.value === normalizeCourseworkType(coursework?.coursework_type))?.label || coursework?.coursework_type || "-",
+        SUBMISSION_TYPE_OPTIONS.find((option) => option.value === coursework?.submission_type)?.label || coursework?.submission_type || "-",
+        coursework?.deadline ? formatDate(coursework.deadline) : "No due date",
         item.student_name || "-",
         item.group_name || "-",
         item.group ? getRowMemberCount(item, groupsById) : "-",
         item.student_roll_no || "-",
         submittedAt ? formatDate(submittedAt) : "-",
         STATUS_CHIP[getStudentStatus(item)]?.label || "Waiting",
+        item.is_late ? "Late" : "On time",
         formatMarks(marks),
         formatMarks(coursework?.max_marks),
         fileLabel,
@@ -1303,52 +1388,85 @@ const SubmissionsPage = () => {
       ];
     });
     const filterBits = [
+      viewMode === "closed" ? "Window: Closed" : "Window: Open",
       search.trim() ? `Search: ${search.trim()}` : "",
+      selectedSemesterIds.length
+        ? `Semesters: ${semesterFilterOptions.filter((item) => selectedSemesterIds.includes(item.value)).map((item) => item.label).join(", ")}`
+        : "",
       selectedCourseIds.length
         ? `Courses: ${courseFilterOptions.filter((item) => selectedCourseIds.includes(item.value)).map((item) => item.label).join(", ")}`
         : "All courses",
+      selectedTeacherNames.length ? `Teachers: ${selectedTeacherNames.join(", ")}` : "",
       selectedAssessmentIds.length
         ? `Assessments: ${assessmentFilterOptions.filter((item) => selectedAssessmentIds.includes(item.value)).map((item) => item.label).join(", ")}`
         : "Visible assessments",
+      selectedTypeFilters.length
+        ? `Type: ${typeFilterOptions.filter((item) => selectedTypeFilters.includes(item.value)).map((item) => item.label).join(", ")}`
+        : "",
+      selectedModeFilters.length
+        ? `Mode: ${SUBMISSION_TYPE_OPTIONS.filter((item) => selectedModeFilters.includes(item.value)).map((item) => item.label).join(", ")}`
+        : "",
       selectedGroupIds.length
         ? `Groups: ${groupFilterOptions.filter((item) => selectedGroupIds.includes(item.value)).map((item) => item.label).join(", ")}`
         : "",
       selectedStatusFilters.length
         ? `Status: ${STUDENT_STATUS_OPTIONS.filter((item) => selectedStatusFilters.includes(item.value)).map((item) => item.label).join(", ")}`
         : "All statuses",
+      selectedFileFilters.length ? `File: ${selectedFileFilters.join(", ")}` : "",
+      selectedLateFilters.length ? `Late: ${selectedLateFilters.join(", ")}` : "",
+      selectedTopicFilters.length ? `Topic: ${selectedTopicFilters.join(", ")}` : "",
+      `Exported ${new Date().toLocaleString()}`,
       `Rows: ${rows.length}`,
     ].filter(Boolean);
     return {
       headers,
       rows,
       subtitle: filterBits.join(" · "),
-      filePrefix: isAdminApprovalsView ? "admin-assessment-approvals" : "teacher-assessment-approvals",
+      filePrefix: `${isAdminApprovalsView ? "admin" : "teacher"}-approvals-${viewMode === "closed" ? "closed" : "open"}`,
     };
   }, [
     displayRows,
     courseworkById,
+    courses,
     courseNameById,
     courseTeacherById,
     feedbackBySubmission,
     groupsById,
     search,
+    viewMode,
     selectedCourseIds,
     selectedAssessmentIds,
     selectedGroupIds,
     selectedStatusFilters,
+    selectedSemesterIds,
+    selectedTeacherNames,
+    selectedTypeFilters,
+    selectedModeFilters,
+    selectedFileFilters,
+    selectedLateFilters,
+    selectedTopicFilters,
     courseFilterOptions,
     assessmentFilterOptions,
     groupFilterOptions,
+    semesterFilterOptions,
+    typeFilterOptions,
     isAdminApprovalsView,
   ]);
-  const exportApprovals = (kind) => {
+  const exportApprovals = (kind, onlySelected = false) => {
+    const rows = onlySelected
+      ? approvalSheet.rows.filter((_, idx) => selectedSubmissionIds[getRowSelectKey(displayRows[idx], idx)])
+      : approvalSheet.rows;
+    if (!rows.length) {
+      notify(onlySelected ? "Select rows to export" : "Nothing to export in this view", "warning");
+      return;
+    }
     exportTable({
       kind,
-      filePrefix: approvalSheet.filePrefix,
+      filePrefix: onlySelected ? `${approvalSheet.filePrefix}-selected` : approvalSheet.filePrefix,
       title: "Assessment Approvals",
-      subtitle: approvalSheet.subtitle,
+      subtitle: onlySelected ? `${approvalSheet.subtitle} · Selected only` : approvalSheet.subtitle,
       headers: approvalSheet.headers,
-      rows: approvalSheet.rows,
+      rows,
     });
   };
   const selectedRows = useMemo(
@@ -1414,7 +1532,34 @@ const SubmissionsPage = () => {
       });
     }
     if (value === "save-typed") return saveAllDraftMarks(section.items);
+    if (value === "delete-selected") return bulkDeleteSelected(section.selectedItems);
+    if (value === "export-selected-csv") return exportApprovals("csv", true);
+    if (value === "export-selected-pdf") return exportApprovals("pdf", true);
+    if (value === "select-waiting") return selectRowsByStatus(section.items, "waiting");
+    if (value === "select-requests") return selectRowsByStatus(section.items, "pending");
+    if (value === "select-files") return selectRowsByStatus(section.items, "file_submitted");
+    if (value === "expand-groups") return setGroupRowsExpanded(section.items, true);
+    if (value === "collapse-groups") return setGroupRowsExpanded(section.items, false);
     return null;
+  };
+  const selectRowsByStatus = (items, status) => {
+    setSelectedSubmissionIds((prev) => {
+      const next = { ...prev };
+      items.forEach((item, idx) => {
+        if (getStudentStatus(item) === status) next[getRowSelectKey(item, idx)] = true;
+      });
+      return next;
+    });
+  };
+  const setGroupRowsExpanded = (items, expanded) => {
+    setOpenGroupRows((prev) => {
+      const next = { ...prev };
+      items.forEach((item, idx) => {
+        if (!canShowMembersButton(item, groupsById)) return;
+        next[getRowSelectKey(item, idx)] = expanded;
+      });
+      return next;
+    });
   };
   const bulkSaveSelectedMarks = async (rowList) => {
     if (bulkSaveLockRef.current) return;
@@ -1538,7 +1683,7 @@ const SubmissionsPage = () => {
       return;
     }
     resultsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [selectedCourseIds, selectedAssessmentIds, selectedGroupIds, selectedStatusFilters]);
+  }, [selectedCourseIds, selectedAssessmentIds, selectedGroupIds, selectedStatusFilters, selectedSemesterIds, selectedTeacherNames, selectedTypeFilters, selectedModeFilters, viewMode]);
 
   useEffect(() => {
     const courseKeys = Object.keys(groupedByCourseAndCoursework);
@@ -1569,13 +1714,18 @@ const SubmissionsPage = () => {
   }, [visibleSelectKeys]);
 
   const courseSections = Object.entries(visibleGrouped).map(([courseTitle, courseworkGroup]) => {
-    const assessmentTitles = sortAssessmentTitlesByComing(Object.keys(courseworkGroup), courseworkGroup, courseworkById);
+    const assessmentTitles = sortAssessmentTitlesByWindow(Object.keys(courseworkGroup), courseworkGroup, courseworkById, viewMode);
     const selectedTitle = selectedCourseworkByCourse[courseTitle] || assessmentTitles[0];
     const items = orderApprovalRows(courseworkGroup[selectedTitle] || []);
     const selectedItems = items.filter((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
     const tableAllChecked = items.length > 0 && items.every((item, idx) => selectedSubmissionIds[getRowSelectKey(item, idx)]);
+    const selectedCoursework = courseworkForTitle(selectedTitle, courseworkGroup, courseworkById);
+    const courseId = String(selectedCoursework?.course || items[0]?.course || "");
+    const course = courses.find((item) => String(item.id) === courseId);
     return {
       courseTitle,
+      course,
+      selectedCoursework,
       courseworkGroup,
       assessmentTitles,
       selectedTitle,
@@ -1593,7 +1743,11 @@ const SubmissionsPage = () => {
       tableAllChecked,
       tableSomeChecked: selectedItems.length > 0 && !tableAllChecked,
     };
-  });
+  }).sort((a, b) => (
+    viewMode === "closed"
+      ? closedSortKey(a.selectedCoursework) - closedSortKey(b.selectedCoursework)
+      : upcomingSortKey(a.selectedCoursework) - upcomingSortKey(b.selectedCoursework)
+  ));
 
   const renderApprovalTableRow = (item, idx, { sr, isMemberRow = false, isExpanded = false } = {}) => {
     const primarySubmissionId = getPrimarySubmissionId(item);
@@ -1646,6 +1800,9 @@ const SubmissionsPage = () => {
                   "&:hover": { bgcolor: "#eab308" },
                 }}
               />
+            ) : null}
+            {!isMemberRow && item.is_late ? (
+              <Chip size="small" label="Late" sx={{ bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }} />
             ) : null}
           </Stack>
           {showTopic ? (
@@ -1735,11 +1892,57 @@ const SubmissionsPage = () => {
     <Box sx={{ flex: 1, minHeight: 0, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
     <ListingPage
       title="Assessment Approvals"
-      subtitle="Group assessments show group leads first. Open Members to mark the group or each student, then save once."
+      subtitle="Open work is nearest due date first. Closed work is most recently due first. Group, individual, and both marking stay the same."
+      tabs={(
+        <Stack spacing={0.6}>
+          <CompactTabs
+            value={viewMode}
+            onChange={setViewMode}
+            tabs={[
+              { value: "opening", label: `Open (${windowCounts.open})` },
+              { value: "closed", label: `Closed (${windowCounts.closed})` },
+            ]}
+          />
+          <Stack direction="row" spacing={0.6} useFlexGap flexWrap="wrap">
+            {STUDENT_STATUS_OPTIONS.map((option) => {
+              const count = displayRows.filter((row) => getStudentStatus(row) === option.value).length;
+              if (!count) return null;
+              return (
+                <Chip
+                  key={option.value}
+                  size="small"
+                  label={`${option.label} ${count}`}
+                  onClick={() => setSelectedStatusFilters((prev) => (prev.length === 1 && prev[0] === option.value ? [] : [option.value]))}
+                  sx={{
+                    fontWeight: 700,
+                    bgcolor: selectedStatusFilters.includes(option.value) ? STATUS_CHIP[option.value].bgcolor : "#f8fafc",
+                    color: STATUS_CHIP[option.value].color,
+                  }}
+                />
+              );
+            })}
+            {displayRows.some((row) => row.is_late) ? (
+              <Chip
+                size="small"
+                label={`Late ${displayRows.filter((row) => row.is_late).length}`}
+                onClick={() => setSelectedLateFilters((prev) => (prev.length === 1 && prev[0] === "yes" ? [] : ["yes"]))}
+                sx={{ fontWeight: 700, bgcolor: "#fee2e2", color: "#b91c1c" }}
+              />
+            ) : null}
+          </Stack>
+        </Stack>
+      )}
       actions={(
         <Stack direction="row" spacing={0.8}>
-          <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={() => exportApprovals("csv")}>CSV</Button>
-          <Button size="small" variant="outlined" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={() => exportApprovals("pdf")}>PDF</Button>
+          <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={(e) => setExportMenu(e.currentTarget)}>
+            Export
+          </Button>
+          <Menu anchorEl={exportMenu} open={Boolean(exportMenu)} onClose={() => setExportMenu(null)}>
+            <MenuItem onClick={() => { exportApprovals("csv"); setExportMenu(null); }}>CSV · this view</MenuItem>
+            <MenuItem onClick={() => { exportApprovals("pdf"); setExportMenu(null); }}>PDF · this view</MenuItem>
+            <MenuItem onClick={() => { exportApprovals("csv", true); setExportMenu(null); }}>CSV · selected</MenuItem>
+            <MenuItem onClick={() => { exportApprovals("pdf", true); setExportMenu(null); }}>PDF · selected</MenuItem>
+          </Menu>
         </Stack>
       )}
       filters={(
@@ -1754,22 +1957,57 @@ const SubmissionsPage = () => {
             setSelectedAssessmentIds([]);
             setSelectedGroupIds([]);
             setSelectedStatusFilters([]);
+            setSelectedSemesterIds([]);
+            setSelectedTeacherNames([]);
+            setSelectedTypeFilters([]);
+            setSelectedModeFilters([]);
+            setSelectedFileFilters([]);
+            setSelectedLateFilters([]);
+            setSelectedTopicFilters([]);
             resetSearch();
           }}
           filters={(
             <>
+              {semesterFilterOptions.length ? (
+                <MultiFilterSelect
+                  label="Semester"
+                  value={selectedSemesterIds}
+                  options={semesterFilterOptions}
+                  onChange={setSelectedSemesterIds}
+                />
+              ) : null}
               <MultiFilterSelect
                 label="Course"
                 value={selectedCourseIds}
                 options={courseFilterOptions}
                 onChange={setSelectedCourseIds}
               />
+              {isAdminApprovalsView && teacherFilterOptions.length ? (
+                <MultiFilterSelect
+                  label="Teacher"
+                  value={selectedTeacherNames}
+                  options={teacherFilterOptions}
+                  onChange={setSelectedTeacherNames}
+                />
+              ) : null}
               <MultiFilterSelect
                 label="Assessment"
                 value={selectedAssessmentIds}
                 options={assessmentFilterOptions}
                 onChange={setSelectedAssessmentIds}
                 minWidth={220}
+              />
+              <MultiFilterSelect
+                label="Type"
+                value={selectedTypeFilters}
+                options={typeFilterOptions}
+                onChange={setSelectedTypeFilters}
+              />
+              <MultiFilterSelect
+                label="Mode"
+                value={selectedModeFilters}
+                options={SUBMISSION_TYPE_OPTIONS}
+                onChange={setSelectedModeFilters}
               />
               {groupFilterOptions.length ? (
                 <MultiFilterSelect
@@ -1787,6 +2025,24 @@ const SubmissionsPage = () => {
                 onChange={setSelectedStatusFilters}
                 minWidth={200}
               />
+              <MultiFilterSelect
+                label="File"
+                value={selectedFileFilters}
+                options={FLAG_FILTER_OPTIONS}
+                onChange={setSelectedFileFilters}
+              />
+              <MultiFilterSelect
+                label="Late"
+                value={selectedLateFilters}
+                options={FLAG_FILTER_OPTIONS}
+                onChange={setSelectedLateFilters}
+              />
+              <MultiFilterSelect
+                label="Topic"
+                value={selectedTopicFilters}
+                options={FLAG_FILTER_OPTIONS}
+                onChange={setSelectedTopicFilters}
+              />
             </>
           )}
         />
@@ -1795,25 +2051,39 @@ const SubmissionsPage = () => {
         <Stack spacing={1.2} ref={resultsSectionRef}>
           {courseSections.map((section) => (
             <Box key={section.courseTitle}>
-              <Typography sx={{ fontWeight: 800, color: "#13377a", mb: 1 }}>
-                {section.courseTitle}
-              </Typography>
+              <Stack spacing={0.2} sx={{ mb: 1 }}>
+                <Typography sx={{ fontWeight: 800, color: "#13377a" }}>
+                  {section.courseTitle}
+                </Typography>
+                <Typography variant="caption" sx={{ color: "#5b6f91" }}>
+                  {[
+                    section.course?.semester_name || (section.course?.semester_number ? `Semester ${section.course.semester_number}` : ""),
+                    (section.course?.teacher_names || []).join(", "),
+                    section.selectedCoursework?.deadline
+                      ? `${viewMode === "closed" ? "Closed" : "Due"} ${formatDate(section.selectedCoursework.deadline)}`
+                      : "No due date",
+                  ].filter(Boolean).join(" · ")}
+                </Typography>
+              </Stack>
               <Box sx={{ mb: 1.2 }}>
                 <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "#35507c", mb: 0.5 }}>
-                  Assessments
+                  {viewMode === "closed" ? "Closed assessments" : "Open assessments"}
                 </Typography>
                 {section.assessmentTitles.length > 1 ? (
                   <CompactTabs
                     value={section.selectedTitle}
                     onChange={(next) => setSelectedCourseworkByCourse((prev) => ({ ...prev, [section.courseTitle]: next }))}
-                    tabs={section.assessmentTitles.map((title) => ({
-                      value: title,
-                      label: `${title} (${(section.courseworkGroup[title] || []).length})`,
-                    }))}
+                    tabs={section.assessmentTitles.map((title) => {
+                      const cw = courseworkForTitle(title, section.courseworkGroup, courseworkById);
+                      return {
+                        value: title,
+                        label: `${title} · ${formatDueShort(cw?.deadline)} (${(section.courseworkGroup[title] || []).length})`,
+                      };
+                    })}
                   />
                 ) : (
                   <Typography sx={{ fontWeight: 700, color: "#35507c" }}>
-                    {section.selectedTitle} ({section.items.length})
+                    {section.selectedTitle} · {formatDueShort(section.selectedCoursework?.deadline)} ({section.items.length})
                   </Typography>
                 )}
               </Box>
@@ -1892,6 +2162,32 @@ const SubmissionsPage = () => {
                         <MenuItem value="save-typed" disabled={!section.items.length || savingAllMarks}>
                           {savingAllMarks ? "Saving typed marks..." : "Save typed marks"}
                         </MenuItem>
+                        <MenuItem value="select-waiting" disabled={!section.items.some((row) => getStudentStatus(row) === "waiting")}>
+                          {`Select waiting (${section.items.filter((row) => getStudentStatus(row) === "waiting").length})`}
+                        </MenuItem>
+                        <MenuItem value="select-requests" disabled={!section.items.some((row) => getStudentStatus(row) === "pending")}>
+                          Select requests
+                        </MenuItem>
+                        <MenuItem value="select-files" disabled={!section.items.some((row) => getStudentStatus(row) === "file_submitted")}>
+                          Select file sent
+                        </MenuItem>
+                        <MenuItem value="expand-groups" disabled={!section.items.some((row) => canShowMembersButton(row, groupsById))}>
+                          Expand group members
+                        </MenuItem>
+                        <MenuItem value="collapse-groups" disabled={!section.items.some((row) => canShowMembersButton(row, groupsById))}>
+                          Hide group members
+                        </MenuItem>
+                        <MenuItem value="export-selected-csv" disabled={!section.selectedItems.length}>
+                          {`Export selected CSV (${section.selectedItems.length})`}
+                        </MenuItem>
+                        <MenuItem value="export-selected-pdf" disabled={!section.selectedItems.length}>
+                          {`Export selected PDF (${section.selectedItems.length})`}
+                        </MenuItem>
+                        {isAdminApprovalsView ? (
+                          <MenuItem value="delete-selected" disabled={!section.selectedItems.length || bulkDeleting}>
+                            {bulkDeleting ? "Deleting..." : `Delete selected (${section.selectedItems.length})`}
+                          </MenuItem>
+                        ) : null}
                       </Select>
                     </FormControl>
           </Stack>
@@ -1906,22 +2202,27 @@ const SubmissionsPage = () => {
           {(() => {
             const groupCount = displayRows.filter((row) => row.group).length;
             const individualCount = displayRows.length - groupCount;
+            const windowLabel = viewMode === "closed" ? "Closed" : "Open";
             if (groupCount && individualCount) {
-              return `${groupCount} group${groupCount === 1 ? "" : "s"} and ${individualCount} individual student${individualCount === 1 ? "" : "s"} in this view`;
+              return `${windowLabel} · ${groupCount} group${groupCount === 1 ? "" : "s"} and ${individualCount} individual student${individualCount === 1 ? "" : "s"} in this view`;
             }
             if (groupCount) {
-              return `${groupCount} group${groupCount === 1 ? "" : "s"} in this view`;
+              return `${windowLabel} · ${groupCount} group${groupCount === 1 ? "" : "s"} in this view`;
             }
-            return `${displayRows.length} student${displayRows.length === 1 ? "" : "s"} in this view`;
+            return `${windowLabel} · ${displayRows.length} student${displayRows.length === 1 ? "" : "s"} in this view`;
           })()}
                 </Typography>
       ) : null}
     >
         {!courseSections.length && !loading && (
           <Box sx={{ py: 5, textAlign: "center" }}>
-            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>No students match these filters</Typography>
+            <Typography sx={{ fontWeight: 700, color: "#13377a" }}>
+              {viewMode === "closed" ? "No closed assessments in this filter" : "No open assessments in this filter"}
+            </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Change course, assessment, or student status, or reset to All.
+              {viewMode === "closed"
+                ? "Work still before its deadline is in Open. Reset filters or switch tabs."
+                : "Work past its deadline is in Closed. Reset filters or switch tabs."}
                           </Typography>
           </Box>
         )}
