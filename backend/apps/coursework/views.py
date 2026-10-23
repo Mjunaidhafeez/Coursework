@@ -25,6 +25,7 @@ from apps.groups.models import GroupMember, StudentGroup
 
 from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
 from .serializers import CourseworkSerializer, FeedbackGradeSerializer, SubmissionSerializer
+from .sharing import peer_student_ids, sibling_submission_qs
 
 
 class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
@@ -64,7 +65,22 @@ class CourseworkViewSet(AuditLogMixin, BulkActionMixin, viewsets.ModelViewSet):
         if user.role == User.Role.TEACHER:
             return queryset.filter(course__teachers=user)
         if user.role == User.Role.STUDENT:
-            return queryset.filter(course__enrollments__student=user).distinct()
+            member_groups = StudentGroup.objects.filter(
+                members__student=user,
+                members__accepted=True,
+            )
+            group_course_ids = member_groups.exclude(course_id=None).values_list("course_id", flat=True)
+            group_coursework_ids = member_groups.exclude(coursework_id=None).values_list("coursework_id", flat=True)
+            shared_coursework_ids = Submission.objects.filter(
+                Q(student=user)
+                | Q(group__members__student=user, group__members__accepted=True)
+            ).values_list("coursework_id", flat=True)
+            return queryset.filter(
+                Q(course__enrollments__student=user)
+                | Q(course_id__in=group_course_ids)
+                | Q(id__in=group_coursework_ids)
+                | Q(id__in=shared_coursework_ids)
+            ).distinct()
         return queryset
 
     def _ensure_auto_approved_roster(self, coursework):
@@ -400,14 +416,27 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
         return queryset
 
+    def _notify_submission_peers(self, submission, message):
+        peer_ids = peer_student_ids(submission, exclude_id=self.request.user.id)
+        if not peer_ids:
+            return
+        peers = list(User.objects.filter(id__in=peer_ids, is_active=True))
+        if peers:
+            notify_event(peers, message)
+
     def perform_create(self, serializer):
         submission = serializer.save()
         self.create_audit_log(self.request, "submission_created", submission, {"status": submission.status})
+        actor = self.request.user.get_full_name().strip() or self.request.user.username
         teachers = list(submission.coursework.course.teachers.filter(is_active=True))
         push_notifications(
             teachers,
             f"New submission for {submission.coursework.title}",
             f"{submission.student.get_full_name().strip() if submission.student else 'A student'} submitted a request.",
+        )
+        self._notify_submission_peers(
+            submission,
+            f"{actor} sent a request for {submission.coursework.title}. Open Submit Work to view it and upload files.",
         )
 
     def _get_scope_submissions(self, submission, scope):
@@ -738,25 +767,11 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
         target = submission.submission_files.filter(id=file_id).first()
         if target:
             return target
-        extra = (
-            SubmissionFile.objects.filter(id=file_id)
+        return (
+            SubmissionFile.objects.filter(id=file_id, submission__in=sibling_submission_qs(submission))
             .select_related("submission")
             .first()
         )
-        if not extra or extra.submission.coursework_id != submission.coursework_id:
-            return None
-        other = extra.submission
-        if submission.group_id and other.group_id and submission.group_id == other.group_id:
-            return extra
-        own_ids = {*(submission.requested_member_ids or [])}
-        other_ids = {*(other.requested_member_ids or [])}
-        if submission.student_id:
-            own_ids.add(submission.student_id)
-        if other.student_id:
-            other_ids.add(other.student_id)
-        if own_ids and own_ids == other_ids:
-            return extra
-        return None
 
     def _serve_submission_file(self, request, file_id, as_attachment):
         submission = self.get_object()
@@ -779,8 +794,6 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             if latest.file:
                 submission.file = latest.file.name
             submission.submitted_at = latest.uploaded_at
-            if latest.uploaded_by_id:
-                submission.student_id = latest.uploaded_by_id
         else:
             submission.file = None
         submission.save()
@@ -813,10 +826,15 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             created.append(row)
         self._sync_primary_file_from_uploaded_files(submission)
         submission.refresh_from_db()
-        teachers = submission.coursework.course.teachers.filter(is_active=True)
+        actor = request.user.get_full_name().strip() or request.user.username
+        title = f"{submission.coursework.course.code} — {submission.coursework.title}"
         notify_event(
-            list(teachers),
-            f"{request.user.get_full_name().strip() or request.user.username} submitted {len(created)} file(s) for {submission.coursework.course.code} — {submission.coursework.title}.",
+            list(submission.coursework.course.teachers.filter(is_active=True)),
+            f"{actor} submitted {len(created)} file(s) for {title}.",
+        )
+        self._notify_submission_peers(
+            submission,
+            f"{actor} submitted {len(created)} file(s) for {submission.coursework.title}.",
         )
         return Response(
             {
@@ -834,13 +852,14 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
         if not file_id:
             return Response({"detail": "file_id is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        target = submission.submission_files.filter(id=file_id).first()
+        target = self._resolve_submission_file(submission, file_id)
         if not target:
             return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        owner = target.submission
         delete_stored_file(target)
         target.delete()
-        self._sync_primary_file_from_uploaded_files(submission)
+        self._sync_primary_file_from_uploaded_files(owner)
         submission.refresh_from_db()
         return Response(
             {
@@ -867,7 +886,7 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             return Response({"detail": "file_id is required."}, status=status.HTTP_400_BAD_REQUEST)
         if not title:
             return Response({"detail": "File name is required."}, status=status.HTTP_400_BAD_REQUEST)
-        target = submission.submission_files.filter(id=file_id).first()
+        target = self._resolve_submission_file(submission, file_id)
         if not target:
             return Response({"detail": "File not found."}, status=status.HTTP_404_NOT_FOUND)
         try:
@@ -885,7 +904,12 @@ class SubmissionViewSet(AuditLogMixin, viewsets.ModelViewSet):
             serializer.save()
             return
         if user.role == User.Role.STUDENT and self._can_student_edit_submission(user, submission):
-            serializer.save()
+            saved = serializer.save()
+            actor = user.get_full_name().strip() or user.username
+            self._notify_submission_peers(
+                saved,
+                f"{actor} updated the request for {saved.coursework.title}.",
+            )
             return
         raise PermissionDenied("You do not have permission to update this submission.")
 

@@ -18,7 +18,14 @@ const normalizeMember = (member) => {
   const rollNo = member?.rollNo || member?.roll_no || member?.student_roll_no || member?.student_id || "";
   const avatar = toAbsoluteMediaUrl(member?.avatar || member?.student_avatar || null);
   const key = member?.id || member?.student || `${name}-${rollNo}`;
-  return { key, name, rollNo, avatar, isLead: Boolean(member?.is_lead) };
+  return {
+    key,
+    name,
+    rollNo,
+    avatar,
+    isLead: Boolean(member?.is_lead),
+    activity: member?.activity || "",
+  };
 };
 
 const StudentMemberList = ({ members = [], emptyText = "No members found.", compact = false }) => {
@@ -63,6 +70,9 @@ const StudentMemberList = ({ members = [], emptyText = "No members found.", comp
                   {item.name}
                 </Typography>
                 {item.isLead ? <Chip size="small" color="primary" variant="outlined" label="Lead" sx={{ height: 18, fontSize: "0.62rem" }} /> : null}
+                {item.activity ? (
+                  <Chip size="small" color="success" variant="outlined" label={item.activity} sx={{ height: 18, fontSize: "0.62rem" }} />
+                ) : null}
               </Stack>
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: compact ? "0.65rem" : undefined }}>
                 {item.rollNo || "-"}

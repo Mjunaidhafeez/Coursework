@@ -6,6 +6,7 @@ from apps.common.uploads import media_field_url, public_file_url, store_upload, 
 from apps.groups.models import GroupMember, StudentGroup
 
 from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
+from .sharing import sibling_files_qs
 
 
 def normalize_coursework_type(value):
@@ -175,6 +176,7 @@ class CourseworkSerializer(serializers.ModelSerializer):
 class SubmissionFileSerializer(serializers.ModelSerializer):
     file_name = serializers.SerializerMethodField()
     file = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = SubmissionFile
@@ -187,6 +189,7 @@ class SubmissionFileSerializer(serializers.ModelSerializer):
             "file_name",
             "original_name",
             "uploaded_by",
+            "uploaded_by_name",
             "uploaded_at",
             "created_at",
         ]
@@ -209,6 +212,11 @@ class SubmissionFileSerializer(serializers.ModelSerializer):
     def get_file(self, obj):
         return public_file_url(obj, self.context.get("request"))
 
+    def get_uploaded_by_name(self, obj):
+        if not obj.uploaded_by:
+            return ""
+        return obj.uploaded_by.get_full_name().strip() or obj.uploaded_by.username
+
 
 class SubmissionSerializer(serializers.ModelSerializer):
     member_ids = serializers.ListField(
@@ -228,7 +236,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
     last_file_updated_at = serializers.SerializerMethodField()
     is_marked = serializers.SerializerMethodField()
     obtained_marks = serializers.SerializerMethodField()
-    submitted_files = SubmissionFileSerializer(many=True, read_only=True, source="submission_files")
+    submitted_files = serializers.SerializerMethodField()
 
     class Meta:
         model = Submission
@@ -337,8 +345,24 @@ class SubmissionSerializer(serializers.ModelSerializer):
         full_name = obj.student.get_full_name().strip()
         return full_name or obj.student.username
 
+    def _shared_files(self, obj):
+        cache = self.context.setdefault("_sibling_files", {})
+        if obj.group_id:
+            key = f"g:{obj.coursework_id}:{obj.group_id}"
+        elif obj.requested_member_ids:
+            key = f"r:{obj.coursework_id}:{','.join(str(item) for item in sorted(obj.requested_member_ids or []))}"
+        else:
+            return list(obj.submission_files.all())
+        if key not in cache:
+            cache[key] = list(sibling_files_qs(obj))
+        return cache[key]
+
+    def get_submitted_files(self, obj):
+        return SubmissionFileSerializer(self._shared_files(obj), many=True, context=self.context).data
+
     def get_last_file_updated_by_name(self, obj):
-        latest = obj.submission_files.order_by("-uploaded_at", "-created_at").first()
+        files = self._shared_files(obj)
+        latest = files[-1] if files else None
         if latest and latest.uploaded_by:
             return latest.uploaded_by.get_full_name().strip() or latest.uploaded_by.username
         if not obj.file:
@@ -346,7 +370,8 @@ class SubmissionSerializer(serializers.ModelSerializer):
         return self.get_submitted_by_name(obj)
 
     def get_last_file_updated_at(self, obj):
-        latest = obj.submission_files.order_by("-uploaded_at", "-created_at").first()
+        files = self._shared_files(obj)
+        latest = files[-1] if files else None
         if latest:
             return latest.uploaded_at
         if not obj.file:

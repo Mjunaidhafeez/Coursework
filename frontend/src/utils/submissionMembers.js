@@ -44,6 +44,7 @@ export const resolveSubmissionMembers = async (api, endpoints, submission) => {
       name: member.student_name || member.student_display || member.student_username || `Student #${member.student || "-"}`,
       roll_no: member.student_roll_no || "",
       avatar: member.student_avatar || null,
+      is_lead: Boolean(member.is_lead),
     }));
   }
 
@@ -60,4 +61,22 @@ export const resolveSubmissionMembers = async (api, endpoints, submission) => {
   }
 
   return [];
+};
+
+export const withMemberFileActivity = (members = [], files = [], leadId = null) => {
+  const counts = new Map();
+  files.forEach((file) => {
+    const key = String(file.uploaded_by || "");
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return members.map((member) => {
+    const id = String(member.student_id || member.id || "");
+    const count = counts.get(id) || 0;
+    return {
+      ...member,
+      is_lead: Boolean(member.is_lead) || (leadId != null && String(leadId) === id),
+      activity: count ? `Submitted ${count} file${count === 1 ? "" : "s"}` : "",
+    };
+  });
 };

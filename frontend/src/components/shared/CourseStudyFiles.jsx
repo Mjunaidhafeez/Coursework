@@ -19,16 +19,17 @@ import {
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import api from "../../api/client";
 import { ENDPOINTS } from "../../api/endpoints";
 import { useUi } from "../../context/UiContext";
 import { extractApiErrorMessage } from "../../utils/apiErrors";
 import { confirmDelete } from "../../utils/confirm";
-import { displayFileName, fileExtensionFrom, IMAGE_EXT, OFFICE_EXT, previewFromBlob, titleFromFileName, WORD_EXT } from "../../utils/filePreview";
+import { displayFileName, fileExtensionFrom, IMAGE_EXT, OFFICE_EXT, previewFromBlob, WORD_EXT } from "../../utils/filePreview";
 import { oversizedFileNames } from "../../utils/uploadLimits";
 import FilePreviewDialog from "./FilePreviewDialog";
+import MultiFilePicker from "./MultiFilePicker";
 
 const fetchStudyFileBlob = async (courseId, fileId, mode) => {
   const { data } = await api.get(`${ENDPOINTS.courses}${courseId}/study-files/${fileId}/${mode}/`, {
@@ -39,9 +40,8 @@ const fetchStudyFileBlob = async (courseId, fileId, mode) => {
 
 export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClose, onChanged }) => {
   const { notify } = useUi();
-  const fileInputRef = useRef(null);
   const [title, setTitle] = useState("");
-  const [file, setFile] = useState(null);
+  const [pendingFiles, setPendingFiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const [renaming, setRenaming] = useState(null);
   const [renameTitle, setRenameTitle] = useState("");
@@ -100,29 +100,28 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
 
   const resetUpload = () => {
     setTitle("");
-    setFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setPendingFiles([]);
   };
 
   const upload = async () => {
     if (!course?.id) return;
-    if (!file) {
-      notify("Choose a study file to upload", "warning");
+    if (!pendingFiles.length) {
+      notify("Choose study file(s) to upload", "warning");
       return;
     }
-    if (oversizedFileNames([file]).length) {
-      notify("File is larger than 25 MB", "error");
+    if (oversizedFileNames(pendingFiles).length) {
+      notify("A file is larger than 25 MB", "error");
       return;
     }
     const payload = new FormData();
-    payload.append("file", file);
-    payload.append("title", title.trim() || titleFromFileName(file.name));
+    pendingFiles.forEach((item) => payload.append("files", item));
+    if (title.trim()) payload.append("title", title.trim());
     setSaving(true);
     try {
       await api.post(`${ENDPOINTS.courses}${course.id}/study-files/`, payload, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      notify("Study file uploaded");
+      notify(pendingFiles.length === 1 ? "Study file uploaded" : `${pendingFiles.length} study files uploaded`);
       resetUpload();
       onChanged?.();
     } catch (err) {
@@ -177,29 +176,21 @@ export const CourseStudyFilesDialog = ({ open, course, canManage = false, onClos
               onChange={(e) => setTitle(e.target.value)}
               sx={{ minWidth: 180, flex: 1 }}
             />
-            <Button size="small" variant="outlined" component="label">
-              {file ? file.name : "Choose file"}
-              <input
-                ref={fileInputRef}
-                hidden
-                type="file"
-                accept=".pdf,.doc,.docx,.zip,.ppt,.pptx,.xlsx,.xls,.png,.jpg,.jpeg"
-                onChange={(e) => {
-                  const next = e.target.files?.[0] || null;
-                  if (next && oversizedFileNames([next]).length) {
-                    notify("File is larger than 25 MB", "error");
-                    e.target.value = "";
-                    setFile(null);
-                    return;
-                  }
-                  setFile(next);
-                }}
-              />
+            <MultiFilePicker
+              accept=".pdf,.doc,.docx,.zip,.ppt,.pptx,.xlsx,.xls,.png,.jpg,.jpeg"
+              files={pendingFiles}
+              onChange={(next) => {
+                if (oversizedFileNames(next).length) {
+                  notify("A file is larger than 25 MB", "error");
+                  return;
+                }
+                setPendingFiles(next);
+              }}
+            />
+            <Button size="small" variant="contained" disabled={saving || !pendingFiles.length} onClick={upload}>
+              {saving ? "Uploading..." : pendingFiles.length > 1 ? `Upload ${pendingFiles.length}` : "Upload"}
             </Button>
-            <Button size="small" variant="contained" disabled={saving} onClick={upload}>
-              {saving ? "Uploading..." : "Add file"}
-            </Button>
-            <Typography variant="caption" color="text.secondary">Max 25 MB</Typography>
+            <Typography variant="caption" color="text.secondary">Select multiple · 25 MB each</Typography>
           </Stack>
         ) : null}
         {files.length ? (

@@ -134,21 +134,35 @@ class CourseViewSet(BulkActionMixin, viewsets.ModelViewSet):
         if not self._can_manage_course_files(request.user, course):
             return Response({"detail": "You can only upload files for your courses."}, status=status.HTTP_403_FORBIDDEN)
         title = str(request.data.get("title") or "").strip()
-        upload = request.FILES.get("file")
-        if not upload:
+        uploads = request.FILES.getlist("files") or request.FILES.getlist("file")
+        if not uploads and request.FILES.get("file"):
+            uploads = [request.FILES["file"]]
+        if not uploads:
             return Response({"detail": "A study file is required."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            validate_upload(upload)
-        except ValidationError as exc:
-            return Response({"detail": exc.detail if hasattr(exc, "detail") else str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        if not title:
-            title = upload.name.rsplit(".", 1)[0]
-        study_file = CourseStudyFile(course=course, title=title, uploaded_by=request.user)
-        store_upload(study_file, upload, folder=f"mba-portal/courses/{course.id}")
-        study_file.save()
+        created = []
+        for upload in uploads:
+            try:
+                validate_upload(upload)
+            except ValidationError as exc:
+                return Response({"detail": exc.detail if hasattr(exc, "detail") else str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            stem = upload.name.rsplit(".", 1)[0]
+            display = title if title and len(uploads) == 1 else (f"{title} — {stem}" if title else stem)
+            study_file = CourseStudyFile(course=course, title=display, uploaded_by=request.user)
+            store_upload(study_file, upload, folder=f"mba-portal/courses/{course.id}")
+            study_file.save()
+            created.append(study_file)
         students = User.objects.filter(enrollments__course=course, is_active=True).distinct()
-        notify_event(students, f"New study file in {course.code}: {study_file.title}")
-        return Response(CourseStudyFileSerializer(study_file, context={"request": request}).data, status=status.HTTP_201_CREATED)
+        notify_event(
+            students,
+            f"New study file in {course.code}: {created[0].title}"
+            if len(created) == 1
+            else f"{len(created)} new study files in {course.code}.",
+        )
+        serialized = CourseStudyFileSerializer(created, many=True, context={"request": request}).data
+        return Response(
+            {"uploaded_count": len(created), "files": serialized, **(serialized[0] if len(serialized) == 1 else {})},
+            status=status.HTTP_201_CREATED,
+        )
 
     def _get_managed_study_file(self, request, file_id, forbidden_detail):
         course = self.get_object()

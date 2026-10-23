@@ -35,7 +35,8 @@ import { shouldAllotTopics } from "../../utils/courseworkForm";
 import { formatDate, formatMarks } from "../../utils/format";
 import { openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { shallowEqualObjects } from "../../utils/object";
-import { resolveSubmissionMembers } from "../../utils/submissionMembers";
+import { resolveSubmissionMembers, withMemberFileActivity } from "../../utils/submissionMembers";
+import MultiFilePicker from "../../components/shared/MultiFilePicker";
 import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
 import { oversizedFileNames } from "../../utils/uploadLimits";
 import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
@@ -106,6 +107,13 @@ const SubmitWorkPage = () => {
         map[key] = submission;
         return;
       }
+      const isMine = String(submission.student) === String(user?.id);
+      const prevMine = String(prev.student) === String(user?.id);
+      if (isMine && !prevMine) {
+        map[key] = submission;
+        return;
+      }
+      if (prevMine && !isMine) return;
       const prevTs = new Date(prev.updated_at || prev.submitted_at || prev.created_at || 0).getTime();
       const currTs = new Date(submission.updated_at || submission.submitted_at || submission.created_at || 0).getTime();
       if (currTs >= prevTs) {
@@ -113,7 +121,7 @@ const SubmitWorkPage = () => {
       }
     });
     return map;
-  }, [submissions]);
+  }, [submissions, user?.id]);
   const blockedMemberIdsByCoursework = useMemo(() => {
     const map = {};
     const addParticipant = (courseworkId, participantId) => {
@@ -862,7 +870,14 @@ const SubmitWorkPage = () => {
                                               {membersLoadingBySubmission[submission.id] ? (
                                                 <Typography variant="body2" color="text.secondary">Loading members...</Typography>
                                               ) : (
-                                                <StudentMemberList members={membersBySubmission[submission.id] || []} compact />
+                                                <StudentMemberList
+                                                  members={withMemberFileActivity(
+                                                    membersBySubmission[submission.id] || [],
+                                                    submission.submitted_files || [],
+                                                    submission.student
+                                                  )}
+                                                  compact
+                                                />
                                               )}
                                             </Box>
                                             <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
@@ -905,29 +920,22 @@ const SubmitWorkPage = () => {
                                           <Box sx={{ p: 1.2, borderRadius: 1.2, border: "1px dashed #93c5fd", bgcolor: "#f8fbff" }}>
                                             <Typography variant="body2" sx={{ fontWeight: 800 }}>Upload work</Typography>
                                             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                                              PDF, DOCX, ZIP or PPTX. Max 25 MB each.
+                                              Select multiple PDF, DOCX, ZIP or PPTX files at once. Max 25 MB each.
                                             </Typography>
                                             {canUpload ? (
-                                              <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }}>
-                                                <Button component="label" size="small" variant="outlined">
-                                                  Choose files
-                                                  <input
-                                                    hidden
-                                                    type="file"
-                                                    accept=".pdf,.docx,.zip,.pptx"
-                                                    multiple
-                                                    onChange={(e) => {
-                                                      const files = Array.from(e.target.files || []);
-                                                      const tooBig = oversizedFileNames(files);
-                                                      if (tooBig.length) {
-                                                        notify(`${tooBig.join(", ")} is larger than 25 MB`, "error");
-                                                        e.target.value = "";
-                                                        return;
-                                                      }
-                                                      setRowFiles((prev) => ({ ...prev, [submission.id]: files }));
-                                                    }}
-                                                  />
-                                                </Button>
+                                              <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8} alignItems={{ sm: "center" }} useFlexGap flexWrap="wrap">
+                                                <MultiFilePicker
+                                                  accept=".pdf,.docx,.zip,.pptx"
+                                                  files={rowFiles[submission.id] || []}
+                                                  onChange={(files) => {
+                                                    const tooBig = oversizedFileNames(files);
+                                                    if (tooBig.length) {
+                                                      notify(`${tooBig.join(", ")} is larger than 25 MB`, "error");
+                                                      return;
+                                                    }
+                                                    setRowFiles((prev) => ({ ...prev, [submission.id]: files }));
+                                                  }}
+                                                />
                                                 <Button
                                                   size="small"
                                                   variant="contained"
@@ -936,11 +944,6 @@ const SubmitWorkPage = () => {
                                                 >
                                                   {rowUploading[submission.id] ? "Uploading..." : "Upload"}
                                                 </Button>
-                                                {rowFiles[submission.id]?.length ? (
-                                                  <Typography variant="caption" color="text.secondary">
-                                                    {rowFiles[submission.id].length} file(s) selected
-                                                  </Typography>
-                                                ) : null}
                                               </Stack>
                                             ) : (
                                               <Typography variant="body2" color="text.secondary">
@@ -963,6 +966,11 @@ const SubmitWorkPage = () => {
                                                     >
                                                       <Typography variant="body2" sx={{ flex: 1 }}>
                                                         {fileItem.file_name || `File #${fileItem.id}`}
+                                                        {fileItem.uploaded_by_name ? (
+                                                          <Typography component="span" variant="caption" color="text.secondary">
+                                                            {` · ${fileItem.uploaded_by_name}`}
+                                                          </Typography>
+                                                        ) : null}
                                                       </Typography>
                                                       <Button
                                                         size="small"
