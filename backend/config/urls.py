@@ -18,7 +18,10 @@ def serve_spa(dist_dir):
         index = Path(dist_dir) / "index.html"
         if not index.exists():
             return HttpResponse("The site is being published. Please try again shortly.", status=503)
-        return HttpResponse(index.read_text(encoding="utf-8"), content_type="text/html")
+        response = HttpResponse(index.read_text(encoding="utf-8"), content_type="text/html")
+        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response["Pragma"] = "no-cache"
+        return response
 
     return _view
 
