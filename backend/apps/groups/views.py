@@ -120,6 +120,8 @@ class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
             serializer.save(status=StudentGroup.Status.PENDING)
             return
         serializer.save()
+        if serializer.instance.status == StudentGroup.Status.APPROVED:
+            GroupMember.accept_roster(serializer.instance)
 
     def perform_destroy(self, instance):
         self._validate_student_group_write(self.request, instance)
@@ -286,10 +288,7 @@ class StudentGroupViewSet(BulkActionMixin, viewsets.ModelViewSet):
         group.status = new_status
         group.save(update_fields=["status", "updated_at"])
         if new_status == StudentGroup.Status.APPROVED:
-            group.members.exclude(invitation_status=GroupMember.InvitationStatus.REJECTED).update(
-                accepted=True,
-                invitation_status=GroupMember.InvitationStatus.ACCEPTED,
-            )
+            GroupMember.accept_roster(group)
         target_label = (
             group.coursework.title if group.coursework else (group.course.title if group.course else "all courses")
         )

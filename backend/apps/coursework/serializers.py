@@ -9,6 +9,18 @@ from .models import Coursework, FeedbackGrade, Submission, SubmissionFile
 from .sharing import sibling_files_qs
 
 
+def _user_member_payload(user, **extra):
+    avatar = getattr(user, "avatar", None)
+    payload = {
+        "id": user.id,
+        "name": user.get_full_name().strip() or user.username,
+        "roll_no": getattr(getattr(user, "student_profile", None), "student_id", "") or "",
+        "avatar": avatar.url if avatar else None,
+    }
+    payload.update(extra)
+    return payload
+
+
 def normalize_coursework_type(value):
     return (
         str(value or "")
@@ -296,48 +308,28 @@ class SubmissionSerializer(serializers.ModelSerializer):
         if not obj.requested_member_ids:
             return []
         users = User.objects.filter(id__in=obj.requested_member_ids).order_by(*User.LIST_ORDER)
-        result = []
-        for user in users:
-            full_name = user.get_full_name().strip() or user.username
-            avatar = getattr(user, "avatar", None)
-            result.append(
-                {
-                    "id": user.id,
-                    "name": full_name,
-                    "roll_no": getattr(getattr(user, "student_profile", None), "student_id", "") or "",
-                    "avatar": avatar.url if avatar else None,
-                }
-            )
-        return result
+        return [_user_member_payload(user) for user in users]
 
     def get_group_member_ids(self, obj):
         group = getattr(obj, "group", None)
         if not group:
             return []
-        return list(
-            GroupMember.objects.filter(group=group, accepted=True)
-            .values_list("student_id", flat=True)
-        )
+        return list(GroupMember.roster_qs(group=group).values_list("student_id", flat=True))
 
     def get_group_member_details(self, obj):
         group = getattr(obj, "group", None)
         if not group:
             return []
-        result = []
-        members = GroupMember.objects.filter(group=group, accepted=True).select_related("student")
-        for member in members:
-            student = member.student
-            avatar = getattr(student, "avatar", None)
-            full_name = student.get_full_name().strip() or student.username
-            result.append(
-                {
-                    "id": student.id,
-                    "name": full_name,
-                    "roll_no": getattr(getattr(student, "student_profile", None), "student_id", "") or "",
-                    "avatar": avatar.url if avatar else None,
-                }
-            )
-        return result
+        members = (
+            GroupMember.roster_qs(group=group)
+            .select_related("student", "student__student_profile")
+            .order_by(*User.AS_MEMBER_ORDER)
+        )
+        return [
+            _user_member_payload(member.student, is_lead=bool(member.is_lead))
+            for member in members
+            if member.student_id
+        ]
 
     def get_submitted_by_name(self, obj):
         if not obj.student:

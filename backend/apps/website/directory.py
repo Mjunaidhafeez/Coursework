@@ -3,7 +3,7 @@ import re
 from apps.accounts.models import User
 from apps.academics.models import Course, Department
 from apps.common.uploads import media_field_url
-from apps.groups.models import StudentGroup
+from apps.groups.models import GroupMember, StudentGroup
 
 from .media import public_media_url
 from .models import WebsiteStudent, WebsiteTeacher
@@ -75,7 +75,12 @@ def portal_students(request=None):
         groups = [
             item.group.name
             for item in person.group_memberships.all()
-            if item.group_id and item.accepted is not False and getattr(item.group, "status", "") == "approved"
+            if (
+                item.group_id
+                and item.invitation_status != GroupMember.InvitationStatus.REJECTED
+                and getattr(item.group, "status", "") == "approved"
+                and getattr(item.group, "source", "") == StudentGroup.Source.MANUAL
+            )
         ]
         rows.append(
             {
@@ -99,7 +104,7 @@ def portal_students(request=None):
 def portal_groups(request=None):
     rows = []
     groups = (
-        StudentGroup.objects.filter(status=StudentGroup.Status.APPROVED)
+        StudentGroup.objects.filter(status=StudentGroup.Status.APPROVED, source=StudentGroup.Source.MANUAL)
         .select_related("course", "course__semester", "course__department")
         .prefetch_related("members__student__student_profile")
     )
@@ -107,7 +112,7 @@ def portal_groups(request=None):
         members = []
         for item in group.members.all():
             student = item.student
-            if not student or not student.is_active or item.accepted is False:
+            if not student or item.invitation_status == GroupMember.InvitationStatus.REJECTED:
                 continue
             profile = getattr(student, "student_profile", None)
             members.append(

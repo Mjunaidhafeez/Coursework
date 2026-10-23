@@ -117,13 +117,18 @@ export const filtersFromProfile = (profile) => ({
   section: profile?.section ? String(profile.section) : "",
 });
 
+export const isRejectedMember = (member) =>
+  String(member?.invitation_status || "").toLowerCase() === "rejected";
+
+export const rosterMembers = (group) =>
+  (group?.members || []).filter((member) => !isRejectedMember(member));
+
 export const occupancyFromGroups = (groups = [], ignoreGroupId = null) => {
   const map = {};
   groups.forEach((group) => {
     if (!["pending", "approved"].includes(String(group.status || "").toLowerCase())) return;
     if (ignoreGroupId && Number(group.id) === Number(ignoreGroupId)) return;
-    (group.members || []).forEach((member) => {
-      if (String(member.invitation_status || "").toLowerCase() === "rejected") return;
+    rosterMembers(group).forEach((member) => {
       const studentId = Number(member.student);
       if (!studentId || map[studentId]) return;
       map[studentId] = {
@@ -153,10 +158,7 @@ export const findStudentGroupLock = (groups, userId) =>
   (groups || []).find((group) => {
     if (!["pending", "approved"].includes(String(group.status || "").toLowerCase())) return false;
     if (Number(group.creator) === Number(userId)) return true;
-    return (group.members || []).some(
-      (member) =>
-        Number(member.student) === Number(userId) && String(member.invitation_status || "").toLowerCase() !== "rejected"
-    );
+    return rosterMembers(group).some((member) => Number(member.student) === Number(userId));
   });
 
 export const postGroupDecision = (api, endpoints, id, decision) => api.post(`${endpoints.groups}${id}/${decision}/`);

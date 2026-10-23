@@ -1,34 +1,45 @@
+import { rosterMembers } from "./groupForm";
+
+const toDialogMember = (member) => ({
+  id: member.id || member.student || member.student_id,
+  student_id: member.student_id || member.student || (typeof member.id === "number" ? member.id : null),
+  name: member.name || member.student_name || member.student_display || member.student_username || `Student #${member.student || member.id || "-"}`,
+  roll_no: member.roll_no || member.student_roll_no || "",
+  avatar: member.avatar || member.student_avatar || null,
+  is_lead: Boolean(member.is_lead),
+});
+
+const selfMember = (submission) =>
+  submission?.student_name
+    ? [
+        {
+          id: submission.student || "self",
+          student_id: submission.student || null,
+          name: submission.student_name,
+          roll_no: submission.student_roll_no || "",
+          avatar: submission.student_avatar || null,
+        },
+      ]
+    : [];
+
 export const resolveSubmissionMembers = async (api, endpoints, submission) => {
   if (!submission) return [];
 
+  if (submission.group) {
+    if ((submission.group_member_details || []).length) {
+      return submission.group_member_details.map(toDialogMember);
+    }
+    const { data } = await api.get(`${endpoints.groups}${submission.group}/`);
+    return rosterMembers(data).map(toDialogMember);
+  }
+
   if ((submission.requested_member_details || []).length) {
-    const firstMember = submission.student_name
-      ? [
-          {
-            id: submission.student || "self",
-            student_id: submission.student || null,
-            name: submission.student_name,
-            roll_no: submission.student_roll_no || "",
-            avatar: submission.student_avatar || null,
-          },
-        ]
-      : [];
-    return [...firstMember, ...(submission.requested_member_details || [])];
+    return [...selfMember(submission), ...(submission.requested_member_details || [])];
   }
 
   if ((submission.requested_member_names || []).length) {
     return [
-      ...(submission.student_name
-        ? [
-            {
-              id: submission.student || "self",
-              student_id: submission.student || null,
-              name: submission.student_name,
-              roll_no: submission.student_roll_no || "",
-              avatar: submission.student_avatar || null,
-            },
-          ]
-        : []),
+      ...selfMember(submission),
       ...(submission.requested_member_names || []).map((name, idx) => ({
         id: `requested-${idx}-${name}`,
         name,
@@ -36,31 +47,7 @@ export const resolveSubmissionMembers = async (api, endpoints, submission) => {
     ];
   }
 
-  if (submission.group) {
-    const { data } = await api.get(`${endpoints.groups}${submission.group}/`);
-    return (data.members || []).map((member) => ({
-      id: member.id || member.student,
-      student_id: member.student || null,
-      name: member.student_name || member.student_display || member.student_username || `Student #${member.student || "-"}`,
-      roll_no: member.student_roll_no || "",
-      avatar: member.student_avatar || null,
-      is_lead: Boolean(member.is_lead),
-    }));
-  }
-
-  if (submission.student_name) {
-    return [
-      {
-        id: submission.student || "self",
-        student_id: submission.student || null,
-        name: submission.student_name,
-        roll_no: submission.student_roll_no || "",
-        avatar: submission.student_avatar || null,
-      },
-    ];
-  }
-
-  return [];
+  return selfMember(submission);
 };
 
 export const withMemberFileActivity = (members = [], files = [], leadId = null) => {

@@ -48,7 +48,7 @@ import { resolveSubmissionMembers } from "../../utils/submissionMembers";
 import { STATUS_CHIP, STUDENT_STATUS_OPTIONS, getStudentStatus } from "../../utils/submissionWorkflow";
 import { exportTable } from "../../utils/export";
 import { confirmDelete } from "../../utils/confirm";
-import { leadIdFromGroup } from "../../utils/groupForm";
+import { leadIdFromGroup, rosterMembers } from "../../utils/groupForm";
 
 const compareByRollNo = (a, b) => {
   const rollA = String(a.student_roll_no || a.rollNo || "").trim();
@@ -77,17 +77,16 @@ const sortAssessmentTitlesByComing = (titles, courseworkGroup, courseworkById) =
     (a, b) => getAssessmentDeadlineScore(a, courseworkGroup, courseworkById) - getAssessmentDeadlineScore(b, courseworkGroup, courseworkById)
   );
 
-const acceptedGroupMembers = (group) =>
-  (group?.members || []).filter((member) => member.accepted !== false);
-
 const uniqueMemberCount = (values = []) =>
   new Set(values.map((value) => String(value || "").trim()).filter(Boolean)).size;
 
 const getRowMemberCount = (item, groupsById = {}) => {
   if (!item) return 0;
   if (item.group) {
-    const accepted = acceptedGroupMembers(groupsById[String(item.group)]);
-    if (accepted.length) return accepted.length;
+    const roster = rosterMembers(groupsById[String(item.group)]);
+    if (roster.length) return roster.length;
+    const fromDetails = uniqueMemberCount((item.group_member_details || []).map((member) => member.id || member.student));
+    if (fromDetails) return fromDetails;
     const fromIds = uniqueMemberCount(item.group_member_ids);
     if (fromIds) return fromIds;
     return uniqueMemberCount((item.group_member_rows || []).map((row) => row.student || row.student_id));
@@ -128,16 +127,16 @@ const getExpandableMemberRows = (item, groupsById = {}) => {
     });
   });
   if (item.group) {
-    acceptedGroupMembers(groupsById[String(item.group)]).forEach((member) => {
-      const key = String(member.student || "");
+    const addRosterMember = (member, studentKey) => {
+      const key = String(studentKey || "");
       if (!key || key === leadId || byStudent.has(key)) return;
       byStudent.set(key, {
-        id: `member-${item.coursework}-${member.student}`,
+        id: `member-${item.coursework}-${key}`,
         submission_id: null,
         coursework: item.coursework,
-        student: member.student,
-        student_name: member.student_name || member.student_display || `Student #${member.student}`,
-        student_roll_no: member.student_roll_no || "-",
+        student: member.student || member.id || key,
+        student_name: member.student_name || member.student_display || member.name || `Student #${key}`,
+        student_roll_no: member.student_roll_no || member.roll_no || "-",
         group: item.group,
         group_name: item.group_name,
         force_individual_row: true,
@@ -145,7 +144,9 @@ const getExpandableMemberRows = (item, groupsById = {}) => {
         is_member_expand_row: true,
         is_topic_not_submitted: true,
       });
-    });
+    };
+    rosterMembers(groupsById[String(item.group)]).forEach((member) => addRosterMember(member, member.student));
+    (item.group_member_details || []).forEach((member) => addRosterMember(member, member.id || member.student));
   }
   (item.requested_member_details || []).forEach((member) => {
     const key = String(member.student_id || member.student || member.id || "");
@@ -436,7 +437,7 @@ const SubmissionsPage = () => {
       const [cwRes, courseRes, groupsRes] = await Promise.all([
         api.get(`${ENDPOINTS.courseworks}?page_size=300`),
         api.get(`${ENDPOINTS.courses}?page_size=300`),
-        api.get(`${ENDPOINTS.groups}?page_size=2000&ordering=name`),
+        api.get(`${ENDPOINTS.groups}?page_size=2000&ordering=name&include_coursework_groups=true`),
       ]);
       setCourseworksMeta(cwRes.data.results || []);
       setCourses(courseRes.data.results || []);
@@ -1016,10 +1017,8 @@ const SubmissionsPage = () => {
             if (memberId) submittedStudentIds.add(String(memberId));
           });
           const group = groupsById[String(row.group)];
-          (group?.members || []).forEach((member) => {
-            if (member?.student && member.accepted !== false) {
-              submittedStudentIds.add(String(member.student));
-            }
+          rosterMembers(group).forEach((member) => {
+            if (member?.student) submittedStudentIds.add(String(member.student));
           });
         });
       const courseTitle = coursework.course_title || courses.find((course) => String(course.id) === String(coursework.course))?.title || "-";
@@ -1056,7 +1055,7 @@ const SubmissionsPage = () => {
       (row.group_member_rows || []).forEach((member) => {
         groupedStudentKeys.add(`${row.coursework}-${member.student || member.student_id}`);
       });
-      acceptedGroupMembers(groupsById[String(row.group)]).forEach((member) => {
+      rosterMembers(groupsById[String(row.group)]).forEach((member) => {
         groupedStudentKeys.add(`${row.coursework}-${member.student}`);
       });
     });
@@ -1068,7 +1067,7 @@ const SubmissionsPage = () => {
         if (group.course && String(group.course) !== String(coursework.course)) return;
         if (group.coursework && String(group.coursework) !== String(coursework.id)) return;
         if (existingGroupKeys.has(`${coursework.id}-${group.id}`)) return;
-        const members = acceptedGroupMembers(group);
+        const members = rosterMembers(group);
         if (!members.some((member) => waitingSet.has(`${coursework.id}-${member.student}`))) return;
         const leadId = leadIdFromGroup(group) || members[0]?.student;
         const lead = members.find((member) => String(member.student) === String(leadId)) || members[0];

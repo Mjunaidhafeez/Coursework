@@ -364,14 +364,18 @@ class StudentGroupSerializer(serializers.ModelSerializer):
                 desired_ids.add(instance.creator_id)
 
             existing = set(instance.members.values_list("student_id", flat=True))
+            request = self.context.get("request")
+            admin_edit = getattr(getattr(request, "user", None), "role", None) == User.Role.SUPER_ADMIN
+            auto_accept = admin_edit or instance.status == StudentGroup.Status.APPROVED
             for student_id in desired_ids - existing:
                 is_creator = student_id == instance.creator_id
+                accept = auto_accept or is_creator
                 GroupMember.objects.create(
                     group=instance,
                     student_id=student_id,
-                    accepted=is_creator,
+                    accepted=accept,
                     invitation_status=(
-                        GroupMember.InvitationStatus.ACCEPTED if is_creator else GroupMember.InvitationStatus.PENDING
+                        GroupMember.InvitationStatus.ACCEPTED if accept else GroupMember.InvitationStatus.PENDING
                     ),
                 )
                 if not is_creator:

@@ -80,6 +80,22 @@ class GroupMember(TimeStampedModel):
         return f"{self.student.username} in {self.group.name}"
 
     @classmethod
+    def roster_qs(cls, group=None, group_id=None):
+        qs = cls.objects.exclude(invitation_status=cls.InvitationStatus.REJECTED)
+        if group is not None:
+            return qs.filter(group=group)
+        if group_id is not None:
+            return qs.filter(group_id=group_id)
+        return qs
+
+    @classmethod
+    def accept_roster(cls, group):
+        return cls.roster_qs(group=group).update(
+            accepted=True,
+            invitation_status=cls.InvitationStatus.ACCEPTED,
+        )
+
+    @classmethod
     def active_for_students(cls, student_ids, exclude_group_id=None):
         qs = cls.objects.filter(
             student_id__in=student_ids,
