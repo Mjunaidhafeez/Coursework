@@ -5,6 +5,7 @@ from apps.academics.models import Course, Department
 from apps.common.uploads import media_field_url
 from apps.groups.models import StudentGroup
 
+from .media import public_media_url
 from .models import WebsiteStudent, WebsiteTeacher
 
 
@@ -24,7 +25,7 @@ def _label(user):
 
 
 def _photo(user, request=None):
-    return media_field_url(getattr(user, "avatar", None), request) or ""
+    return public_media_url(request, media_field_url(getattr(user, "avatar", None), request) or "")
 
 
 def portal_teachers(request=None):
@@ -109,8 +110,6 @@ def portal_groups(request=None):
             if not student or not student.is_active or item.accepted is False:
                 continue
             profile = getattr(student, "student_profile", None)
-            if profile and not profile.show_on_website:
-                continue
             members.append(
                 {
                     "name": _label(student),
@@ -121,7 +120,7 @@ def portal_groups(request=None):
             )
         if not members:
             continue
-        members.sort(key=lambda row: _natural_key(row.get("roll_no"), row.get("name")))
+        members.sort(key=lambda row: (not row.get("is_lead"), _natural_key(row.get("roll_no"), row.get("name"))))
         course = group.course
         rows.append(
             {
@@ -155,7 +154,7 @@ def merged_directory(request=None):
                 "department": item.department,
                 "degrees": item.degrees,
                 "bio": item.bio,
-                "photo_url": item.photo_url,
+                "photo_url": public_media_url(request, item.photo_url),
                 "subjects": [],
                 "semesters": [],
             }
@@ -177,7 +176,7 @@ def merged_directory(request=None):
                 "section": "",
                 "department": "",
                 "note": item.note,
-                "photo_url": item.photo_url,
+                "photo_url": public_media_url(request, item.photo_url),
                 "subjects": [],
                 "groups": [],
             }

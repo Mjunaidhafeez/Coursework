@@ -20,6 +20,7 @@ from apps.common.uploads import cloudinary_enabled, media_field_url, upload_to_c
 
 from .defaults import DEFAULT_PAGES, PAGE_CATALOG, default_page_flags
 from .directory import merged_directory, portal_counts
+from .media import collected_images, public_media_url
 from .models import (
     WebsiteActivity,
     WebsiteAlumnus,
@@ -66,11 +67,38 @@ def build_nav(pages, flags):
     return items
 
 
+def _public_images(request, item):
+    extras = item.image_urls if isinstance(getattr(item, "image_urls", None), list) else []
+    return [public_media_url(request, url) for url in collected_images(getattr(item, "image_url", ""), extras)]
+
+
+def _apply_image_lists(validated):
+    if "image_url" not in validated and "image_urls" not in validated:
+        return validated
+    images = collected_images(validated.get("image_url"), validated.get("image_urls") or [])
+    validated["image_url"] = images[0] if images else ""
+    validated["image_urls"] = images[1:]
+    return validated
+
+
+def _normalize_page_media(request, pages):
+    if not isinstance(pages, dict):
+        return pages
+    for page in pages.values():
+        if not isinstance(page, dict):
+            continue
+        for key in ("background_url", "photo_url"):
+            if page.get(key):
+                page[key] = public_media_url(request, page[key])
+    return pages
+
+
 def _public_payload(request=None):
     row = WebsiteSettings.load()
     pages = merge_pages(row.pages)
     flags = merge_flags(row.page_flags)
     directory = merged_directory(request)
+    pages = _normalize_page_media(request, pages)
     return {
         "site_name": row.site_name,
         "tagline": row.tagline,
@@ -79,8 +107,8 @@ def _public_payload(request=None):
         "secondary_color": row.secondary_color,
         "header_color": row.header_color,
         "footer_color": row.footer_color,
-        "logo_url": row.logo_url,
-        "hero_image_url": row.hero_image_url,
+        "logo_url": public_media_url(request, row.logo_url),
+        "hero_image_url": public_media_url(request, row.hero_image_url),
         "show_login_button": row.show_login_button,
         "login_path": row.login_path or "/login",
         "login_label": row.login_label or "Login",
@@ -96,30 +124,25 @@ def _public_payload(request=None):
         "page_catalog": PAGE_CATALOG,
         "nav": build_nav(pages, flags),
         "pages": pages,
-        "announcements": [
+        "announcements": [_announcement_public(request, item) for item in WebsiteAnnouncement.objects.filter(published=True)[:24]],
+        "gallery": [
             {
                 "id": item.id,
                 "title": item.title,
-                "excerpt": item.excerpt,
-                "body": item.body,
-                "image_url": item.image_url,
-                "published_at": item.published_at,
+                "album": item.album,
+                "image_url": public_media_url(request, item.image_url),
             }
-            for item in WebsiteAnnouncement.objects.filter(published=True)[:24]
-        ],
-        "gallery": [
-            {"id": item.id, "title": item.title, "album": item.album, "image_url": item.image_url}
-            for item in WebsiteGalleryItem.objects.filter(published=True)[:60]
+            for item in WebsiteGalleryItem.objects.filter(published=True)[:120]
         ],
         "downloads": [
             {
                 "id": item.id,
                 "title": item.title,
                 "description": item.description,
-                "file_url": item.file_url,
+                "file_url": public_media_url(request, item.file_url),
                 "original_name": item.original_name,
             }
-            for item in WebsiteDownload.objects.filter(published=True)[:40]
+            for item in WebsiteDownload.objects.filter(published=True)[:80]
         ],
         "teachers": directory["teachers"],
         "alumni": [
@@ -130,7 +153,7 @@ def _public_payload(request=None):
                 "program": item.program,
                 "current_role": item.current_role,
                 "story": item.story,
-                "photo_url": item.photo_url,
+                "photo_url": public_media_url(request, item.photo_url),
             }
             for item in WebsiteAlumnus.objects.filter(published=True)
         ],
@@ -145,25 +168,41 @@ def _public_payload(request=None):
                 "marks": item.marks,
                 "teacher_names": item.teacher_names,
                 "degrees": item.degrees,
-                "photo_url": item.photo_url,
+                "photo_url": public_media_url(request, item.photo_url),
             }
             for item in WebsiteResult.objects.filter(published=True)
         ],
         "students": directory["students"][:400],
         "groups": directory["groups"],
         "counts": portal_counts(),
-        "activities": [
-            {
-                "id": item.id,
-                "title": item.title,
-                "body": item.body,
-                "image_url": item.image_url,
-                "posted_on": item.posted_on,
-                "semester": item.semester,
-                "class_name": item.class_name,
-            }
-            for item in WebsiteActivity.objects.filter(published=True)[:80]
-        ],
+        "activities": [_activity_public(request, item) for item in WebsiteActivity.objects.filter(published=True)[:100]],
+    }
+
+
+def _announcement_public(request, item):
+    images = _public_images(request, item)
+    return {
+        "id": item.id,
+        "title": item.title,
+        "excerpt": item.excerpt,
+        "body": item.body,
+        "image_url": images[0] if images else "",
+        "images": images,
+        "published_at": item.published_at,
+    }
+
+
+def _activity_public(request, item):
+    images = _public_images(request, item)
+    return {
+        "id": item.id,
+        "title": item.title,
+        "body": item.body,
+        "image_url": images[0] if images else "",
+        "images": images,
+        "posted_on": item.posted_on,
+        "semester": item.semester,
+        "class_name": item.class_name,
     }
 
 
@@ -219,23 +258,36 @@ def _store_site_file(request, upload, folder="mba-portal/website"):
         upload.seek(0)
     if cloudinary_enabled():
         stored = upload_to_cloudinary(upload, folder=folder)
-        return stored.get("url") or "", upload.name
+        return public_media_url(request, stored.get("url") or ""), upload.name
     path = default_storage.save(f"website/{upload.name}", ContentFile(upload.read()))
-    return request.build_absolute_uri(f"{django_settings.MEDIA_URL}{path}"), upload.name
+    return public_media_url(request, f"{django_settings.MEDIA_URL}{path}"), upload.name
 
 
 @api_view(["POST"])
 @permission_classes([IsSuperAdmin])
 def website_upload(request):
-    upload = request.FILES.get("file")
-    if not upload:
+    uploads = list(request.FILES.getlist("files") or [])
+    single = request.FILES.get("file")
+    if single and single not in uploads:
+        uploads.insert(0, single)
+    if not uploads:
         return Response({"detail": "A file is required."}, status=status.HTTP_400_BAD_REQUEST)
+    stored = []
     try:
-        url, name = _store_site_file(request, upload)
+        for upload in uploads:
+            url, name = _store_site_file(request, upload)
+            stored.append({"url": url, "name": name})
     except ValidationError as exc:
         detail = exc.detail[0] if isinstance(exc.detail, (list, tuple)) else exc.detail
         return Response({"detail": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"url": url, "name": name})
+    return Response(
+        {
+            "url": stored[0]["url"],
+            "name": stored[0]["name"],
+            "urls": [item["url"] for item in stored],
+            "files": stored,
+        }
+    )
 
 
 def _send_mail(to_email, subject, body, reply_to=None):
@@ -376,7 +428,7 @@ class StudentViewSet(viewsets.ModelViewSet):
                 semester = f"Semester {profile.semester.number}"
             course = person.enrollments.select_related("course").first()
             class_name = f"{course.course.code} — {course.course.title}" if course else ""
-            photo = media_field_url(person.avatar, request) or ""
+            photo = public_media_url(request, media_field_url(person.avatar, request) or "")
             WebsiteStudent.objects.create(
                 name=person.get_full_name().strip() or person.username,
                 roll_no=roll[:60],
@@ -393,12 +445,19 @@ class StudentViewSet(viewsets.ModelViewSet):
 class ActivityViewSet(viewsets.ModelViewSet):
     queryset = WebsiteActivity.objects.all()
     permission_classes = [IsSuperAdmin]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_serializer_class(self):
         class S(serializers.ModelSerializer):
             class Meta:
                 model = WebsiteActivity
-                fields = ["id", "title", "body", "image_url", "posted_on", "semester", "class_name", "published"]
+                fields = ["id", "title", "body", "image_url", "image_urls", "posted_on", "semester", "class_name", "published"]
+
+            def create(self, validated_data):
+                return super().create(_apply_image_lists(validated_data))
+
+            def update(self, instance, validated_data):
+                return super().update(instance, _apply_image_lists(validated_data))
 
         return S
 
@@ -458,7 +517,13 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         class S(serializers.ModelSerializer):
             class Meta:
                 model = WebsiteAnnouncement
-                fields = ["id", "title", "excerpt", "body", "image_url", "published", "published_at"]
+                fields = ["id", "title", "excerpt", "body", "image_url", "image_urls", "published", "published_at"]
+
+            def create(self, validated_data):
+                return super().create(_apply_image_lists(validated_data))
+
+            def update(self, instance, validated_data):
+                return super().update(instance, _apply_image_lists(validated_data))
 
         return S
 
@@ -466,6 +531,7 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 class GalleryViewSet(viewsets.ModelViewSet):
     queryset = WebsiteGalleryItem.objects.all()
     permission_classes = [IsSuperAdmin]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_serializer_class(self):
         class S(serializers.ModelSerializer):
@@ -475,10 +541,35 @@ class GalleryViewSet(viewsets.ModelViewSet):
 
         return S
 
+    @action(detail=False, methods=["post"], url_path="bulk")
+    def bulk(self, request):
+        rows = request.data.get("items") if isinstance(request.data, dict) else request.data
+        if not isinstance(rows, list):
+            return Response({"detail": "Send items as a list."}, status=400)
+        created = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            url = public_media_url(request, row.get("image_url"))
+            if not url:
+                continue
+            created.append(
+                WebsiteGalleryItem.objects.create(
+                    title=str(row.get("title") or "")[:160],
+                    album=str(row.get("album") or "Campus")[:80],
+                    image_url=url,
+                    published=bool(row.get("published", True)),
+                )
+            )
+        if not created:
+            return Response({"detail": "Upload at least one image."}, status=400)
+        return Response(self.get_serializer(created, many=True).data, status=201)
+
 
 class DownloadViewSet(viewsets.ModelViewSet):
     queryset = WebsiteDownload.objects.all()
     permission_classes = [IsSuperAdmin]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_serializer_class(self):
         class S(serializers.ModelSerializer):
@@ -487,3 +578,28 @@ class DownloadViewSet(viewsets.ModelViewSet):
                 fields = ["id", "title", "description", "file_url", "original_name", "published", "created_at"]
 
         return S
+
+    @action(detail=False, methods=["post"], url_path="bulk")
+    def bulk(self, request):
+        rows = request.data.get("items") if isinstance(request.data, dict) else request.data
+        if not isinstance(rows, list):
+            return Response({"detail": "Send items as a list."}, status=400)
+        created = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            url = public_media_url(request, row.get("file_url"))
+            if not url:
+                continue
+            created.append(
+                WebsiteDownload.objects.create(
+                    title=str(row.get("title") or row.get("original_name") or "Download")[:200],
+                    description=str(row.get("description") or "")[:300],
+                    file_url=url,
+                    original_name=str(row.get("original_name") or "")[:255],
+                    published=bool(row.get("published", True)),
+                )
+            )
+        if not created:
+            return Response({"detail": "Upload at least one file."}, status=400)
+        return Response(self.get_serializer(created, many=True).data, status=201)

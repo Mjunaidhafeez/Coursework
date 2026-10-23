@@ -6,6 +6,7 @@ const MultiFilePicker = ({
   onChange,
   label = "Choose files",
   disabled = false,
+  multiple = true,
 }) => (
   <Button size="small" variant="outlined" component="label" disabled={disabled}>
     {files.length ? `${files.length} file(s) selected` : label}
@@ -13,7 +14,7 @@ const MultiFilePicker = ({
       hidden
       type="file"
       accept={accept}
-      multiple
+      multiple={multiple}
       disabled={disabled}
       onChange={(e) => {
         onChange(Array.from(e.target.files || []));

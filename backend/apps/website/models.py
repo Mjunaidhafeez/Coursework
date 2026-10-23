@@ -54,7 +54,8 @@ class WebsiteAnnouncement(TimeStampedModel):
     title = models.CharField(max_length=200)
     excerpt = models.CharField(max_length=300, blank=True)
     body = models.TextField()
-    image_url = models.URLField(max_length=500, blank=True)
+    image_url = models.CharField(max_length=500, blank=True)
+    image_urls = models.JSONField(default=list, blank=True)
     published = models.BooleanField(default=True)
     published_at = models.DateTimeField(auto_now_add=True)
 
@@ -65,7 +66,7 @@ class WebsiteAnnouncement(TimeStampedModel):
 class WebsiteGalleryItem(TimeStampedModel):
     title = models.CharField(max_length=160, blank=True)
     album = models.CharField(max_length=80, default="Campus")
-    image_url = models.URLField(max_length=500)
+    image_url = models.CharField(max_length=500)
     published = models.BooleanField(default=True)
 
     class Meta:
@@ -75,7 +76,7 @@ class WebsiteGalleryItem(TimeStampedModel):
 class WebsiteDownload(TimeStampedModel):
     title = models.CharField(max_length=200)
     description = models.CharField(max_length=300, blank=True)
-    file_url = models.URLField(max_length=500)
+    file_url = models.CharField(max_length=500)
     original_name = models.CharField(max_length=255, blank=True)
     published = models.BooleanField(default=True)
 
@@ -149,7 +150,8 @@ class WebsiteStudent(TimeStampedModel):
 class WebsiteActivity(TimeStampedModel):
     title = models.CharField(max_length=200)
     body = models.TextField()
-    image_url = models.URLField(max_length=500, blank=True)
+    image_url = models.CharField(max_length=500, blank=True)
+    image_urls = models.JSONField(default=list, blank=True)
     posted_on = models.DateField(default=timezone.now)
     semester = models.CharField(max_length=40, blank=True)
     class_name = models.CharField(max_length=160, blank=True)

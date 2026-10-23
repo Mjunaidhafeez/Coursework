@@ -1,16 +1,18 @@
 import { Link } from "react-router-dom";
 
 import { useSite } from "../context/SiteContext";
+import { itemImages } from "../utils/media";
 
 const HomePage = () => {
   const { site } = useSite();
   const home = site.pages?.home || {};
   const latest = (site.announcements || []).slice(0, 3);
-  const photos = (site.gallery || []).slice(0, 6);
-  const faculty = (site.teachers || []).slice(0, 3);
+  const photos = (site.gallery || []).slice(0, 8);
+  const faculty = (site.teachers || []).slice(0, 4);
   const latestActivities = (site.activities || []).slice(0, 3);
   const vc = site.pages?.vc || {};
   const flags = site.page_flags || {};
+  const counts = site.counts || {};
 
   return (
     <div>
@@ -27,12 +29,42 @@ const HomePage = () => {
           <h1>{home.hero_title || site.site_name}</h1>
           <p className="lead">{home.hero_subtitle}</p>
           <div className="hero-actions">
-            {flags.admissions !== false ? <Link className="btn-primary" to="/admissions">Admissions</Link> : null}
-            {flags.programs !== false ? <Link className="btn-ghost" to="/programs">Explore programmes</Link> : null}
-            {site.show_login_button ? <a className="btn-ghost" href={site.login_path || "/login"}>{site.login_label || "Login"}</a> : null}
+            {flags.admissions !== false ? (
+              <Link className="btn-primary" to="/admissions">
+                Admissions
+              </Link>
+            ) : null}
+            {flags.programs !== false ? (
+              <Link className="btn-ghost" to="/programs">
+                Explore programmes
+              </Link>
+            ) : null}
+            {site.show_login_button ? (
+              <a className="btn-ghost" href={site.login_path || "/login"}>
+                {site.login_label || "Login"}
+              </a>
+            ) : null}
           </div>
         </div>
       </section>
+      {counts.students || counts.faculty || counts.programmes ? (
+        <section className="stat-strip">
+          <div className="site-wrap stat-strip-inner">
+            <div>
+              <strong>{counts.students || 0}</strong>
+              <span>Students</span>
+            </div>
+            <div>
+              <strong>{counts.faculty || 0}</strong>
+              <span>Faculty</span>
+            </div>
+            <div>
+              <strong>{counts.programmes || 0}</strong>
+              <span>Programmes</span>
+            </div>
+          </div>
+        </section>
+      ) : null}
       <section className="site-wrap site-section">
         <div className="card-grid">
           {(home.highlights || []).map((item) => (
@@ -50,13 +82,16 @@ const HomePage = () => {
             <Link to="/announcements">View all</Link>
           </div>
           <div className="card-grid">
-            {latest.map((item) => (
-              <Link key={item.id} to={`/announcements/${item.id}`} className="card">
-                {item.image_url ? <img src={item.image_url} alt="" className="card-media" /> : null}
-                <h3>{item.title}</h3>
-                <p>{item.excerpt || item.body?.slice(0, 140)}</p>
-              </Link>
-            ))}
+            {latest.map((item) => {
+              const cover = itemImages(item)[0];
+              return (
+                <Link key={item.id} to={`/announcements/${item.id}`} className="card">
+                  {cover ? <img src={cover} alt="" className="card-media" /> : null}
+                  <h3>{item.title}</h3>
+                  <p>{item.excerpt || item.body?.slice(0, 140)}</p>
+                </Link>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -67,14 +102,17 @@ const HomePage = () => {
             <Link to="/activities">Daily posts</Link>
           </div>
           <div className="card-grid">
-            {latestActivities.map((item) => (
-              <Link key={item.id} to="/activities" className="card">
-                {item.image_url ? <img src={item.image_url} alt="" className="card-media" /> : null}
-                <p className="meta">{item.posted_on}</p>
-                <h3>{item.title}</h3>
-                <p>{item.body.slice(0, 120)}…</p>
-              </Link>
-            ))}
+            {latestActivities.map((item) => {
+              const cover = itemImages(item)[0];
+              return (
+                <Link key={item.id} to="/activities" className="card">
+                  {cover ? <img src={cover} alt="" className="card-media" /> : null}
+                  <p className="meta">{item.posted_on}</p>
+                  <h3>{item.title}</h3>
+                  <p>{item.body ? `${item.body.slice(0, 120)}…` : ""}</p>
+                </Link>
+              );
+            })}
           </div>
         </section>
       ) : null}

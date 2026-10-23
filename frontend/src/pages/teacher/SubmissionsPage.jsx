@@ -98,15 +98,17 @@ const STATUS_CHIP = {
 const acceptedGroupMembers = (group) =>
   (group?.members || []).filter((member) => member.accepted !== false);
 
+const uniqueMemberCount = (values = []) =>
+  new Set(values.map((value) => String(value || "").trim()).filter(Boolean)).size;
+
 const getRowMemberCount = (item, groupsById = {}) => {
   if (!item) return 0;
   if (item.group) {
-    return (
-      (item.group_member_rows || []).length ||
-      (item.group_member_ids || []).length ||
-      acceptedGroupMembers(groupsById[String(item.group)]).length ||
-      0
-    );
+    const accepted = acceptedGroupMembers(groupsById[String(item.group)]);
+    if (accepted.length) return accepted.length;
+    const fromIds = uniqueMemberCount(item.group_member_ids);
+    if (fromIds) return fromIds;
+    return uniqueMemberCount((item.group_member_rows || []).map((row) => row.student || row.student_id));
   }
   if (item.is_topic_not_submitted) return 0;
   return (

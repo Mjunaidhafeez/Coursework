@@ -3,10 +3,14 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 
 import { useSite } from "../context/SiteContext";
 
+const PRIMARY_PATHS = ["/", "/about", "/programs", "/admissions", "/teachers", "/students", "/activities", "/gallery", "/contact"];
+
 const SiteLayout = () => {
   const { site, loading } = useSite();
   const [open, setOpen] = useState(false);
   const nav = site.nav || [];
+  const primary = nav.filter((item) => PRIMARY_PATHS.includes(item.path));
+  const more = nav.filter((item) => !PRIMARY_PATHS.includes(item.path));
 
   return (
     <div className="site-shell">
@@ -34,11 +38,23 @@ const SiteLayout = () => {
             {open ? "Close" : "Menu"}
           </button>
           <nav className={`site-nav ${open ? "is-open" : ""}`}>
-            {nav.map((item) => (
+            {primary.map((item) => (
               <NavLink key={item.path} to={item.path} end={item.path === "/"} onClick={() => setOpen(false)}>
                 {item.label}
               </NavLink>
             ))}
+            {more.length ? (
+              <div className="site-more">
+                <span>More</span>
+                <div className="site-more-menu">
+                  {more.map((item) => (
+                    <NavLink key={item.path} to={item.path} onClick={() => setOpen(false)}>
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {site.show_login_button ? (
               <a className="site-login" href={site.login_path || "/login"}>
                 {site.login_label || "Login"}
@@ -64,7 +80,9 @@ const SiteLayout = () => {
             <strong>Explore</strong>
             <div className="site-socials">
               {nav.slice(0, 6).map((item) => (
-                <Link key={item.path} to={item.path}>{item.label}</Link>
+                <Link key={item.path} to={item.path}>
+                  {item.label}
+                </Link>
               ))}
             </div>
           </div>

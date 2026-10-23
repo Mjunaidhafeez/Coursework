@@ -72,15 +72,18 @@ const StudentsPage = () => {
         {visibleGroups.length ? (
           <>
             <h2 className="section-title">Student groups</h2>
-            <div className="people-grid people-grid-compact">
+            <div className="groups-grid">
               {visibleGroups.map((group) => (
                 <article key={group.id} className="group-card">
-                  <h3>{group.name}</h3>
+                  <h3>
+                    {group.name}
+                    <span className="meta"> · {(group.members || []).length} member{(group.members || []).length === 1 ? "" : "s"}</span>
+                  </h3>
                   {(group.members || []).map((member) => (
                     <CompactPersonRow
                       key={`${group.id}-${member.roll_no || member.name}`}
                       photo={member.photo_url}
-                      name={member.name}
+                      name={member.is_lead ? `${member.name} (Lead)` : member.name}
                       lines={[member.roll_no]}
                     />
                   ))}

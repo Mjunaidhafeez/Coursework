@@ -9,6 +9,7 @@ const GalleryPage = () => {
   const items = site.gallery || [];
   const albums = useMemo(() => ["All", ...new Set(items.map((item) => item.album || "Campus"))], [items]);
   const [album, setAlbum] = useState("All");
+  const [open, setOpen] = useState(null);
   const visible = album === "All" ? items : items.filter((item) => item.album === album);
 
   return (
@@ -22,15 +23,25 @@ const GalleryPage = () => {
             </button>
           ))}
         </div>
-        <div className="gallery-grid">
-          {visible.map((item) => (
-            <figure key={item.id}>
-              <img src={item.image_url} alt={item.title || item.album} />
-              {item.title ? <figcaption>{item.title}</figcaption> : null}
-            </figure>
-          ))}
-        </div>
+        {visible.length ? (
+          <div className="gallery-grid">
+            {visible.map((item) => (
+              <figure key={item.id} onClick={() => setOpen(item)}>
+                <img src={item.image_url} alt={item.title || item.album} />
+                {item.title ? <figcaption>{item.title}</figcaption> : null}
+              </figure>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-note">Photos will appear here once the university office publishes the gallery.</p>
+        )}
       </div>
+      {open ? (
+        <button type="button" className="lightbox" onClick={() => setOpen(null)}>
+          <img src={open.image_url} alt={open.title || open.album} />
+          {open.title ? <span>{open.title}</span> : null}
+        </button>
+      ) : null}
     </div>
   );
 };
