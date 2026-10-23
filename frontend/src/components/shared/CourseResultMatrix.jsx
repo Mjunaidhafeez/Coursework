@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { formatMarks } from "../../utils/format";
 import { shallowEqualObjects } from "../../utils/object";
-import { csvSafe, downloadTextFile, fileSafe } from "../../utils/export";
+import { exportTable } from "../../utils/export";
 
 const toNumber = (value) => {
   const n = Number(value);
@@ -274,67 +274,36 @@ const CourseResultMatrix = ({
     return ["Student Name", "Roll No", ...Array.from(dynamic), "Total Obtained", "Total Marks"];
   }, [content]);
 
-  const exportExcel = () => {
-    const metaRow = `Semester: ${exportMeta.semesters.join(", ") || "-"} | Course Name: ${exportMeta.courses.join(", ") || "-"} | Course Teacher: ${exportMeta.teachers.join(", ") || "-"}`;
-    const lines = [
-      csvSafe(metaRow),
-      "",
-      exportHeaders.map(csvSafe).join(","),
-      ...exportRows.map((row) =>
-        [
-          row.studentName,
-          row.rollNo,
-          ...exportHeaders.slice(2, -2).map((header) => row.courseworkMarks[header] || "-"),
-          row.totalObtained,
-          row.totalMax,
-        ]
-          .map(csvSafe)
-          .join(",")
-      ),
-    ];
-    downloadTextFile(`${fileSafe(exportFilePrefix)}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
-  };
+  const resultSheet = useMemo(() => {
+    const headers = exportHeaders;
+    const rows = exportRows.map((row) => [
+      row.studentName,
+      row.rollNo,
+      ...headers.slice(2, -2).map((header) => row.courseworkMarks[header] || "-"),
+      row.totalObtained,
+      row.totalMax,
+    ]);
+    const subtitle = [
+      `Semester: ${exportMeta.semesters.join(", ") || "-"}`,
+      `Course: ${exportMeta.courses.join(", ") || "-"}`,
+      `Teacher: ${exportMeta.teachers.join(", ") || "-"}`,
+      search ? `Search: ${search}` : "",
+      semesterFilter ? "Semester filter on" : "",
+      courseFilter ? "Course filter on" : "",
+      `Rows: ${rows.length}`,
+    ].filter(Boolean).join(" · ");
+    return { headers, rows, subtitle };
+  }, [exportHeaders, exportRows, exportMeta, search, semesterFilter, courseFilter]);
 
-  const exportPdf = () => {
-    const headerCells = exportHeaders.map((h) => `<th>${h}</th>`).join("");
-    const metaLine = `Semester: ${exportMeta.semesters.join(", ") || "-"} | Course Name: ${exportMeta.courses.join(", ") || "-"} | Course Teacher: ${exportMeta.teachers.join(", ") || "-"}`;
-    const bodyRows = exportRows
-      .map(
-        (row) => `<tr>
-      <td>${row.studentName}</td>
-      <td>${row.rollNo}</td>
-      ${exportHeaders.slice(2, -2).map((header) => `<td>${row.courseworkMarks[header] || "-"}</td>`).join("")}
-      <td>${row.totalObtained}</td>
-      <td>${row.totalMax}</td>
-    </tr>`
-      )
-      .join("");
-    const pop = window.open("", "_blank", "width=1400,height=900");
-    if (!pop) return;
-    pop.document.write(`
-      <html>
-        <head>
-          <title>Course Result Matrix</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 14px; }
-            table { width: 100%; border-collapse: collapse; font-size: 11px; }
-            th, td { border: 1px solid #cbd5e1; padding: 6px; text-align: left; }
-            th { background: #eff6ff; position: sticky; top: 0; }
-          </style>
-        </head>
-        <body>
-          <h2>Course Result Matrix</h2>
-          <p><strong>${metaLine}</strong></p>
-          <table>
-            <thead><tr>${headerCells}</tr></thead>
-            <tbody>${bodyRows}</tbody>
-          </table>
-        </body>
-      </html>
-    `);
-    pop.document.close();
-    pop.focus();
-    pop.print();
+  const exportResults = (kind) => {
+    exportTable({
+      kind,
+      filePrefix: exportFilePrefix,
+      title: "Course Result",
+      subtitle: resultSheet.subtitle,
+      headers: resultSheet.headers,
+      rows: resultSheet.rows,
+    });
   };
 
   if (!content.length) {
@@ -348,10 +317,10 @@ const CourseResultMatrix = ({
   return (
     <Stack spacing={1.2}>
       <Stack direction="row" spacing={0.8} justifyContent="flex-end" sx={{ mb: 0.4 }}>
-        <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>
-          Excel
+        <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={() => exportResults("csv")}>
+          CSV
         </Button>
-        <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>
+        <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={() => exportResults("pdf")}>
           PDF
         </Button>
       </Stack>

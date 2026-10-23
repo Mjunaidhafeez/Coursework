@@ -2,6 +2,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   Collapse,
   Dialog,
   DialogActions,
@@ -37,7 +38,7 @@ import { openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { shallowEqualObjects } from "../../utils/object";
 import { resolveSubmissionMembers, withMemberFileActivity } from "../../utils/submissionMembers";
 import MultiFilePicker from "../../components/shared/MultiFilePicker";
-import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
+import { getSubmissionStageMeta, studentNextStep } from "../../utils/submissionWorkflow";
 import { oversizedFileNames } from "../../utils/uploadLimits";
 import { toAbsoluteMediaUrl } from "../../utils/mediaUrl";
 
@@ -622,7 +623,7 @@ const SubmitWorkPage = () => {
           label="Search"
           search={search}
           onSearchChange={setSearch}
-          onSearch={() => {}}
+          live
           onReset={() => {
             setSearch("");
             setSemesterFilter("");
@@ -725,6 +726,9 @@ const SubmitWorkPage = () => {
       )}
     >
         <Box>
+          <Alert severity="info" sx={{ mb: 1.2, py: 0.4 }}>
+            1. Open an assessment · 2. Send a topic request or wait for allotment · 3. After approval, upload files · 4. See marks in Course Result
+          </Alert>
           {(() => {
             const section = viewMode === "opening"
               ? { key: "opening", title: "Open assessments", grouped: openingGrouped, tone: "#f8fbff", border: "#dbeafe" }
@@ -787,7 +791,7 @@ const SubmitWorkPage = () => {
                               );
                               return (
                                 <Box key={coursework.id} sx={{ p: 1.2, borderRadius: 1.5, border: "1px solid #e2e8f0", bgcolor: "#fcfdff" }}>
-                                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                  <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
                                     <Button
                                       size="small"
                                       variant="text"
@@ -796,6 +800,16 @@ const SubmitWorkPage = () => {
                                     >
                                       {coursework.title}
                                     </Button>
+                                    <Chip
+                                      size="small"
+                                      label={stage?.label || (shouldAllotTopics(coursework) ? "Waiting" : "Send request")}
+                                      sx={{
+                                        height: 22,
+                                        fontWeight: 700,
+                                        bgcolor: stage?.bgcolor || "#e2e8f0",
+                                        color: stage?.color || "#334155",
+                                      }}
+                                    />
                                     <IconButton size="small" onClick={() => toggleCourseworkSection(coursework, submission)}>
                                       {openCourseworkSections[String(coursework.id)] ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
                                     </IconButton>
@@ -805,6 +819,12 @@ const SubmitWorkPage = () => {
                                       <Typography variant="caption" color="text.secondary">
                                         {assessmentMetaLine(coursework)}
                                         {shouldAllotTopics(coursework) ? " · Teacher allots the topic" : ""}
+                                      </Typography>
+                                      <Typography variant="body2" sx={{ fontWeight: 700, color: "#1d4ed8" }}>
+                                        {studentNextStep(submission, {
+                                          teacherAllots: shouldAllotTopics(coursework),
+                                          dueLocked: isSubmissionDueLocked(coursework),
+                                        })}
                                       </Typography>
                                       {coursework.sample_file_url ? (
                                         <Button
@@ -851,9 +871,9 @@ const SubmitWorkPage = () => {
                                             <Typography variant="body2" sx={{ fontWeight: 800, mb: 0.6 }}>Submission</Typography>
                                             <Typography variant="body2"><strong>Topic:</strong> {submission.topic || "—"}</Typography>
                                             <Typography variant="body2" sx={{ mt: 0.3 }}>
-                                              <strong>Status:</strong> {stage?.label || "—"}
+                                              <strong>Status:</strong> {stage?.label || "Waiting"}
                                               {" · "}
-                                              {hasUploadedFiles(submission) ? "File uploaded" : "No file yet"}
+                                              {hasUploadedFiles(submission) ? "File sent" : "No file yet"}
                                               {" · "}
                                               {submission.is_marked
                                                 ? `Marked ${formatMarks(submission.obtained_marks)}/${formatMarks(coursework?.max_marks)}`
@@ -949,7 +969,11 @@ const SubmitWorkPage = () => {
                                               <Typography variant="body2" color="text.secondary">
                                                 {isSubmissionDueLocked(coursework)
                                                   ? "Upload is locked because the due time has passed."
-                                                  : "Upload opens after the teacher approves this request."}
+                                                  : stage?.key === "rejected"
+                                                    ? "This request was rejected. Edit it and send again."
+                                                    : stage?.key === "pending"
+                                                      ? "Waiting for teacher approval. Upload opens after approval."
+                                                      : "Upload opens after the teacher approves this request."}
                                               </Typography>
                                             )}
                                             <Stack spacing={0.6} sx={{ mt: 1 }}>

@@ -1,1 +1,0 @@
-const o=e=>window.confirm(e),t=(e="record")=>o(`Are you sure you want to delete this ${e}?`),c=(e,n="records")=>o(`Delete ${e} selected ${n}?`),r=(e="record",n=1)=>o(n>1?`Permanently delete ${n} selected ${e}? This cannot be undone.`:`Permanently delete this ${e}? This cannot be undone.`);export{r as a,c as b,t as c};

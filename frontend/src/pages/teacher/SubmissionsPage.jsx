@@ -11,7 +11,6 @@ import {
   FormControl,
   IconButton,
   InputLabel,
-  ListItemText,
   Menu,
   MenuItem,
   Select,
@@ -34,6 +33,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import api from "../../api/client";
 import CompactTabs from "../../components/shared/CompactTabs";
 import ListingPage from "../../components/shared/ListingPage";
+import MultiFilterSelect from "../../components/shared/MultiFilterSelect";
 import { PersonNameCell } from "../../components/shared/PersonAvatar";
 import SearchToolbar from "../../components/shared/SearchToolbar";
 import { useAuth } from "../../context/AuthContext";
@@ -45,8 +45,8 @@ import { formatDate, formatMarks } from "../../utils/format";
 import { shallowEqualObjects } from "../../utils/object";
 import { downloadSubmissionFile, filesWithOwner, hasSubmissionFile, openSubmissionFilePreview } from "../../utils/submissionFiles";
 import { resolveSubmissionMembers } from "../../utils/submissionMembers";
-import { getSubmissionStageMeta } from "../../utils/submissionWorkflow";
-import { csvSafe, downloadTextFile, fileSafe } from "../../utils/export";
+import { STATUS_CHIP, STUDENT_STATUS_OPTIONS, getStudentStatus } from "../../utils/submissionWorkflow";
+import { exportTable } from "../../utils/export";
 import { confirmDelete } from "../../utils/confirm";
 import { leadIdFromGroup } from "../../utils/groupForm";
 
@@ -76,24 +76,6 @@ const sortAssessmentTitlesByComing = (titles, courseworkGroup, courseworkById) =
   [...titles].sort(
     (a, b) => getAssessmentDeadlineScore(a, courseworkGroup, courseworkById) - getAssessmentDeadlineScore(b, courseworkGroup, courseworkById)
   );
-
-const STUDENT_STATUS_OPTIONS = [
-  { value: "waiting", label: "Waiting" },
-  { value: "pending", label: "Request for approval" },
-  { value: "approved", label: "Approved" },
-  { value: "file_submitted", label: "File sent" },
-  { value: "marked", label: "Marked" },
-  { value: "rejected", label: "Rejected" },
-];
-
-const STATUS_CHIP = {
-  waiting: { label: "Waiting", bgcolor: "#e2e8f0", color: "#334155" },
-  pending: { label: "Request for approval", bgcolor: "#ffedd5", color: "#9a3412" },
-  approved: { label: "Approved", bgcolor: "#dbeafe", color: "#1d4ed8" },
-  file_submitted: { label: "File sent", bgcolor: "#e9d5ff", color: "#6b21a8" },
-  marked: { label: "Marked", bgcolor: "#dcfce7", color: "#15803d" },
-  rejected: { label: "Rejected", bgcolor: "#fee2e2", color: "#b91c1c" },
-};
 
 const acceptedGroupMembers = (group) =>
   (group?.members || []).filter((member) => member.accepted !== false);
@@ -190,65 +172,10 @@ const getDisplayedSubmittedAt = (item) => {
   return null;
 };
 
-const hasSentApprovalRequest = (row) => {
-  if (!row || row.is_topic_not_submitted) return false;
-  const id = row.submission_id || row.id;
-  if (!id || String(row.id || "").startsWith("missing-")) return false;
-  const approval = String(row.approval_status || "pending").toLowerCase();
-  return approval === "pending" || approval === "request_pending";
-};
-
-const getStudentStatus = (row) => {
-  if (row?.is_topic_not_submitted) return "waiting";
-  if (row?.is_marked) return "marked";
-  if (String(row?.approval_status || "").toLowerCase() === "rejected") return "rejected";
-  if (String(row?.approval_status || "").toLowerCase() === "approved") {
-    return hasSubmissionFile(row) || row?.file ? "file_submitted" : "approved";
-  }
-  return hasSentApprovalRequest(row) ? "pending" : "waiting";
-};
-
 const rowMatchesStudentStatuses = (row, statuses = []) => {
   if (!statuses.length) return true;
   return statuses.includes(getStudentStatus(row));
 };
-
-const normalizeMultiFilter = (current, nextValue) => {
-  const next = typeof nextValue === "string" ? nextValue.split(",") : nextValue;
-  if (!current.length) return next.filter((value) => value && value !== "all");
-  if (next.includes("all")) return [];
-  return next.filter((value) => value && value !== "all");
-};
-
-const MultiFilterSelect = ({ label, value = [], options = [], onChange, minWidth = 188 }) => (
-  <FormControl size="small" sx={{ minWidth, maxWidth: { xs: "100%", md: 280 } }}>
-    <InputLabel>{label}</InputLabel>
-    <Select
-      multiple
-      label={label}
-      value={value.length ? value : ["all"]}
-      onChange={(event) => onChange(normalizeMultiFilter(value, event.target.value))}
-      renderValue={() => {
-        if (!value.length) return `All ${label.toLowerCase()}`;
-        const labels = options.filter((option) => value.includes(option.value)).map((option) => option.label);
-        if (!labels.length) return `All ${label.toLowerCase()}`;
-        return labels.length <= 2 ? labels.join(", ") : `${labels.length} selected`;
-      }}
-      MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
-    >
-      <MenuItem value="all">
-        <Checkbox size="small" checked={!value.length} />
-        <ListItemText primary={`All ${label.toLowerCase()}`} />
-      </MenuItem>
-      {options.map((option) => (
-        <MenuItem key={option.value} value={option.value}>
-          <Checkbox size="small" checked={value.includes(option.value)} />
-          <ListItemText primary={option.label} />
-        </MenuItem>
-      ))}
-    </Select>
-  </FormControl>
-);
 
 const rowMatchesSearch = (row, searchValue) => {
   const query = String(searchValue || "").trim().toLowerCase();
@@ -1327,47 +1254,104 @@ const SubmissionsPage = () => {
     });
     return map;
   }, [courses]);
-  const exportSections = useMemo(() => {
-    const sections = new Map();
-    displayRows.forEach((item) => {
+  const approvalSheet = useMemo(() => {
+    const headers = [
+      "Sr #",
+      "Course",
+      "Teacher",
+      "Assessment",
+      "Name",
+      "Group",
+      "Members",
+      "Roll no",
+      "Date/time",
+      "Status",
+      "Marks",
+      "Max marks",
+      "File",
+      "Topic",
+      "Feedback",
+    ];
+    const rows = displayRows.map((item, idx) => {
       const coursework = courseworkById[String(item.coursework)];
       const courseId = String(coursework?.course || "");
-      const courseTitle = courseNameById[courseId] || "-";
-      const teacherName = courseTeacherById[courseId] || "-";
-      const courseworkTitle = item.coursework_title || coursework?.title || `Assessment #${item.coursework}`;
-      const stageLabel = item.is_topic_not_submitted ? "Not submitted" : getSubmissionStageMeta(item).label;
-      const feedbackText = item.is_topic_not_submitted
-        ? "Awaiting"
-        : feedbackBySubmission[String(getPrimarySubmissionId(item))]?.feedback || "-";
-      if (!sections.has(courseTitle)) {
-        sections.set(courseTitle, {
-          courseTitle,
-          teacherName,
-          courseworks: new Map(),
-        });
-      }
-      const courseNode = sections.get(courseTitle);
-      if (!courseNode.courseworks.has(courseworkTitle)) {
-        courseNode.courseworks.set(courseworkTitle, []);
-      }
-      courseNode.courseworks.get(courseworkTitle).push({
-        studentOrGroup: item.group_name || item.student_name || "-",
-        rollNo: item.student_roll_no || "-",
-        status: stageLabel,
-        approval: item.approval_status || "pending",
-        submissionStatus: item.status || (item.is_topic_not_submitted ? "not_submitted" : "-"),
-        submittedAt: item.submitted_at ? formatDate(item.submitted_at) : "-",
-        feedback: feedbackText,
-      });
+      const submittedAt = getDisplayedSubmittedAt(item);
+      const submissionId = getPrimarySubmissionId(item);
+      const feedbackRow = feedbackBySubmission[String(submissionId)] || {};
+      const marks = feedbackRow.marks ?? item.obtained_marks;
+      const files = item.submitted_files || [];
+      const fileLabel = files.length
+        ? files.map((file) => file.file_name || file.title || file.original_name).filter(Boolean).join("; ")
+        : hasSubmissionFile(item)
+          ? "Yes"
+          : "No";
+      return [
+        idx + 1,
+        courseNameById[courseId] || "-",
+        courseTeacherById[courseId] || "-",
+        item.coursework_title || coursework?.title || "-",
+        item.student_name || "-",
+        item.group_name || "-",
+        item.group ? getRowMemberCount(item, groupsById) : "-",
+        item.student_roll_no || "-",
+        submittedAt ? formatDate(submittedAt) : "-",
+        STATUS_CHIP[getStudentStatus(item)]?.label || "Waiting",
+        formatMarks(marks),
+        formatMarks(coursework?.max_marks),
+        fileLabel,
+        item.topic || "-",
+        item.is_topic_not_submitted ? "Awaiting" : feedbackRow.feedback || "-",
+      ];
     });
-    return Array.from(sections.values()).map((courseNode) => ({
-      ...courseNode,
-      courseworks: Array.from(courseNode.courseworks.entries()).map(([courseworkTitle, rows]) => ({
-        courseworkTitle,
-        rows,
-      })),
-    }));
-  }, [displayRows, courseworkById, courseNameById, courseTeacherById, feedbackBySubmission]);
+    const filterBits = [
+      search.trim() ? `Search: ${search.trim()}` : "",
+      selectedCourseIds.length
+        ? `Courses: ${courseFilterOptions.filter((item) => selectedCourseIds.includes(item.value)).map((item) => item.label).join(", ")}`
+        : "All courses",
+      selectedAssessmentIds.length
+        ? `Assessments: ${assessmentFilterOptions.filter((item) => selectedAssessmentIds.includes(item.value)).map((item) => item.label).join(", ")}`
+        : "Visible assessments",
+      selectedGroupIds.length
+        ? `Groups: ${groupFilterOptions.filter((item) => selectedGroupIds.includes(item.value)).map((item) => item.label).join(", ")}`
+        : "",
+      selectedStatusFilters.length
+        ? `Status: ${STUDENT_STATUS_OPTIONS.filter((item) => selectedStatusFilters.includes(item.value)).map((item) => item.label).join(", ")}`
+        : "All statuses",
+      `Rows: ${rows.length}`,
+    ].filter(Boolean);
+    return {
+      headers,
+      rows,
+      subtitle: filterBits.join(" · "),
+      filePrefix: isAdminApprovalsView ? "admin-assessment-approvals" : "teacher-assessment-approvals",
+    };
+  }, [
+    displayRows,
+    courseworkById,
+    courseNameById,
+    courseTeacherById,
+    feedbackBySubmission,
+    groupsById,
+    search,
+    selectedCourseIds,
+    selectedAssessmentIds,
+    selectedGroupIds,
+    selectedStatusFilters,
+    courseFilterOptions,
+    assessmentFilterOptions,
+    groupFilterOptions,
+    isAdminApprovalsView,
+  ]);
+  const exportApprovals = (kind) => {
+    exportTable({
+      kind,
+      filePrefix: approvalSheet.filePrefix,
+      title: "Assessment Approvals",
+      subtitle: approvalSheet.subtitle,
+      headers: approvalSheet.headers,
+      rows: approvalSheet.rows,
+    });
+  };
   const selectedRows = useMemo(
     () => displayRows.filter((row, idx) => selectedSubmissionIds[getRowSelectKey(row, idx)]),
     [displayRows, selectedSubmissionIds]
@@ -1549,104 +1533,6 @@ const SubmissionsPage = () => {
       bulkDeleteLockRef.current = false;
     }
   };
-  const exportExcel = () => {
-    const header = ["Student/Group", "Roll No", "Status", "Approval", "Submission Status", "Submitted At", "Feedback"];
-    const lines = [];
-    exportSections.forEach((section) => {
-      lines.push([`Course: ${section.courseTitle}`, `Course Teacher: ${section.teacherName}`].map(csvSafe).join(","));
-      section.courseworks.forEach((courseworkNode) => {
-        lines.push([`Assessment: ${courseworkNode.courseworkTitle}`].map(csvSafe).join(","));
-        lines.push(header.map(csvSafe).join(","));
-        courseworkNode.rows.forEach((row) => {
-          lines.push(
-            [row.studentOrGroup, row.rollNo, row.status, row.approval, row.submissionStatus, row.submittedAt, row.feedback]
-              .map(csvSafe)
-              .join(",")
-          );
-        });
-        lines.push("");
-      });
-      lines.push("");
-    });
-    downloadTextFile(
-      `${fileSafe(isAdminApprovalsView ? "admin-assessment-approvals" : "teacher-assessment-approvals")}.csv`,
-      lines.join("\n"),
-      "text/csv;charset=utf-8"
-    );
-  };
-  const exportPdf = () => {
-    const sectionBlocks = exportSections
-      .map((section) => {
-        const courseworkBlocks = section.courseworks
-          .map((courseworkNode) => {
-            const rowsHtml = courseworkNode.rows
-              .map(
-                (row) => `<tr>
-                  <td>${row.studentOrGroup}</td>
-                  <td>${row.rollNo}</td>
-                  <td>${row.status}</td>
-                  <td>${row.approval}</td>
-                  <td>${row.submissionStatus}</td>
-                  <td>${row.submittedAt}</td>
-                  <td>${row.feedback}</td>
-                </tr>`
-              )
-              .join("");
-            return `
-              <div class="coursework-title">Assessment: ${courseworkNode.courseworkTitle}</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Student/Group</th>
-                    <th>Roll No</th>
-                    <th>Status</th>
-                    <th>Approval</th>
-                    <th>Submission Status</th>
-                    <th>Submitted At</th>
-                    <th>Feedback</th>
-                  </tr>
-                </thead>
-                <tbody>${rowsHtml}</tbody>
-              </table>
-            `;
-          })
-          .join("");
-        return `
-          <div class="course-header">
-            <strong>Course:</strong> ${section.courseTitle}
-            <span class="teacher-tag"><strong>Course Teacher:</strong> ${section.teacherName}</span>
-          </div>
-          ${courseworkBlocks}
-        `;
-      })
-      .join("");
-    const pop = window.open("", "_blank", "width=1300,height=850");
-    if (!pop) return;
-    pop.document.write(`
-      <html>
-        <head>
-          <title>Assessment Approvals</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 14px; }
-            .course-header { margin: 12px 0 6px; padding: 8px; background: #eff6ff; border: 1px solid #cfe0fb; border-radius: 8px; }
-            .teacher-tag { margin-left: 14px; color: #1e3a8a; }
-            .coursework-title { margin: 8px 0 4px; font-weight: 700; color: #10213f; }
-            table { width: 100%; border-collapse: collapse; font-size: 12px; }
-            th, td { border: 1px solid #cbd5e1; padding: 6px; text-align: left; }
-            th { background: #eff6ff; }
-          </style>
-        </head>
-        <body>
-          <h2>Assessment Approvals</h2>
-          ${sectionBlocks}
-        </body>
-      </html>
-    `);
-    pop.document.close();
-    pop.focus();
-    pop.print();
-  };
-
   useEffect(() => {
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
@@ -1851,17 +1737,18 @@ const SubmissionsPage = () => {
     <ListingPage
       title="Assessment Approvals"
       subtitle="Group assessments show group leads first. Open Members to mark the group or each student, then save once."
-      actions={isAdminApprovalsView ? (
+      actions={(
         <Stack direction="row" spacing={0.8}>
-          <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportExcel}>CSV</Button>
-          <Button size="small" variant="outlined" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportPdf}>PDF</Button>
+          <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={() => exportApprovals("csv")}>CSV</Button>
+          <Button size="small" variant="outlined" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={() => exportApprovals("pdf")}>PDF</Button>
         </Stack>
-      ) : null}
+      )}
       filters={(
         <SearchToolbar
           label="Search student, topic or group"
           search={search}
           onSearchChange={setSearch}
+          live
           onSearch={runSearch}
           onReset={() => {
             setSelectedCourseIds([]);

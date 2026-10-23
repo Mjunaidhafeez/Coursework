@@ -35,7 +35,7 @@ import BulkActionBar from "../../components/shared/BulkActionBar";
 import useRowSelection from "../../hooks/useRowSelection";
 import { extractApiErrorMessage, extractFieldErrors } from "../../utils/apiErrors";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
-import { downloadCsvFile, printTablePdf } from "../../utils/export";
+import { exportTable } from "../../utils/export";
 import { getRoleLetter, getUserDisplayName } from "../../utils/userDisplay";
 import { PersonNameCell, PersonPhotoField } from "../../components/shared/PersonAvatar";
 import SelectPlaceholder from "../../components/shared/SelectPlaceholder";
@@ -438,43 +438,43 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
     }
   };
 
-  const getStudentExportRows = async () => {
+  const getStudentExportSheet = async () => {
     const params = buildUsersParams({ pageValue: 1, pageSizeValue: 4000 });
     const { data } = await api.get(usersListPath(params));
-    return activeUsers(data).map((user) => [
-      user.username || "-",
+    const people = activeUsers(data);
+    const courseLabel = (id) => courses.find((course) => String(course.id) === String(id))?.code || id;
+    const headers = ["Student Name", "Roll No", "Username", "Email", "Department", "Class", "Section", "Semester", "Subjects", "Website"];
+    const rows = people.map((user) => [
       getUserDisplayName(user) || "-",
       user.student_profile?.student_id || "-",
+      user.username || "-",
+      user.email || "-",
       user.student_profile?.department_name || user.teacher_profile?.department_name || "-",
       user.student_profile?.school_class_name || "-",
       user.student_profile?.section_name || "-",
       user.student_profile?.semester_number || user.student_profile?.semester || "-",
+      (user.enrolled_course_ids || []).map(courseLabel).join(", ") || "-",
+      user.student_profile?.show_on_website === false ? "Hidden" : "Visible",
     ]);
+    const subtitle = [
+      search ? `Search: ${search}` : "",
+      filters.department ? `Department filter` : "",
+      filters.semester ? `Semester filter` : "",
+      filters.school_class ? `Class filter` : "",
+      filters.section ? `Section filter` : "",
+      filters.course ? `Subject filter` : "",
+      filters.show_on_website === "true" ? "Website: Visible" : filters.show_on_website === "false" ? "Website: Hidden" : "",
+      `Rows: ${rows.length}`,
+    ].filter(Boolean).join(" · ");
+    return { headers, rows, subtitle };
   };
-  const exportStudentsCsv = async () => {
+  const exportStudents = async (kind) => {
     try {
-      const rows = await getStudentExportRows();
-      downloadCsvFile({
-        filePrefix: "class-students",
-        headers: ["Username", "Student Name", "Roll No", "Department", "Class", "Section", "Semester"],
-        rows,
-      });
-      notify("Students CSV exported");
+      const sheet = await getStudentExportSheet();
+      exportTable({ kind, filePrefix: "class-students", title: "Class Students", ...sheet });
+      notify(kind === "pdf" ? "Students PDF exported" : "Students CSV exported");
     } catch {
-      notify("Failed to export students CSV", "error");
-    }
-  };
-  const exportStudentsPdf = async () => {
-    try {
-      const rows = await getStudentExportRows();
-      printTablePdf({
-        title: "Class Students",
-        headers: ["Username", "Student Name", "Roll No", "Department", "Class", "Section", "Semester"],
-        rows,
-      });
-      notify("Students PDF exported");
-    } catch {
-      notify("Failed to export students PDF", "error");
+      notify(kind === "pdf" ? "Failed to export students PDF" : "Failed to export students CSV", "error");
     }
   };
 
@@ -643,8 +643,8 @@ const UsersPage = ({ fixedRole = "", pageTitle = "User Management" }) => {
           )}
           actions={isStudentAdminPage ? (
             <>
-              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportStudentsCsv}>CSV</Button>
-              <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportStudentsPdf}>PDF</Button>
+              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={() => exportStudents("csv")}>CSV</Button>
+              <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={() => exportStudents("pdf")}>PDF</Button>
             </>
           ) : null}
         />

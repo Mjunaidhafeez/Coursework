@@ -11,6 +11,7 @@ const SearchToolbar = ({
   placeholder,
   filters = null,
   actions = null,
+  live = false,
 }) => (
   <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap" sx={filterBarSx}>
     <TextField
@@ -24,7 +25,7 @@ const SearchToolbar = ({
       }}
     />
     {filters}
-    <Button size="small" variant="outlined" onClick={onSearch}>Search</Button>
+    {!live && onSearch ? <Button size="small" variant="outlined" onClick={onSearch}>Search</Button> : null}
     <Button size="small" variant="text" onClick={onReset}>Reset</Button>
     {actions}
   </Stack>

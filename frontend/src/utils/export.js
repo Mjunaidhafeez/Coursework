@@ -14,23 +14,25 @@ export const downloadTextFile = (fileName, content, mimeType) => {
   URL.revokeObjectURL(url);
 };
 
-export const downloadCsvFile = ({ filePrefix, headers, rows }) => {
-  const lines = [
-    headers.map(csvSafe).join(","),
-    ...rows.map((row) => row.map(csvSafe).join(",")),
-  ];
+export const downloadCsvFile = ({ filePrefix, title, subtitle, headers, rows }) => {
+  const lines = [];
+  if (title) lines.push(csvSafe(title));
+  if (subtitle) lines.push(csvSafe(subtitle));
+  if (title || subtitle) lines.push("");
+  lines.push(headers.map(csvSafe).join(","));
+  rows.forEach((row) => lines.push(row.map(csvSafe).join(",")));
   downloadTextFile(`${fileSafe(filePrefix)}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
 };
 
-export const exportTable = ({ kind, filePrefix, title, headers, rows }) => {
+export const exportTable = ({ kind, filePrefix, title, subtitle, headers, rows }) => {
   if (kind === "pdf") {
-    printTablePdf({ title, headers, rows });
+    printTablePdf({ title, subtitle, headers, rows });
     return;
   }
-  downloadCsvFile({ filePrefix, headers, rows });
+  downloadCsvFile({ filePrefix, title, subtitle, headers, rows });
 };
 
-export const printTablePdf = ({ title, headers, rows }) => {
+export const printTablePdf = ({ title, headers, rows, subtitle }) => {
   const headerRow = headers.map((header) => `<th>${header}</th>`).join("");
   const bodyRows = rows
     .map((row) => `<tr>${row.map((cell) => `<td>${String(cell ?? "-")}</td>`).join("")}</tr>`)
@@ -40,17 +42,19 @@ export const printTablePdf = ({ title, headers, rows }) => {
   pop.document.write(`
     <html>
       <head>
-        <title>${title}</title>
+        <title>${title || "Export"}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 14px; }
-          h2 { margin: 0 0 12px; }
+          h2 { margin: 0 0 8px; }
+          .meta { margin: 0 0 12px; color: #334155; font-size: 12px; }
           table { width: 100%; border-collapse: collapse; font-size: 12px; }
           th, td { border: 1px solid #cbd5e1; padding: 6px; text-align: left; vertical-align: top; white-space: pre-line; }
           th { background: #eff6ff; }
         </style>
       </head>
       <body>
-        <h2>${title}</h2>
+        ${title ? `<h2>${title}</h2>` : ""}
+        ${subtitle ? `<p class="meta">${subtitle}</p>` : ""}
         <table>
           <thead><tr>${headerRow}</tr></thead>
           <tbody>${bodyRows}</tbody>

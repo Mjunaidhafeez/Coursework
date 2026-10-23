@@ -1,5 +1,5 @@
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { Button, Chip, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup } from "@mui/material";
+import { Button, Chip, IconButton, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import { useState } from "react";
 
 import { useUi } from "../../context/UiContext";
@@ -222,6 +222,11 @@ const CourseworkFormSection = ({
             ))}
           </TextField>
         </Stack>
+        <Typography variant="caption" color="text.secondary">
+          {studentsChooseTopic
+            ? "Students send a topic request. Use Topic approval to review it, or Auto-approve all to skip waiting."
+            : "You will allot topics after saving. Students skip the request step and upload once the topic is given."}
+        </Typography>
         <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap" alignItems="center">
           <TextField
             size="small"

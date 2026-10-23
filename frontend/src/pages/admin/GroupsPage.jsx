@@ -26,7 +26,7 @@ import { useUi } from "../../context/UiContext";
 import useRowSelection from "../../hooks/useRowSelection";
 import { postBulkUpdate, runBulkDelete } from "../../utils/bulkApi";
 import { confirmDelete } from "../../utils/confirm";
-import { downloadCsvFile, printTablePdf } from "../../utils/export";
+import { exportTable } from "../../utils/export";
 import { occupancyFromGroups } from "../../utils/groupForm";
 import { GROUP_STATUS_OPTIONS } from "../../utils/groupOptions";
 import { describeGroupScope } from "../../utils/groupScopeOptions";
@@ -166,42 +166,43 @@ const GroupsPage = () => {
     }
   };
 
-  const getGroupExportRows = async () => {
+  const getGroupExportSheet = async () => {
     const params = buildGroupsParams({ pageValue: 1, pageSizeValue: 4000 });
     const { data } = await api.get(`${ENDPOINTS.groups}?${params.toString()}`);
-    return (data.results || []).map((group) => [
+    const groups = data.results || [];
+    const headers = ["Group Name", "Group For", "Status", "Members", "Group Members (Name | Roll No)"];
+    const rows = groups.map((group) => [
       group.name || "-",
       describeGroupScope(group),
       group.status || "-",
+      (group.members || []).length,
       (group.members || [])
         .map((member) => `${member.student_name || member.name || "-"} | ${member.student_roll_no || member.roll_no || "-"}`)
         .join("\n"),
     ]);
+    return {
+      headers,
+      rows,
+      subtitle: [
+        search ? `Search: ${search}` : "",
+        statusFilter ? `Status: ${statusFilter}` : "All statuses",
+        courseFilter ? "Course filter" : "",
+        semesterFilter ? "Semester filter" : "",
+        departmentFilter ? "Department filter" : "",
+        classFilter ? "Class filter" : "",
+        sectionFilter ? "Section filter" : "",
+        `Rows: ${rows.length}`,
+      ].filter(Boolean).join(" · "),
+    };
   };
 
-  const exportGroupsCsv = async () => {
+  const exportGroups = async (kind) => {
     try {
-      downloadCsvFile({
-        filePrefix: "class-groups",
-        headers: ["Group Name", "Group For", "Status", "Group Members (Name | Roll No)"],
-        rows: await getGroupExportRows(),
-      });
-      notify("Groups CSV exported");
+      const sheet = await getGroupExportSheet();
+      exportTable({ kind, filePrefix: "class-groups", title: "Class Groups", ...sheet });
+      notify(kind === "pdf" ? "Groups PDF exported" : "Groups CSV exported");
     } catch {
-      notify("Failed to export groups CSV", "error");
-    }
-  };
-
-  const exportGroupsPdf = async () => {
-    try {
-      printTablePdf({
-        title: "Class Groups",
-        headers: ["Group Name", "Group For", "Status", "Group Members (Name | Roll No)"],
-        rows: await getGroupExportRows(),
-      });
-      notify("Groups PDF exported");
-    } catch {
-      notify("Failed to export groups PDF", "error");
+      notify(kind === "pdf" ? "Failed to export groups PDF" : "Failed to export groups CSV", "error");
     }
   };
 
@@ -283,8 +284,8 @@ const GroupsPage = () => {
           actions={(
             <>
               <Button size="small" variant="outlined" onClick={() => loadData({ pageValue: 1 })}>Apply</Button>
-              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={exportGroupsCsv}>CSV</Button>
-              <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={exportGroupsPdf}>PDF</Button>
+              <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon fontSize="small" />} onClick={() => exportGroups("csv")}>CSV</Button>
+              <Button size="small" variant="contained" color="secondary" startIcon={<PictureAsPdfRoundedIcon fontSize="small" />} onClick={() => exportGroups("pdf")}>PDF</Button>
             </>
           )}
         />
